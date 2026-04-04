@@ -8,18 +8,25 @@ The goal is to keep stable, reusable shell behavior here, while leaving machine-
 
 This shared config currently manages:
 
+- Zsh options (AUTO_CD, EXTENDED_GLOB, CORRECT, etc.)
 - History settings
-- Aliases
+- Aliases (ls, git extras, safety, network)
 - `zoxide` integration
 - `fzf` settings and shell bindings
+- Enhanced completion system (fuzzy matching, menu selection, colored listings)
+- Shell functions (extract, mkcd, ff, ft, fkill, etc.)
+- Global aliases (G, L, W, H, T, NE, NUL)
 
 These files are loaded by the main entrypoint:
 
-- `init.zsh` - sources the shared modules in order
+- `init.zsh` - sets zsh options and sources the shared modules in order
 - `10-history.zsh` - shared history behavior
 - `20-aliases.zsh` - shared aliases and fallbacks
 - `30-zoxide.zsh` - guarded `zoxide` initialization
-- `40-fzf.zsh` - shared `fzf` configuration and guarded initialization
+- `40-fzf.zsh` - shared `fzf` configuration and shell bindings
+- `50-completion.zsh` - enhanced completion zstyles
+- `60-functions.zsh` - useful shell functions
+- `70-globals.zsh` - global aliases for command-line piping
 
 ## What does not live here
 
@@ -77,6 +84,7 @@ If something is missing, the script prints install hints for common package mana
 - If `tree` is missing, the `lt` alias is not created unless `lsd` is available.
 - If `zoxide` or `fzf` are missing, their init blocks are skipped cleanly.
 - If `bat` is missing, `fzf` file previews fall back to `sed`.
+- If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
 
 ## Suggested git usage
 
