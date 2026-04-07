@@ -56,6 +56,20 @@ _zsh_tip_pool=(
   "Combine globals: git log G fix W counts commits mentioning fix"
 )
 
+if command -v nix >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Run npkg install bat for a short nix profile install command"
+    "Run npkg search ripgrep to search nixpkgs without remembering full nix syntax"
+  )
+fi
+
+if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Run npkg install with no args to fuzzy-pick packages from nixpkgs"
+    "Run npkg remove with no args to fuzzy-select installed Nix packages to uninstall"
+  )
+fi
+
 tips() {
   local total=${#_zsh_tip_pool}
 

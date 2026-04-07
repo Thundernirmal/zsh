@@ -233,3 +233,269 @@ fbr() {
   echo "Branch '$branch' was not found"
   return 1
 }
+
+# Thin apt-like wrapper around nix profile with optional fzf pickers.
+if command -v nix >/dev/null 2>&1; then
+  _npkg_nix() {
+    command nix --extra-experimental-features "nix-command flakes" "$@"
+  }
+
+  _npkg_usage() {
+    print 'Usage: npkg <command> [args]'
+    print ''
+    print 'Commands:'
+    print '  install [pkg ...]    Install package(s); with no args opens an fzf picker'
+    print '  find <query>         Search nixpkgs in fzf and install selected package(s)'
+    print '  search <query>       Run a plain nixpkgs search'
+    print '  list                 List packages in the current profile'
+    print '  remove [pkg ...]     Remove package(s); with no args opens an fzf picker'
+    print '  upgrade [pkg ...]    Upgrade all packages or only the named ones'
+    print '  help                 Show this help text'
+    print ''
+    print 'Examples:'
+    print '  npkg install bat'
+    print '  npkg find ripgrep'
+    print '  npkg remove'
+    print '  npkg upgrade'
+    print ''
+    print 'Notes:'
+    print '  - Bare install names are expanded to nixpkgs#<name>'
+    print '  - Interactive install/remove needs jq and fzf'
+    print '  - Advanced nix flags can be passed through by calling nix directly'
+  }
+
+  _npkg_require_picker() {
+    local action=$1
+
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "jq is required for interactive npkg ${action}"
+      echo "Install jq or use non-interactive commands like 'npkg search <query>'"
+      return 1
+    fi
+
+    if ! command -v fzf >/dev/null 2>&1; then
+      echo "fzf is required for interactive npkg ${action}"
+      return 1
+    fi
+
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+      echo "Interactive npkg ${action} requires a terminal"
+      return 1
+    fi
+  }
+
+  _npkg_find() {
+    emulate -L zsh
+    setopt pipefail
+
+    local query selection candidates
+    local -a terms installables
+
+    _npkg_require_picker 'install' || return 1
+
+    if (( $# == 0 )); then
+      read -r "query?Search nixpkgs> "
+      if [ -z "$query" ]; then
+        echo "Usage: npkg find <query>"
+        return 1
+      fi
+      terms=("$query")
+    else
+      terms=("$@")
+    fi
+
+    candidates=$(
+      _npkg_nix search --json nixpkgs "${terms[@]}" |
+        command jq -r '
+          def clean_text:
+            tostring
+            | gsub("[\r\n\t]+"; " ")
+            | gsub("  +"; " ");
+
+          to_entries
+          | sort_by([((.value.pname // .key) | ascii_downcase), .key])
+          | .[]
+          | [
+              .key,
+              (.value.pname // (.key | split(".")[-1])),
+              (.value.version // ""),
+              ((.value.description // "") | clean_text)
+            ]
+          | @tsv
+        '
+    ) || return 1
+
+    if [ -z "$candidates" ]; then
+      echo "No nixpkgs matches found for: ${terms[*]}"
+      return 1
+    fi
+
+    selection=$(
+      print -r -- "$candidates" |
+        command fzf -m --delimiter=$'\t' --with-nth=2,3,4 \
+          --prompt='Nix install> ' \
+          --header='Tab marks packages, Enter installs' \
+          --preview 'printf "Name: %s\nVersion: %s\nAttr: %s\n\n%s\n" {2} {3} {1} {4}' \
+          --preview-window=right,60%,border-left,wrap
+    ) || return 0
+
+    while IFS=$'\t' read -r attr _; do
+      [ -n "$attr" ] && installables+=("nixpkgs#$attr")
+    done <<< "$selection"
+
+    (( ${#installables[@]} > 0 )) || return 0
+    _npkg_nix profile install "${installables[@]}"
+  }
+
+  _npkg_remove_picker() {
+    emulate -L zsh
+    setopt pipefail
+
+    local candidates selection
+    local -a targets
+
+    _npkg_require_picker 'remove' || return 1
+
+    candidates=$(
+      _npkg_nix profile list --json |
+        command jq -r '
+          def clean_text:
+            tostring
+            | gsub("[\r\n\t]+"; " ")
+            | gsub("  +"; " ");
+
+          def manifest_entries:
+            if (.elements | type) == "object" then
+              .elements
+              | to_entries
+              | sort_by(.key)
+              | map(select(.value.active // true))
+              | .[]
+              | {
+                  target: .key,
+                  name: .key,
+                  attr: (.value.attrPath // ""),
+                  source: (.value.originalUrl // .value.originalUri // .value.url // .value.uri // "")
+                }
+            elif (.elements | type) == "array" then
+              .elements[]
+              | select(.active // true)
+              | {
+                  target: (.storePaths[0] // .attrPath // ""),
+                  name: ((.attrPath // (.storePaths[0] // "")) | split(".")[-1]),
+                  attr: (.attrPath // ""),
+                  source: (.originalUrl // .originalUri // .url // .uri // "")
+                }
+            else
+              empty
+            end;
+
+          manifest_entries
+          | select(.target != "")
+          | [
+              .target,
+              .name,
+              .attr,
+              (.source | clean_text)
+            ]
+          | @tsv
+        '
+    ) || return 1
+
+    if [ -z "$candidates" ]; then
+      echo "No packages are installed in the current Nix profile"
+      return 0
+    fi
+
+    selection=$(
+      print -r -- "$candidates" |
+        command fzf -m --delimiter=$'\t' --with-nth=2,3,4 \
+          --prompt='Nix remove> ' \
+          --header='Tab marks packages, Enter removes' \
+          --preview 'printf "Name: %s\nAttr: %s\nSource: %s\n" {2} {3} {4}' \
+          --preview-window=right,60%,border-left,wrap
+    ) || return 0
+
+    while IFS=$'\t' read -r target _; do
+      [ -n "$target" ] && targets+=("$target")
+    done <<< "$selection"
+
+    (( ${#targets[@]} > 0 )) || return 0
+    _npkg_nix profile remove "${targets[@]}"
+  }
+
+  npkg() {
+    emulate -L zsh
+
+    local cmd=${1:-help}
+    local installable
+    local -a expanded
+
+    if (( $# > 0 )); then
+      shift
+    fi
+
+    case $cmd in
+      install|add|i)
+        if (( $# == 0 )); then
+          _npkg_find
+          return
+        fi
+
+        if [[ $1 == -* ]]; then
+          _npkg_nix profile install "$@"
+          return
+        fi
+
+        for installable in "$@"; do
+          case $installable in
+            *'#'*|*':'*|/*|./*|../*) expanded+=("$installable") ;;
+            *) expanded+=("nixpkgs#$installable") ;;
+          esac
+        done
+
+        _npkg_nix profile install "${expanded[@]}"
+        ;;
+      find|pick|fzf)
+        _npkg_find "$@"
+        ;;
+      search|s)
+        if (( $# == 0 )); then
+          echo "Usage: npkg search <query>"
+          return 1
+        fi
+
+        if [[ $1 == -* ]]; then
+          _npkg_nix search "$@"
+        else
+          _npkg_nix search nixpkgs "$@"
+        fi
+        ;;
+      list|ls)
+        _npkg_nix profile list "$@"
+        ;;
+      remove|rm|uninstall|delete)
+        if (( $# == 0 )); then
+          _npkg_remove_picker
+        else
+          _npkg_nix profile remove "$@"
+        fi
+        ;;
+      upgrade|up|update)
+        if (( $# == 0 )); then
+          _npkg_nix profile upgrade --all
+        else
+          _npkg_nix profile upgrade "$@"
+        fi
+        ;;
+      help|-h|--help)
+        _npkg_usage
+        ;;
+      *)
+        echo "Unknown npkg command: $cmd"
+        _npkg_usage
+        return 1
+        ;;
+    esac
+  }
+fi
