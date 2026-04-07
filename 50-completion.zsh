@@ -1,35 +1,11 @@
-# Enhanced zsh completion system.
-# This complements OMZ without clashing — OMZ loads compinit,
-# we just tune the behavior with zstyles.
+# Lighter zsh completion tuning.
+# OMZ already runs compinit; keep this file small to avoid slow completion lists.
 
-# Enable menu-based completion selection
-zstyle ':completion:*' menu select
+# Case-insensitive matching is cheap and useful; avoid heavier fuzzy matchers.
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
 
-# Fuzzy matching: case-insensitive, partial word matching
-zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
-
-# Use LS_COLORS for colored completion listings
-zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
-
-# Show descriptions for completion groups
-zstyle ':completion:*:descriptions' format '%F{yellow}-- %d --%f'
-zstyle ':completion:*:messages' format '%F{purple}-- %d --%f'
-zstyle ':completion:*:warnings' format '%F{red}-- no matches found --%f'
-
-# Group completions by type (files, commands, aliases, etc.)
-zstyle ':completion:*' group-name ''
-
-# Sort files by modification time
-zstyle ':completion:*' file-sort modification
-
-# Don't insert common prefix when ambiguous, just show menu
-zstyle ':completion:*' insert-tab false
-
-# Squeeze consecutive slashes in path completion
+# Clean up path completion without changing default completion flow.
 zstyle ':completion:*' squeeze-slashes true
-
-# Include options in completion results
-zstyle ':completion:*' complete-options true
 
 # Better kill completion (show process info)
 zstyle ':completion:*:*:*:*:processes' command "ps -u $USER -o pid,user,comm,cmd -w -w"
