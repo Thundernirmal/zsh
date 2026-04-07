@@ -32,6 +32,22 @@ check_cmd() {
   fi
 }
 
+check_any_cmd() {
+  display=$1
+  kind=$2
+  shift 2
+
+  for name in "$@"; do
+    if have_cmd "$name"; then
+      printf 'ok: %s\n' "$display"
+      return 0
+    fi
+  done
+
+  printf 'missing %s: %s\n' "$kind" "$display"
+  record_missing "$kind" "$display"
+}
+
 detect_manager() {
   for manager in apt dnf pacman brew; do
     if have_cmd "$manager"; then
@@ -51,19 +67,19 @@ print_hints() {
   case "$manager" in
     apt)
       printf '  sudo apt update\n'
-      printf '  sudo apt install zsh git lsd zoxide fzf bat tree\n'
+      printf '  sudo apt install zsh git lsd zoxide fzf bat tree fd-find\n'
       ;;
     dnf)
-      printf '  sudo dnf install zsh git lsd zoxide fzf bat tree\n'
+      printf '  sudo dnf install zsh git lsd zoxide fzf bat tree fd-find\n'
       ;;
     pacman)
-      printf '  sudo pacman -S zsh git lsd zoxide fzf bat tree\n'
+      printf '  sudo pacman -S zsh git lsd zoxide fzf bat tree fd\n'
       ;;
     brew)
-      printf '  brew install zsh git lsd zoxide fzf bat tree\n'
+      printf '  brew install zsh git lsd zoxide fzf bat tree fd\n'
       ;;
     *)
-      printf '  Install these commands manually: zsh git lsd zoxide fzf bat tree\n'
+      printf '  Install these commands manually: zsh git lsd zoxide fzf bat tree fd/fdfind\n'
       ;;
   esac
 }
@@ -77,6 +93,7 @@ check_cmd zoxide required
 check_cmd fzf required
 check_cmd bat optional
 check_cmd tree optional
+check_any_cmd 'fd/fdfind' optional fd fdfind
 
 if [ -n "$missing_required" ] || [ -n "$missing_optional" ]; then
   print_hints
