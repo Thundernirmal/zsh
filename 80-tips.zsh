@@ -18,7 +18,7 @@ _zsh_tip_pool=(
   "Run mkcd <dir> to create a directory and cd into it in one step"
   "Run croot to jump to the root of the current git repo"
   "Run path to print each PATH entry on its own line"
-  "Run fbr to fuzzy-pick and checkout a git branch"
+  "Run fbr to fuzzy-pick and checkout a git branch from local or remote refs"
   "Run dusage to see the largest items in the current directory"
   "Run bigfiles to find the largest files recursively in the tree"
   "Run dusage [path] [count] to summarize any directory with a custom limit"
@@ -55,6 +55,22 @@ _zsh_tip_pool=(
   "Use ft TODO to quickly find TODO comments in your code"
   "Combine globals: git log G fix W counts commits mentioning fix"
 )
+
+if command -v nix >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Run npkg add bat for a short nix profile add command"
+    "Run npkg search ripgrep to search nixpkgs with package descriptions"
+    "Run npkg refresh to rebuild the cached nixpkgs picker index"
+  )
+fi
+
+if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Run npkg install with no args to fuzzy-pick nixpkgs attribute names"
+    "Run npkg find nvim to seed the nix package picker with an initial query"
+    "Run npkg remove with no args to fuzzy-select installed Nix packages to uninstall"
+  )
+fi
 
 tips() {
   local total=${#_zsh_tip_pool}

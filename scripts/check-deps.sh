@@ -67,19 +67,24 @@ print_hints() {
   case "$manager" in
     apt)
       printf '  sudo apt update\n'
-      printf '  sudo apt install zsh git lsd zoxide fzf bat tree fd-find\n'
+      printf '  sudo apt install zsh git lsd zoxide fzf bat tree fd-find jq\n'
+      printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     dnf)
-      printf '  sudo dnf install zsh git lsd zoxide fzf bat tree fd-find\n'
+      printf '  sudo dnf install zsh git lsd zoxide fzf bat tree fd-find jq\n'
+      printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     pacman)
-      printf '  sudo pacman -S zsh git lsd zoxide fzf bat tree fd\n'
+      printf '  sudo pacman -S zsh git lsd zoxide fzf bat tree fd jq\n'
+      printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     brew)
-      printf '  brew install zsh git lsd zoxide fzf bat tree fd\n'
+      printf '  brew install zsh git lsd zoxide fzf bat tree fd jq\n'
+      printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     *)
-      printf '  Install these commands manually: zsh git lsd zoxide fzf bat tree fd/fdfind\n'
+      printf '  Install these commands manually: zsh git lsd zoxide fzf bat tree fd/fdfind jq\n'
+      printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
   esac
 }
@@ -94,6 +99,8 @@ check_cmd fzf required
 check_cmd bat optional
 check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
+check_cmd jq optional
+check_cmd nix optional
 
 if [ -n "$missing_required" ] || [ -n "$missing_optional" ]; then
   print_hints
