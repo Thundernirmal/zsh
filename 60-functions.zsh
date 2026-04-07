@@ -204,7 +204,7 @@ fbr() {
   local selection branch local_branch
   selection=$(
     git for-each-ref --sort=-committerdate \
-      --format='%(refname:short)\t%(committerdate:relative)\t%(subject)' \
+      --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \
       refs/heads refs/remotes |
       command grep -v $'^[^[:space:]]+/HEAD\t' |
       fzf --ansi --height=50% --delimiter=$'\t' --with-nth=1,2,3 \
@@ -244,24 +244,101 @@ if command -v nix >/dev/null 2>&1; then
     print 'Usage: npkg <command> [args]'
     print ''
     print 'Commands:'
-    print '  install [pkg ...]    Install package(s); with no args opens an fzf picker'
-    print '  find <query>         Search nixpkgs in fzf and install selected package(s)'
-    print '  search <query>       Run a plain nixpkgs search'
+    print '  add [pkg ...]        Add package(s); with no args opens an fzf picker'
+    print '  install [pkg ...]    Alias for add'
+    print '  find [query]         Fuzzy-pick nixpkgs attribute names and add selections'
+    print '  search <query>       Run a plain nixpkgs search with descriptions'
     print '  list                 List packages in the current profile'
     print '  remove [pkg ...]     Remove package(s); with no args opens an fzf picker'
+    print '  refresh              Rebuild the cached nixpkgs attribute index'
     print '  upgrade [pkg ...]    Upgrade all packages or only the named ones'
     print '  help                 Show this help text'
     print ''
     print 'Examples:'
-    print '  npkg install bat'
-    print '  npkg find ripgrep'
+    print '  npkg add bat'
+    print '  npkg find nvim'
     print '  npkg remove'
+    print '  npkg refresh'
     print '  npkg upgrade'
     print ''
     print 'Notes:'
     print '  - Bare install names are expanded to nixpkgs#<name>'
-    print '  - Interactive install/remove needs jq and fzf'
+    print '  - npkg find searches a cached list of nixpkgs attribute names'
+    print '  - Interactive add/find/remove needs jq and fzf'
     print '  - Advanced nix flags can be passed through by calling nix directly'
+  }
+
+  _npkg_current_system() {
+    _npkg_nix eval --impure --raw --expr 'builtins.currentSystem'
+  }
+
+  _npkg_attr_cache_file() {
+    emulate -L zsh
+
+    local system cache_dir
+
+    system=$(_npkg_current_system) || return 1
+    cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/npkg
+
+    print -r -- "${cache_dir}/nixpkgs-attrs-${system}.txt"
+  }
+
+  _npkg_cache_is_stale() {
+    local cache_file=$1
+
+    if [ ! -s "$cache_file" ]; then
+      return 0
+    fi
+
+    [ -n "$(command find "$cache_file" -mtime +1 -print -quit 2>/dev/null)" ]
+  }
+
+  _npkg_refresh_index() {
+    emulate -L zsh
+    setopt pipefail
+
+    local system cache_dir cache_file error_file
+
+    system=$(_npkg_current_system) || return 1
+    cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/npkg
+    cache_file="${cache_dir}/nixpkgs-attrs-${system}.txt"
+    error_file="${cache_file}.err"
+
+    command mkdir -p "$cache_dir" || return 1
+
+    _npkg_nix eval --json "nixpkgs#legacyPackages.${system}" --apply builtins.attrNames 2>"$error_file" |
+      command jq -r '.[]' > "${cache_file}.tmp" || {
+        [ -f "${cache_file}.tmp" ] && command rm -f "${cache_file}.tmp"
+        if [ -s "$error_file" ]; then
+          command cat "$error_file"
+          command rm -f "$error_file"
+        fi
+        return 1
+      }
+
+    command mv "${cache_file}.tmp" "$cache_file" || return 1
+    command rm -f "$error_file"
+    print -r -- "$cache_file"
+  }
+
+  _npkg_attr_index() {
+    emulate -L zsh
+
+    local cache_file
+
+    cache_file=$(_npkg_attr_cache_file) || return 1
+
+    if _npkg_cache_is_stale "$cache_file"; then
+      if [ -f "$cache_file" ]; then
+        print -u2 -- 'Refreshing nixpkgs attribute cache...'
+      else
+        print -u2 -- 'Building nixpkgs attribute cache...'
+      fi
+
+      _npkg_refresh_index >/dev/null || return 1
+    fi
+
+    print -r -- "$cache_file"
   }
 
   _npkg_require_picker() {
@@ -284,67 +361,33 @@ if command -v nix >/dev/null 2>&1; then
     fi
   }
 
-  _npkg_find() {
+  _npkg_pick_installables() {
     emulate -L zsh
-    setopt pipefail
 
-    local query selection candidates
-    local -a terms installables
+    local cache_file selection attr query
+    local -a installables
 
     _npkg_require_picker 'install' || return 1
 
-    if (( $# == 0 )); then
-      read -r "query?Search nixpkgs> "
-      if [ -z "$query" ]; then
-        echo "Usage: npkg find <query>"
-        return 1
-      fi
-      terms=("$query")
-    else
-      terms=("$@")
-    fi
-
-    candidates=$(
-      _npkg_nix search --json nixpkgs "${terms[@]}" |
-        command jq -r '
-          def clean_text:
-            tostring
-            | gsub("[\r\n\t]+"; " ")
-            | gsub("  +"; " ");
-
-          to_entries
-          | sort_by([((.value.pname // .key) | ascii_downcase), .key])
-          | .[]
-          | [
-              .key,
-              (.value.pname // (.key | split(".")[-1])),
-              (.value.version // ""),
-              ((.value.description // "") | clean_text)
-            ]
-          | @tsv
-        '
-    ) || return 1
-
-    if [ -z "$candidates" ]; then
-      echo "No nixpkgs matches found for: ${terms[*]}"
-      return 1
-    fi
+    query="${(j: :)@}"
+    cache_file=$(_npkg_attr_index) || return 1
 
     selection=$(
-      print -r -- "$candidates" |
-        command fzf -m --delimiter=$'\t' --with-nth=2,3,4 \
+      command cat "$cache_file" |
+        command fzf -m \
           --prompt='Nix install> ' \
-          --header='Tab marks packages, Enter installs' \
-          --preview 'printf "Name: %s\nVersion: %s\nAttr: %s\n\n%s\n" {2} {3} {1} {4}' \
-          --preview-window=right,60%,border-left,wrap
+          --query="$query" \
+          --header='Type to filter attribute names, Tab marks packages, Enter adds' \
+          --preview 'printf "Attr: %s\nInstall ref: nixpkgs#%s\n" {} {}' \
+          --preview-window=right,45%,border-left,wrap
     ) || return 0
 
-    while IFS=$'\t' read -r attr _; do
+    while IFS= read -r attr; do
       [ -n "$attr" ] && installables+=("nixpkgs#$attr")
     done <<< "$selection"
 
     (( ${#installables[@]} > 0 )) || return 0
-    _npkg_nix profile install "${installables[@]}"
+    _npkg_nix profile add "${installables[@]}"
   }
 
   _npkg_remove_picker() {
@@ -438,12 +481,12 @@ if command -v nix >/dev/null 2>&1; then
     case $cmd in
       install|add|i)
         if (( $# == 0 )); then
-          _npkg_find
+          _npkg_pick_installables
           return
         fi
 
         if [[ $1 == -* ]]; then
-          _npkg_nix profile install "$@"
+          _npkg_nix profile add "$@"
           return
         fi
 
@@ -454,10 +497,10 @@ if command -v nix >/dev/null 2>&1; then
           esac
         done
 
-        _npkg_nix profile install "${expanded[@]}"
+        _npkg_nix profile add "${expanded[@]}"
         ;;
       find|pick|fzf)
-        _npkg_find "$@"
+        _npkg_pick_installables "$@"
         ;;
       search|s)
         if (( $# == 0 )); then
@@ -473,6 +516,10 @@ if command -v nix >/dev/null 2>&1; then
         ;;
       list|ls)
         _npkg_nix profile list "$@"
+        ;;
+      refresh)
+        _npkg_refresh_index >/dev/null || return 1
+        echo 'Refreshed nixpkgs attribute cache'
         ;;
       remove|rm|uninstall|delete)
         if (( $# == 0 )); then
