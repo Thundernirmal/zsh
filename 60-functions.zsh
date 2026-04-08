@@ -378,7 +378,23 @@ if command -v nix >/dev/null 2>&1; then
           --prompt='Nix install> ' \
           --query="$query" \
           --header='Type to filter attribute names, Tab marks packages, Enter adds' \
-          --preview 'printf "Attr: %s\nInstall ref: nixpkgs#%s\n" {} {}' \
+          --preview '
+            attr={}
+            printf "\033[1;36mAttr:\033[0m %s\n" "$attr"
+            printf "\033[1;36mInstall ref:\033[0m nixpkgs#%s\n\n" "$attr"
+            desc=$(command nix --extra-experimental-features "nix-command flakes" \
+              eval --raw "nixpkgs#$attr.meta.description" 2>/dev/null) \
+              && printf "\033[1;33mDescription:\033[0m\n%s\n\n" "$desc" \
+              || printf "\033[2m(no description available)\033[0m\n\n"
+            ver=$(command nix --extra-experimental-features "nix-command flakes" \
+              eval --raw "nixpkgs#$attr.version" 2>/dev/null) \
+              && [ -n "$ver" ] \
+              && printf "\033[1;33mVersion:\033[0m %s\n" "$ver"
+            hp=$(command nix --extra-experimental-features "nix-command flakes" \
+              eval --raw "nixpkgs#$attr.meta.homepage" 2>/dev/null) \
+              && [ -n "$hp" ] \
+              && printf "\033[1;33mHomepage:\033[0m %s\n" "$hp"
+          ' \
           --preview-window=right,45%,border-left,wrap
     ) || return 0
 
