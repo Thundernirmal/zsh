@@ -9,9 +9,10 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 20-aliases.zsh          → Aliases for ls, git, navigation, safety, network
 ├── 30-zoxide.zsh           → Smart directory jumping
 ├── 40-fzf.zsh              → Fuzzy finder with previews
-├── 50-completion.zsh       → Enhanced tab completion
-├── 60-functions.zsh        → Shell functions (extract, search, kill, etc.)
-└── 70-globals.zsh          → Global aliases (pipe shortcuts)
+├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
+├── 60-functions.zsh        → Shell functions (extract, search, kill, git helpers, npkg, etc.)
+├── 70-globals.zsh          → Global aliases (pipe shortcuts)
+└── 80-tips.zsh             → On-demand tips function
 ```
 
 ---
@@ -23,12 +24,14 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 3. [Aliases](#aliases)
 4. [Zoxide — Smart Navigation](#zoxide--smart-navigation)
 5. [FZF — Fuzzy Finder](#fzf--fuzzy-finder)
-6. [Enhanced Completion](#enhanced-completion)
+6. [Tab Completion](#tab-completion)
 7. [Shell Functions](#shell-functions)
 8. [Global Aliases](#global-aliases)
-9. [OMZ Plugins](#omz-plugins)
-10. [Starship Prompt](#starship-prompt)
-11. [Quick Reference Card](#quick-reference-card)
+9. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
+10. [Tips Function](#tips-function)
+11. [OMZ Plugins](#omz-plugins)
+12. [Starship Prompt](#starship-prompt)
+13. [Quick Reference Card](#quick-reference-card)
 
 ---
 
@@ -293,44 +296,30 @@ fkill 15        # send SIGTERM instead of SIGKILL
 
 ---
 
-## Enhanced Completion
+## Tab Completion
 
-Tab completion is upgraded with:
+Configured in `50-completion.zsh`. OMZ / `compinit` provides the base; this file adds lightweight tuning only.
 
-### Fuzzy matching
+### Case-insensitive matching
+
+Tab completion ignores case for names and paths.
+
 ```zsh
-cd /u/l/b<Tab>  # completes to /usr/local/bin
+cd ~/dow<Tab>    # completes to ~/Downloads
+vim readme<Tab>  # completes to README.md
 ```
 
-### Menu selection
-When multiple options exist, press `Tab` to cycle through them with a visual menu. Use arrow keys or `Tab`/`Shift+Tab` to navigate.
+### Squeeze slashes
 
-### Colored listings
-Files are colored by type (directories blue, executables green, etc.) matching your terminal theme.
-
-### Grouped results
-Completions are grouped by type:
-```
--- command --
-git  ls  cat
--- alias --
-ll  la  lt
--- file --
-README.md  guide.md
-```
-
-### Descriptions
-Options show descriptions:
-```
--- git options --
---oneline    show one line per commit
---graph      draw ASCII graph
-```
+Extra slashes are cleaned up during path completion automatically.
 
 ### Process completion for `kill`
+
 ```zsh
 kill <Tab>    # shows PID, user, command for each process
 ```
+
+> **Note:** Heavy completion UI features (menu selection, colored listings, grouped results, per-option descriptions) were intentionally removed because they made completion lists noticeably slower. If you want them, add them locally in `~/.zshrc` after sourcing `init.zsh`.
 
 ---
 
@@ -345,7 +334,7 @@ extract archive.7z
 extract archive.tar.xz
 ```
 
-Supports: `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.zip`, `.rar`, `.7z`, `.gz`, `.tar`, `.bz2`, `.Z`
+Supports: `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.tar`, `.tbz2`, `.tgz`, `.tzst`, `.bz2`, `.Z`
 
 ### mkcd — Create and enter directory
 
@@ -389,13 +378,38 @@ http google.com  # shows response headers
 
 ```zsh
 dusage           # top 20 largest items, human-readable
+dusage /var 10   # top 10 items in /var
 ```
 
 ### bigfiles — Largest files in tree
 
 ```zsh
 bigfiles         # top 20 largest files recursively
+bigfiles /home 5 # top 5 largest files under /home
 ```
+
+### croot — Jump to git repo root
+
+```zsh
+cd ~/projects/myapp/src/components
+croot            # jumps to ~/projects/myapp
+```
+
+### path — Print PATH entries
+
+```zsh
+path    # prints each PATH entry on its own line, one per line
+```
+
+### fbr — Fuzzy-pick and checkout a git branch
+
+Requires `fzf`. Shows local and remote branches sorted by most recent commit, with a log preview.
+
+```zsh
+fbr              # opens branch picker — Tab to select, Enter to checkout
+```
+
+Remote branches are tracked locally automatically.
 
 ---
 
@@ -433,6 +447,50 @@ docker ps W G "running"
 ```
 
 **Tip:** After typing a command with a global alias, press `Space` then `Ctrl+X G` (expand-global) to see what it will expand to before running.
+
+---
+
+## Nix Package Manager (npkg)
+
+Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-like wrapper around `nix profile` with optional `fzf` pickers (requires `fzf` and `jq`).
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `npkg add <pkg>` | Install a package from nixpkgs |
+| `npkg add` | Open an fzf picker to choose packages |
+| `npkg find <query>` | Seed the fzf picker with an initial query |
+| `npkg search <query>` | Plain text search with descriptions |
+| `npkg list` | List installed packages in the current profile |
+| `npkg remove <pkg>` | Remove a package |
+| `npkg remove` | Open an fzf picker to choose packages to remove |
+| `npkg upgrade` | Upgrade all packages |
+| `npkg upgrade <pkg>` | Upgrade a specific package |
+| `npkg refresh` | Rebuild the cached nixpkgs attribute index |
+
+```zsh
+npkg add bat           # install bat
+npkg find nvim         # fuzzy-pick a neovim variant
+npkg search ripgrep    # search with descriptions
+npkg remove            # interactive removal picker
+npkg upgrade           # upgrade everything
+```
+
+The fzf picker preview shows the package description, version, and homepage from nixpkgs. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically after one day.
+
+---
+
+## Tips Function
+
+Defined in `80-tips.zsh`. Prints a random tip from the shared config on demand.
+
+```zsh
+tips    # prints one random tip, e.g.:
+        # tip: Use z <pattern> to jump to directories zoxide remembers
+```
+
+Tips cover aliases, functions, fzf keybindings, glob patterns, history, and more. Extra tips are added automatically when `nix`, `fzf`, and `jq` are all available (for `npkg`).
 
 ---
 
@@ -501,6 +559,8 @@ z <pattern>         → smart jump to directory
 zi                  → interactive directory picker
 <directory_name>    → cd into it (AUTO_CD)
 mkcd <name>         → create + cd in one step
+croot               → jump to git repo root
+fbr                 → fuzzy-pick and checkout a git branch
 pushd / popd        → directory stack navigation
 dirs -v             → show directory stack
 ```
@@ -552,12 +612,26 @@ myip                → public IP
 weather             → weather forecast
 fkill               → fuzzy kill process
 http <url>          → HTTP headers
+path                → print PATH entries one per line
+tips                → print a random usage tip
+```
+
+### Nix (npkg — requires nix)
+```
+npkg add <pkg>      → install from nixpkgs
+npkg add            → fuzzy-pick packages to install
+npkg find <query>   → seeded fuzzy install picker
+npkg search <query> → search nixpkgs with descriptions
+npkg list           → list installed packages
+npkg remove         → fuzzy-pick packages to remove
+npkg upgrade        → upgrade all packages
+npkg refresh        → rebuild nixpkgs attribute cache
 ```
 
 ### Completion
 ```
-<Tab>               → trigger completion, cycle through menu
-<Shift+Tab>         → cycle backwards
+<Tab>               → trigger completion (case-insensitive)
+kill <Tab>          → shows process list with PID, user, command
 ```
 
 ### History

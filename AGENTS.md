@@ -4,12 +4,12 @@
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, test runner, or CI config at the root.
 - `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `60-functions.zsh`, `70-globals.zsh`, `80-tips.zsh`.
-- Prefer `init.zsh` and the module files over `README.md` or `GUIDE.md` if they disagree; the docs currently lag the actual load order.
+- The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Edit Rules
 
 - Keep external tool integrations guarded with `command -v ... >/dev/null 2>&1` and preserve clean fallbacks. This repo is meant to stay portable across machines with different tool sets.
-- IMPORTANT: whenever you change a user-facing alias, function, completion behavior, or workflow in this repo, update `80-tips.zsh` in the same change so the on-demand `tips` output stays accurate.
+- IMPORTANT: whenever you change a user-facing alias, function, completion behavior, or workflow in this repo, update `80-tips.zsh`, `README.md`, and `GUIDE.md` in the same change so all documentation stays accurate and consistent.
 - If you add or remove a shared external dependency, update `scripts/check-deps.sh` too.
 - `scripts/check-deps.sh` is POSIX `sh`, not Zsh. Keep it portable.
 - `40-fzf.zsh` should stay safe in non-prompt startup paths. Keep the `fzf --zsh` init guarded so `zsh -i -c ...` does not hit `can't change option: zle` warnings.
