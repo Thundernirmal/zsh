@@ -13,9 +13,10 @@ This shared config currently manages:
 - Aliases (ls, git extras, safety, network)
 - `zoxide` integration
 - `fzf` settings and shell bindings
-- Enhanced completion system (fuzzy matching, menu selection, colored listings)
-- Shell functions (extract, mkcd, ff, ft, fkill, etc.)
+- Tab completion tuning (case-insensitive matching, process completion)
+- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, npkg, etc.)
 - Global aliases (G, L, W, H, T, NE, NUL)
+- On-demand `tips` function
 
 These files are loaded by the main entrypoint:
 
@@ -24,9 +25,10 @@ These files are loaded by the main entrypoint:
 - `20-aliases.zsh` - shared aliases and fallbacks
 - `30-zoxide.zsh` - guarded `zoxide` initialization
 - `40-fzf.zsh` - shared `fzf` configuration and shell bindings
-- `50-completion.zsh` - enhanced completion zstyles
+- `50-completion.zsh` - completion zstyles (case-insensitive, process completion)
 - `60-functions.zsh` - useful shell functions
 - `70-globals.zsh` - global aliases for command-line piping
+- `80-tips.zsh` - on-demand `tips` shell function
 
 ## What does not live here
 
@@ -75,6 +77,9 @@ It checks whether the shared tools used by this config are available:
 - `fzf`
 - optional: `bat`
 - optional: `tree`
+- optional: `fd` / `fdfind`
+- optional: `jq`
+- optional: `nix` (for the `npkg` wrapper)
 
 If something is missing, the script prints install hints for common package managers.
 
@@ -83,8 +88,11 @@ If something is missing, the script prints install hints for common package mana
 - If `lsd` is missing, aliases fall back to standard `ls` behavior.
 - If `tree` is missing, the `lt` alias is not created unless `lsd` is available.
 - If `zoxide` or `fzf` are missing, their init blocks are skipped cleanly.
-- If `bat` is missing, `fzf` file previews fall back to `sed`.
+- If `bat` is missing, `fzf` file previews fall back to `sed` and `peek` falls back to `cat`.
 - If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
+- If `fd`/`fdfind` is missing, `ff` falls back to `find`.
+- If `nix` is missing, the `npkg` wrapper is not defined.
+- If `jq` is missing, interactive `npkg add`/`remove` pickers are not available.
 
 ## Suggested git usage
 
