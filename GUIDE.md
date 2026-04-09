@@ -114,7 +114,7 @@ Configured in `10-history.zsh`.
 | `SAVEHIST` | 100000 | Commands saved to disk |
 | `APPEND_HISTORY` | on | New sessions append, don't overwrite |
 | `SHARE_HISTORY` | on | History shared across all open terminals |
-| `HIST_IGNORE_DUPS` | on | Don't store consecutive duplicates |
+| `HIST_IGNORE_ALL_DUPS` | on | Remove older duplicates from the entire history |
 | `HIST_FIND_NO_DUPS` | on | `Ctrl+R` shows each command only once |
 
 **Practical benefit:** Open two terminals, run a command in one, immediately search for it with `Ctrl+R` in the other.
@@ -355,8 +355,8 @@ ff ".js"         # find all .js files
 Uses `ripgrep` (rg) if installed, falls back to `grep`.
 
 ```zsh
-ft "TODO"        # search for "TODO" in all files
-ft "function"    # search for "function"
+ft "TODO"           # search for "TODO" in all files under .
+ft "function" src   # search for "function" under src/
 ```
 
 ### peek — Preview a file
@@ -465,6 +465,7 @@ Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-
 | `npkg list` | List installed packages in the current profile |
 | `npkg remove <pkg>` | Remove a package |
 | `npkg remove` | Open an fzf picker to choose packages to remove |
+| `npkg outdated` | Show available upgrades before running upgrade |
 | `npkg upgrade` | Upgrade all packages |
 | `npkg upgrade <pkg>` | Upgrade a specific package |
 | `npkg refresh` | Rebuild the cached nixpkgs attribute index |
@@ -474,10 +475,13 @@ npkg add bat           # install bat
 npkg find nvim         # fuzzy-pick a neovim variant
 npkg search ripgrep    # search with descriptions
 npkg remove            # interactive removal picker
+npkg outdated          # see what would be upgraded
 npkg upgrade           # upgrade everything
 ```
 
 The fzf picker preview shows the package description, version, and homepage from nixpkgs. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically after one day.
+
+`npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints a table — run it before `npkg upgrade` to see what will change.
 
 ---
 
@@ -624,6 +628,7 @@ npkg find <query>   → seeded fuzzy install picker
 npkg search <query> → search nixpkgs with descriptions
 npkg list           → list installed packages
 npkg remove         → fuzzy-pick packages to remove
+npkg outdated       → show available upgrades
 npkg upgrade        → upgrade all packages
 npkg refresh        → rebuild nixpkgs attribute cache
 ```

@@ -58,10 +58,15 @@ ff() {
 
 # Find text in files (uses ripgrep if available, falls back to grep)
 ft() {
+  if [ -z "$1" ]; then
+    echo "Usage: ft <pattern> [path]"
+    return 1
+  fi
+
   if command -v rg >/dev/null 2>&1; then
-    rg --color=always "${1:-}" .
+    rg --color=always "$1" "${2:-.}"
   else
-    grep -rnI --color=auto "${1:-}" . 2>/dev/null
+    grep -rnI --color=auto "$1" "${2:-.}" 2>/dev/null
   fi
 }
 
@@ -113,6 +118,11 @@ http() {
 
 # Preview file (uses bat if available)
 peek() {
+  if [ -z "$1" ]; then
+    echo "Usage: peek <file>"
+    return 1
+  fi
+
   if command -v bat >/dev/null 2>&1; then
     bat --style=numbers --paging=never "$1"
   else
@@ -250,6 +260,7 @@ if command -v nix >/dev/null 2>&1; then
     print '  search <query>       Run a plain nixpkgs search with descriptions'
     print '  list                 List packages in the current profile'
     print '  remove [pkg ...]     Remove package(s); with no args opens an fzf picker'
+    print '  outdated             Show available package upgrades before running upgrade'
     print '  refresh              Rebuild the cached nixpkgs attribute index'
     print '  upgrade [pkg ...]    Upgrade all packages or only the named ones'
     print '  help                 Show this help text'
@@ -258,6 +269,7 @@ if command -v nix >/dev/null 2>&1; then
     print '  npkg add bat'
     print '  npkg find nvim'
     print '  npkg remove'
+    print '  npkg outdated'
     print '  npkg refresh'
     print '  npkg upgrade'
     print ''
@@ -483,6 +495,156 @@ if command -v nix >/dev/null 2>&1; then
     _npkg_nix profile remove "${targets[@]}"
   }
 
+  _npkg_outdated() {
+    emulate -L zsh
+    setopt pipefail NO_MONITOR NO_NOTIFY
+
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "jq is required for npkg outdated"
+      return 1
+    fi
+
+    local profile_json pkg_count tmp_dir
+    local -a names attrs installed_versions
+
+    profile_json=$(_npkg_nix profile list --json 2>/dev/null) || {
+      echo "Failed to read profile"
+      return 1
+    }
+
+    # Extract name, attrPath last segment, and store-path-derived version
+    # for each nixpkgs-sourced element.
+    # version_from_path strips known Nix multi-output suffixes (man, lib,
+    # dev, doc, info, bin, out, debug, static) so that e.g.
+    # "tree-2.3.1-man" yields "2.3.1" instead of "2.3.1-man".
+    local entry_data
+    entry_data=$(
+      print -r -- "$profile_json" | command jq -r '
+        def version_from_path:
+          split("/")[-1]            # basename
+          | split("-")              # split on hyphens
+          # strip known Nix multi-output suffixes from the end
+          | if .[-1] | test("^(out|lib|dev|man|doc|info|bin|static|debug|py)$")
+            then .[:-1] else . end
+          | . as $parts
+          | (length - 1) as $last
+          | reduce range($last; 0; -1) as $i (
+              null;
+              if . == null and ($parts[$i] | test("^[0-9]")) then $i else . end
+            )
+          | if . then [$parts[.:][] ] | join("-") else "??" end;
+
+        if (.elements | type) == "object" then
+          .elements | to_entries[]
+          | select(.value.originalUrl // "" | test("nixpkgs"; "i"))
+          | select(.value.active // true)
+          | .key as $name
+          | (.value.attrPath // "") as $attr
+          | ($attr | split(".")[-1]) as $short
+          | (.value.storePaths[0] // "") as $sp
+          | ($sp | version_from_path) as $ver
+          | [$name, $short, $ver] | @tsv
+        elif (.elements | type) == "array" then
+          .elements[]
+          | select(.active // true)
+          | select((.originalUrl // .url // "") | test("nixpkgs"; "i"))
+          | (.attrPath // "") as $attr
+          | ($attr | split(".")[-1]) as $name
+          | (.storePaths[0] // "") as $sp
+          | ($sp | version_from_path) as $ver
+          | [$name, $name, $ver] | @tsv
+        else
+          empty
+        end
+      '
+    ) || return 1
+
+    if [ -z "$entry_data" ]; then
+      echo "No nixpkgs packages found in the current profile"
+      return 0
+    fi
+
+    # Read entries into arrays
+    while IFS=$'\t' read -r name attr ver; do
+      [ -z "$name" ] && continue
+      names+=("$name")
+      attrs+=("$attr")
+      installed_versions+=("$ver")
+    done <<< "$entry_data"
+
+    pkg_count=${#names[@]}
+    if (( pkg_count == 0 )); then
+      echo "No nixpkgs packages found in the current profile"
+      return 0
+    fi
+
+    echo "Checking $pkg_count package(s) for updates..."
+
+    # Evaluate latest versions in parallel via temp files
+    tmp_dir=$(command mktemp -d) || return 1
+    trap "command rm -rf '$tmp_dir'" INT TERM
+
+    local max_jobs=8 running=0 idx attr_name
+    for (( idx = 1; idx <= pkg_count; idx++ )); do
+      attr_name="${attrs[$idx]}"
+      (
+        local latest
+        latest=$(_npkg_nix eval --raw "nixpkgs#${attr_name}.version" 2>/dev/null) || latest="??"
+        print -r -- "$latest" > "${tmp_dir}/${idx}"
+      ) &
+      (( running++ ))
+      if (( running >= max_jobs )); then
+        wait -n 2>/dev/null || wait
+        (( running-- ))
+      fi
+    done
+    wait
+
+    # Collect results and build output
+    local -a latest_versions
+    local upgrades=0
+    for (( idx = 1; idx <= pkg_count; idx++ )); do
+      if [ -f "${tmp_dir}/${idx}" ]; then
+        latest_versions+=("$(< "${tmp_dir}/${idx}")")
+      else
+        latest_versions+=("??")
+      fi
+    done
+
+    # Print table
+    local name inst avail marker
+    printf '\n'
+    printf '\033[1m%-25s %-20s %-20s %s\033[0m\n' 'Package' 'Installed' 'Available' ''
+    printf '%-25s %-20s %-20s %s\n' '───────' '─────────' '─────────' ''
+
+    for (( idx = 1; idx <= pkg_count; idx++ )); do
+      name="${names[$idx]}"
+      inst="${installed_versions[$idx]}"
+      avail="${latest_versions[$idx]}"
+
+      if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
+        marker='—'
+      elif [ "$inst" = "$avail" ]; then
+        marker='\033[32m✓\033[0m'
+      else
+        marker='\033[33m⬆\033[0m'
+        (( upgrades++ ))
+      fi
+
+      printf '%-25s %-20s %-20s %b\n' "$name" "$inst" "$avail" "$marker"
+    done
+
+    printf '\n'
+    if (( upgrades > 0 )); then
+      printf '\033[33m%d upgrade(s) available.\033[0m Run \033[1mnpkg upgrade\033[0m to apply.\n' "$upgrades"
+    else
+      printf '\033[32mEverything is up to date.\033[0m\n'
+    fi
+
+    command rm -rf "$tmp_dir"
+    trap - INT TERM
+  }
+
   npkg() {
     emulate -L zsh
 
@@ -543,6 +705,9 @@ if command -v nix >/dev/null 2>&1; then
         else
           _npkg_nix profile remove "$@"
         fi
+        ;;
+      outdated|check|diff)
+        _npkg_outdated
         ;;
       upgrade|up|update)
         if (( $# == 0 )); then

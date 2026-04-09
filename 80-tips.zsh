@@ -70,6 +70,7 @@ if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -
     "Run npkg find nvim to seed the nix package picker with an initial query"
     "npkg find shows description, version, and homepage in the preview pane"
     "Run npkg remove with no args to fuzzy-select installed Nix packages to uninstall"
+    "Run npkg outdated to preview available package upgrades before running npkg upgrade"
   )
 fi
 
