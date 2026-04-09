@@ -29,7 +29,7 @@ _zsh_tip_pool=(
   "Run myip to check your public IP address"
   "Run weather to get a quick forecast"
   "Run peek <file> to preview a file quickly"
-  "Run http <url> to follow redirects and print response headers"
+  "Run headers <url> to follow redirects and print response headers"
   "Use global alias G anywhere: git log G fix pipes to grep"
   "Use global alias L anywhere: cat file.txt L pipes to less"
   "Use global alias W anywhere: ps aux W counts lines"
@@ -46,12 +46,10 @@ _zsh_tip_pool=(
   "Mistyped commands may offer a correction because CORRECT is enabled"
   "Tab completion is case-insensitive for names and paths"
   "ff <pattern> [path] uses fd or fdfind when available for faster searches"
-  "Use gs, gd, ga, gaa, gco, gb for quick git operations (OMZ)"
-  "Grey suggestions as you type come from zsh-autosuggestions"
-  "Green commands are valid, red means unknown (syntax highlighting)"
   "Use zi for an interactive fzf-powered directory picker"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
+  "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"
   "Use ft TODO to quickly find TODO comments in your code"
   "Combine globals: git log G fix W counts commits mentioning fix"
 )
@@ -60,7 +58,7 @@ if command -v nix >/dev/null 2>&1; then
   _zsh_tip_pool+=(
     "Run npkg add bat for a short nix profile add command"
     "Run npkg search ripgrep to search nixpkgs with package descriptions"
-    "Run npkg refresh to rebuild the cached nixpkgs picker index"
+    "Run npkg refresh to rebuild the cached nixpkgs picker index (requires jq)"
   )
 fi
 
@@ -71,6 +69,12 @@ if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -
     "npkg find shows description, version, and homepage in the preview pane"
     "Run npkg remove with no args to fuzzy-select installed Nix packages to uninstall"
     "Run npkg outdated to preview available package upgrades before running npkg upgrade"
+  )
+fi
+
+if alias gs >/dev/null 2>&1 && alias gco >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Use gs, gd, ga, gaa, gco, gb for quick git operations when the OMZ git plugin is enabled"
   )
 fi
 

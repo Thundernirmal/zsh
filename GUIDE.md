@@ -116,6 +116,8 @@ Configured in `10-history.zsh`.
 | `SHARE_HISTORY` | on | History shared across all open terminals |
 | `HIST_IGNORE_ALL_DUPS` | on | Remove older duplicates from the entire history |
 | `HIST_FIND_NO_DUPS` | on | `Ctrl+R` shows each command only once |
+| `HIST_IGNORE_SPACE` | on | Commands starting with a space are omitted (good for secrets) |
+| `HIST_REDUCE_BLANKS` | on | Strip extraneous spaces from commands before saving |
 
 **Practical benefit:** Open two terminals, run a command in one, immediately search for it with `Ctrl+R` in the other.
 
@@ -368,10 +370,10 @@ peek config.json
 peek script.sh
 ```
 
-### http — Quick HTTP header check
+### headers — Quick HTTP header check
 
 ```zsh
-http google.com  # shows response headers
+headers google.com  # shows response headers
 ```
 
 ### dusage — Disk usage of current directory
@@ -443,7 +445,7 @@ find / -name "secret" NE
 noisy-command NUL
 
 # Chain multiple globals
-docker ps W G "running"
+docker ps G "running" W
 ```
 
 **Tip:** After typing a command with a global alias, press `Space` then `Ctrl+X G` (expand-global) to see what it will expand to before running.
@@ -452,7 +454,7 @@ docker ps W G "running"
 
 ## Nix Package Manager (npkg)
 
-Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-like wrapper around `nix profile` with optional `fzf` pickers (requires `fzf` and `jq`).
+Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive pickers require both `fzf` and `jq`.
 
 ### Commands
 
@@ -483,6 +485,8 @@ The fzf picker preview shows the package description, version, and homepage from
 
 `npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints a table — run it before `npkg upgrade` to see what will change.
 
+`npkg refresh` also needs `jq`, because the cache is built from JSON output.
+
 ---
 
 ## Tips Function
@@ -494,7 +498,7 @@ tips    # prints one random tip, e.g.:
         # tip: Use z <pattern> to jump to directories zoxide remembers
 ```
 
-Tips cover aliases, functions, fzf keybindings, glob patterns, history, and more. Extra tips are added automatically when `nix`, `fzf`, and `jq` are all available (for `npkg`).
+Tips cover aliases, functions, fzf keybindings, glob patterns, history, and more. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are all available.
 
 ---
 
@@ -615,7 +619,7 @@ ports               → listening ports
 myip                → public IP
 weather             → weather forecast
 fkill               → fuzzy kill process
-http <url>          → HTTP headers
+headers <url>       → HTTP headers
 path                → print PATH entries one per line
 tips                → print a random usage tip
 ```
@@ -673,7 +677,6 @@ git diff G "TODO" L            # search diff for TODO and page it
 ```zsh
 # Press Ctrl+R, type something
 # Press ? to see the full command in preview
-# Press Ctrl+Y to copy the command to clipboard
 ```
 
 ### Directory stack workflow

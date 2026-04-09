@@ -14,7 +14,7 @@ This shared config currently manages:
 - `zoxide` integration
 - `fzf` settings and shell bindings
 - Tab completion tuning (case-insensitive matching, process completion)
-- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, npkg, etc.)
+- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, headers, npkg, etc.)
 - Global aliases (G, L, W, H, T, NE, NUL)
 - On-demand `tips` function
 
@@ -92,7 +92,7 @@ If something is missing, the script prints install hints for common package mana
 - If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
 - If `fd`/`fdfind` is missing, `ff` falls back to `find`.
 - If `nix` is missing, the `npkg` wrapper is not defined.
-- If `jq` is missing, interactive `npkg add`/`remove` pickers are not available.
+- If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`remove` pickers are not available.
 
 ## Suggested git usage
 

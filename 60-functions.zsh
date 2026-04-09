@@ -15,22 +15,40 @@ extract() {
     *.tar.gz)    tar xzf "$1" ;;
     *.tar.xz)    tar xJf "$1" ;;
     *.tar.zst)   tar --zstd -xf "$1" ;;
-    *.bz2)       bunzip2 "$1" ;;
-    *.rar)       unrar x "$1" ;;
-    *.gz)        gunzip "$1" ;;
+    *.bz2)
+      command -v bunzip2 >/dev/null 2>&1 || { echo "bunzip2 is required to extract '$1'"; return 1; }
+      bunzip2 "$1"
+      ;;
+    *.rar)
+      command -v unrar >/dev/null 2>&1 || { echo "unrar is required to extract '$1'"; return 1; }
+      unrar x "$1"
+      ;;
+    *.gz)
+      command -v gunzip >/dev/null 2>&1 || { echo "gunzip is required to extract '$1'"; return 1; }
+      gunzip "$1"
+      ;;
     *.tar)       tar xf "$1" ;;
     *.tbz2)      tar xjf "$1" ;;
     *.tgz)       tar xzf "$1" ;;
     *.tzst)      tar --zstd -xf "$1" ;;
-    *.zip)       unzip "$1" ;;
-    *.Z)         uncompress "$1" ;;
-    *.7z)        7z x "$1" ;;
+    *.zip)
+      command -v unzip >/dev/null 2>&1 || { echo "unzip is required to extract '$1'"; return 1; }
+      unzip "$1"
+      ;;
+    *.Z)
+      command -v uncompress >/dev/null 2>&1 || { echo "uncompress is required to extract '$1'"; return 1; }
+      uncompress "$1"
+      ;;
+    *.7z)
+      command -v 7z >/dev/null 2>&1 || { echo "7z is required to extract '$1'"; return 1; }
+      7z x "$1"
+      ;;
     *)           echo "'$1' cannot be extracted via extract()"; return 1 ;;
   esac
 }
 
 # Create directory and cd into it
-mkcd() { mkdir -p "$1" && cd "$1"; }
+mkcd() { command mkdir -p "$1" && cd "$1"; }
 
 # Find files by name
 ff() {
@@ -52,7 +70,7 @@ ff() {
   elif command -v fdfind >/dev/null 2>&1; then
     fdfind --hidden --follow --glob --ignore-case -- "*$pattern*" "$search_root"
   else
-    find "$search_root" -iname "*$pattern*" 2>/dev/null
+    command find "$search_root" -iname "*$pattern*" 2>/dev/null
   fi
 }
 
@@ -64,9 +82,9 @@ ft() {
   fi
 
   if command -v rg >/dev/null 2>&1; then
-    rg --color=always "$1" "${2:-.}"
+    rg --color=always -- "$1" "${2:-.}"
   else
-    grep -rnI --color=auto "$1" "${2:-.}" 2>/dev/null
+    command grep -rnI --color=auto -- "$1" "${2:-.}" 2>/dev/null
   fi
 }
 
@@ -107,13 +125,13 @@ fkill() {
 }
 
 # Quick HTTP header check
-http() {
+headers() {
   if [ -z "$1" ]; then
-    echo "Usage: http <url>"
+    echo "Usage: headers <url>"
     return 1
   fi
 
-  curl -sIL "$1"
+  curl -sIL -- "$1"
 }
 
 # Preview file (uses bat if available)
@@ -124,9 +142,9 @@ peek() {
   fi
 
   if command -v bat >/dev/null 2>&1; then
-    bat --style=numbers --paging=never "$1"
+    bat --style=numbers --paging=never -- "$1"
   else
-    cat "$1"
+    command cat -- "$1"
   fi
 }
 
@@ -174,7 +192,7 @@ bigfiles() {
       ;;
   esac
 
-  find "$target" -type f -exec du -h {} + 2>/dev/null | sort -rh | head -n "$limit"
+  command find "$target" -type f -exec du -h {} + 2>/dev/null | sort -rh | head -n "$limit"
 }
 
 # Jump to the root of the current git repository
@@ -276,6 +294,7 @@ if command -v nix >/dev/null 2>&1; then
     print 'Notes:'
     print '  - Bare install names are expanded to nixpkgs#<name>'
     print '  - npkg find searches a cached list of nixpkgs attribute names'
+    print '  - npkg refresh and outdated need jq'
     print '  - Interactive add/find/remove needs jq and fzf'
     print '  - Advanced nix flags can be passed through by calling nix directly'
   }
@@ -302,7 +321,7 @@ if command -v nix >/dev/null 2>&1; then
       return 0
     fi
 
-    [ -n "$(command find "$cache_file" -mtime +1 -print -quit 2>/dev/null)" ]
+    [ -n "$(command find "$cache_file" -mtime +1 2>/dev/null)" ]
   }
 
   _npkg_refresh_index() {
@@ -310,6 +329,11 @@ if command -v nix >/dev/null 2>&1; then
     setopt pipefail
 
     local system cache_dir cache_file error_file
+
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "jq is required for npkg refresh"
+      return 1
+    fi
 
     system=$(_npkg_current_system) || return 1
     cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/npkg
@@ -394,18 +418,26 @@ if command -v nix >/dev/null 2>&1; then
             attr={}
             printf "\033[1;36mAttr:\033[0m %s\n" "$attr"
             printf "\033[1;36mInstall ref:\033[0m nixpkgs#%s\n\n" "$attr"
-            desc=$(command nix --extra-experimental-features "nix-command flakes" \
-              eval --raw "nixpkgs#$attr.meta.description" 2>/dev/null) \
-              && printf "\033[1;33mDescription:\033[0m\n%s\n\n" "$desc" \
-              || printf "\033[2m(no description available)\033[0m\n\n"
-            ver=$(command nix --extra-experimental-features "nix-command flakes" \
-              eval --raw "nixpkgs#$attr.version" 2>/dev/null) \
-              && [ -n "$ver" ] \
-              && printf "\033[1;33mVersion:\033[0m %s\n" "$ver"
-            hp=$(command nix --extra-experimental-features "nix-command flakes" \
-              eval --raw "nixpkgs#$attr.meta.homepage" 2>/dev/null) \
-              && [ -n "$hp" ] \
-              && printf "\033[1;33mHomepage:\033[0m %s\n" "$hp"
+            meta_json=$(command nix --extra-experimental-features "nix-command flakes" \
+              eval --json --apply "p: { v = p.version or \"\"; d = p.meta.description or \"\"; h = p.meta.homepage or \"\"; }" "nixpkgs#$attr" 2>/dev/null || echo "{}")
+
+            desc=$(echo "$meta_json" | command jq -r ".d | select(. != \"\") // empty")
+            ver=$(echo "$meta_json" | command jq -r ".v | select(. != \"\") // empty")
+            hp=$(echo "$meta_json" | command jq -r ".h | select(. != \"\") // empty")
+
+            if [ -n "$desc" ]; then
+              printf "\033[1;33mDescription:\033[0m\n%s\n\n" "$desc"
+            else
+              printf "\033[2m(no description available)\033[0m\n\n"
+            fi
+
+            if [ -n "$ver" ]; then
+              printf "\033[1;33mVersion:\033[0m %s\n" "$ver"
+            fi
+
+            if [ -n "$hp" ]; then
+              printf "\033[1;33mHomepage:\033[0m %s\n" "$hp"
+            fi
           ' \
           --preview-window=right,45%,border-left,wrap
     ) || return 0
@@ -594,8 +626,8 @@ if command -v nix >/dev/null 2>&1; then
       ) &
       (( running++ ))
       if (( running >= max_jobs )); then
-        wait -n 2>/dev/null || wait
-        (( running-- ))
+        wait
+        running=0
       fi
     done
     wait
