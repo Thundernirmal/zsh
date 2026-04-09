@@ -67,23 +67,24 @@ print_hints() {
   case "$manager" in
     apt)
       printf '  sudo apt update\n'
-      printf '  sudo apt install zsh git lsd zoxide fzf bat tree fd-find jq\n'
+      printf '  sudo apt install zsh git curl iproute2 lsd zoxide fzf bat tree fd-find jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     dnf)
-      printf '  sudo dnf install zsh git lsd zoxide fzf bat tree fd-find jq\n'
+      printf '  sudo dnf install zsh git curl iproute lsd zoxide fzf bat tree fd-find jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     pacman)
-      printf '  sudo pacman -S zsh git lsd zoxide fzf bat tree fd jq\n'
+      printf '  sudo pacman -S zsh git curl iproute2 lsd zoxide fzf bat tree fd jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     brew)
-      printf '  brew install zsh git lsd zoxide fzf bat tree fd jq\n'
+      printf '  brew install zsh git curl lsd zoxide fzf bat tree fd jq\n'
+      printf '  On GNU/Linux, install ss via your distro package for iproute/iproute2.\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     *)
-      printf '  Install these commands manually: zsh git lsd zoxide fzf bat tree fd/fdfind jq\n'
+      printf '  Install these commands manually: zsh git curl ss lsd zoxide fzf bat tree fd/fdfind jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
   esac
@@ -93,6 +94,8 @@ printf 'Checking shared Zsh config dependencies...\n\n'
 
 check_cmd zsh required
 check_cmd git required
+check_cmd curl required
+check_cmd ss required
 check_cmd lsd required
 check_cmd zoxide required
 check_cmd fzf required

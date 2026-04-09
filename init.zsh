@@ -8,7 +8,7 @@ setopt PUSHD_SILENT         # Don't print directory stack after pushd/popd
 setopt EXTENDED_GLOB        # Powerful glob patterns (e.g. **/*, ^pattern)
 setopt GLOB_DOTS            # Include dotfiles in globs
 setopt NUMERIC_GLOB_SORT    # Sort numbers numerically in globs
-setopt CORRECT              # Spell check commands before executing
+unsetopt CORRECT            # Disable spell-correction prompts, even if enabled earlier
 setopt NO_BEEP              # No beeping
 setopt INTERACTIVE_COMMENTS # Allow # comments in interactive shell
 

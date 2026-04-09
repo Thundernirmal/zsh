@@ -47,8 +47,8 @@ fi
 
 # Network & system
 alias ports='ss -tulnp'
-alias myip='curl -s ifconfig.me'
-alias weather='curl -s wttr.in'
+alias myip='curl -fsSL https://ifconfig.me/ip && printf "\n"'
+alias weather='curl --http1.1 -fsSL https://wttr.in'
 
 # Git extras (OMZ git plugin covers basics, these fill gaps)
 alias glog='git log --oneline --graph --decorate -20'

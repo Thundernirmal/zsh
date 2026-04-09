@@ -1,10 +1,6 @@
 # On-demand tips from across the shared shell config.
 
 _zsh_tip_pool=(
-  "Use z <pattern> to jump to directories zoxide remembers"
-  "Press Ctrl+R to fuzzy search your command history"
-  "Press Ctrl+T to fuzzy insert a file path at your cursor"
-  "Press Alt+C to fuzzy cd into a directory"
   "Type a directory name and press Enter to cd into it (AUTO_CD)"
   "Use .. / ... / .... to go up 1/2/3 levels quickly"
   "Use - to go back to your previous directory"
@@ -26,8 +22,8 @@ _zsh_tip_pool=(
   "Run fkill to fuzzy select and kill a process"
   "Run fkill 15 to send SIGTERM and select multiple processes"
   "Run ports to see all listening ports and their processes"
-  "Run myip to check your public IP address"
-  "Run weather to get a quick forecast"
+  "Run myip to check your public IP address over HTTPS"
+  "Run weather to get a quick forecast over HTTPS"
   "Run peek <file> to preview a file quickly"
   "Run headers <url> to follow redirects and print response headers"
   "Use global alias G anywhere: git log G fix pipes to grep"
@@ -38,15 +34,13 @@ _zsh_tip_pool=(
   "Use pushd/popd and dirs -v for directory stack navigation"
   "Use cd ~1 after dirs -v to jump back through your directory stack"
   "Run ll for a long listing with hidden files and readable sizes"
-  "Run lt for a tree view up to 3 levels deep"
   "Use **/*.ext for recursive glob matching (EXTENDED_GLOB)"
   "* includes dotfiles because GLOB_DOTS is enabled"
   "Use *(.m-1) to glob files modified in the last day"
   "file2 sorts before file10 because NUMERIC_GLOB_SORT is enabled"
-  "Mistyped commands may offer a correction because CORRECT is enabled"
+  "Command spell-correction prompts are intentionally disabled"
   "Tab completion is case-insensitive for names and paths"
   "ff <pattern> [path] uses fd or fdfind when available for faster searches"
-  "Use zi for an interactive fzf-powered directory picker"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
   "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"
@@ -54,11 +48,38 @@ _zsh_tip_pool=(
   "Combine globals: git log G fix W counts commits mentioning fix"
 )
 
+if command -v zoxide >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Use z <pattern> to jump to directories zoxide remembers"
+    "Use zi for an interactive zoxide directory picker"
+  )
+fi
+
+if command -v fzf >/dev/null 2>&1 && [[ -o interactive ]] && [[ -z "$ZSH_EXECUTION_STRING" ]]; then
+  _zsh_tip_pool+=(
+    "Press Ctrl+R to fuzzy search your command history"
+    "Press Ctrl+T to fuzzy insert a file path at your cursor"
+    "Press Alt+C to fuzzy cd into a directory"
+  )
+fi
+
+if alias lt >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Run lt for a tree view up to 3 levels deep"
+  )
+fi
+
 if command -v nix >/dev/null 2>&1; then
   _zsh_tip_pool+=(
     "Run npkg add bat for a short nix profile add command"
     "Run npkg search ripgrep to search nixpkgs with package descriptions"
+  )
+fi
+
+if command -v nix >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
     "Run npkg refresh to rebuild the cached nixpkgs picker index (requires jq)"
+    "Run npkg outdated to preview available package upgrades before running npkg upgrade"
   )
 fi
 
@@ -68,7 +89,6 @@ if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -
     "Run npkg find nvim to seed the nix package picker with an initial query"
     "npkg find shows description, version, and homepage in the preview pane"
     "Run npkg remove with no args to fuzzy-select installed Nix packages to uninstall"
-    "Run npkg outdated to preview available package upgrades before running npkg upgrade"
   )
 fi
 

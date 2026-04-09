@@ -1,6 +1,6 @@
 # Shared Zsh Config
 
-This directory holds the portable part of the Zsh setup that can be tracked in git and reused across different Linux distributions or machines.
+This directory holds the portable part of the Zsh setup that can be tracked in git and reused across different GNU/Linux distributions or machines.
 
 The goal is to keep stable, reusable shell behavior here, while leaving machine-specific choices in the main `~/.zshrc`.
 
@@ -8,9 +8,9 @@ The goal is to keep stable, reusable shell behavior here, while leaving machine-
 
 This shared config currently manages:
 
-- Zsh options (AUTO_CD, EXTENDED_GLOB, CORRECT, etc.)
+- Zsh options (AUTO_CD, EXTENDED_GLOB, INTERACTIVE_COMMENTS, no CORRECT prompts)
 - History settings
-- Aliases (ls, git extras, safety, network)
+- Aliases (ls, git extras, safety, network helpers over HTTPS)
 - `zoxide` integration
 - `fzf` settings and shell bindings
 - Tab completion tuning (case-insensitive matching, process completion)
@@ -70,16 +70,23 @@ $HOME/.config/zsh/scripts/check-deps.sh
 
 It checks whether the shared tools used by this config are available:
 
+Required for the intended shared setup:
+
 - `zsh`
 - `git`
+- `curl`
+- `ss`
 - `lsd`
 - `zoxide`
 - `fzf`
-- optional: `bat`
-- optional: `tree`
-- optional: `fd` / `fdfind`
-- optional: `jq`
-- optional: `nix` (for the `npkg` wrapper)
+
+Optional extras:
+
+- `bat`
+- `tree`
+- `fd` / `fdfind`
+- `jq`
+- `nix` (for the `npkg` wrapper)
 
 If something is missing, the script prints install hints for common package managers.
 
@@ -92,7 +99,9 @@ If something is missing, the script prints install hints for common package mana
 - If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
 - If `fd`/`fdfind` is missing, `ff` falls back to `find`.
 - If `nix` is missing, the `npkg` wrapper is not defined.
-- If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`remove` pickers are not available.
+- If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- The `tips` function only includes dependency-specific tips when their supporting commands are available.
+- This shared config targets GNU/Linux environments; commands such as `ss`, GNU `ls`/`grep` color flags, and some `find`/`du` pipelines are intentionally Linux-oriented.
 
 ## Suggested git usage
 

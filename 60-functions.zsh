@@ -315,13 +315,20 @@ if command -v nix >/dev/null 2>&1; then
   }
 
   _npkg_cache_is_stale() {
+    emulate -L zsh
+
     local cache_file=$1
+    local -A cache_stat
 
     if [ ! -s "$cache_file" ]; then
       return 0
     fi
 
-    [ -n "$(command find "$cache_file" -mtime +1 2>/dev/null)" ]
+    zmodload zsh/datetime 2>/dev/null || return 0
+    zmodload zsh/stat 2>/dev/null || return 0
+    zstat -H cache_stat -- "$cache_file" 2>/dev/null || return 0
+
+    (( EPOCHSECONDS - cache_stat[mtime] >= 86400 ))
   }
 
   _npkg_refresh_index() {
@@ -544,8 +551,8 @@ if command -v nix >/dev/null 2>&1; then
       return 1
     }
 
-    # Extract name, attrPath last segment, and store-path-derived version
-    # for each nixpkgs-sourced element.
+    # Extract the profile name, full flake attrPath, and store-path-derived
+    # version for each nixpkgs-sourced element.
     # version_from_path strips known Nix multi-output suffixes (man, lib,
     # dev, doc, info, bin, out, debug, static) so that e.g.
     # "tree-2.3.1-man" yields "2.3.1" instead of "2.3.1-man".
@@ -572,10 +579,9 @@ if command -v nix >/dev/null 2>&1; then
           | select(.value.active // true)
           | .key as $name
           | (.value.attrPath // "") as $attr
-          | ($attr | split(".")[-1]) as $short
           | (.value.storePaths[0] // "") as $sp
           | ($sp | version_from_path) as $ver
-          | [$name, $short, $ver] | @tsv
+          | [$name, $attr, $ver] | @tsv
         elif (.elements | type) == "array" then
           .elements[]
           | select(.active // true)
@@ -584,7 +590,7 @@ if command -v nix >/dev/null 2>&1; then
           | ($attr | split(".")[-1]) as $name
           | (.storePaths[0] // "") as $sp
           | ($sp | version_from_path) as $ver
-          | [$name, $name, $ver] | @tsv
+          | [$name, $attr, $ver] | @tsv
         else
           empty
         end

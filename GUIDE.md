@@ -1,6 +1,6 @@
 # Zsh Configuration Guide
 
-Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the framework, plugins, and Starship prompt. The shared config in `~/.config/zsh/` adds portable features that work across any machine.
+Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the framework, plugins, and Starship prompt. The shared config in `~/.config/zsh/` adds portable features that work across your GNU/Linux machines.
 
 ```
 ~/.zshrc                    → OMZ, Starship, plugins, PATH
@@ -36,6 +36,8 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ---
 
 ## Zsh Options
+
+This shared layer intentionally targets GNU/Linux environments. A few commands and flags below assume GNU userland tools such as `ss`, GNU `ls`/`grep` color flags, and standard Linux networking utilities.
 
 These options are set in `init.zsh` and change how zsh behaves day-to-day.
 
@@ -87,13 +89,8 @@ Numbers in filenames sort numerically, not alphabetically.
 # With:    file1 file2 file3 file10 file20
 ```
 
-### CORRECT
-Spell-checks commands before executing. If you mistype, zsh asks:
-
-```zsh
-sl
-zsh: correct 'sl' to 'ls' [nyae]? y
-```
+### CORRECT is disabled
+This shared layer explicitly turns command spell-correction off, even if a higher-level config such as `~/.zshrc` enabled it earlier.
 
 ### INTERACTIVE_COMMENTS
 Allows `#` comments on the command line.
@@ -185,8 +182,8 @@ lt    # tree structure
 | Alias | What it does |
 |---|---|
 | `ports` | Show all listening ports and their processes |
-| `myip` | Show your public IP address |
-| `weather` | Show weather forecast |
+| `myip` | Show your public IP address over HTTPS |
+| `weather` | Show weather forecast over HTTPS |
 
 ```zsh
 ports     # what's listening on your machine
@@ -454,7 +451,7 @@ docker ps G "running" W
 
 ## Nix Package Manager (npkg)
 
-Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive pickers require both `fzf` and `jq`.
+Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require both `fzf` and `jq`.
 
 ### Commands
 
@@ -481,7 +478,7 @@ npkg outdated          # see what would be upgraded
 npkg upgrade           # upgrade everything
 ```
 
-The fzf picker preview shows the package description, version, and homepage from nixpkgs. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically after one day.
+The fzf picker preview shows the package description, version, and homepage from nixpkgs. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
 
 `npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints a table — run it before `npkg upgrade` to see what will change.
 
@@ -495,10 +492,10 @@ Defined in `80-tips.zsh`. Prints a random tip from the shared config on demand.
 
 ```zsh
 tips    # prints one random tip, e.g.:
-        # tip: Use z <pattern> to jump to directories zoxide remembers
+        # tip: Run mkcd <dir> to create a directory and cd into it in one step
 ```
 
-Tips cover aliases, functions, fzf keybindings, glob patterns, history, and more. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are all available.
+Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific tips only appear when the supporting commands are available. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are available.
 
 ---
 
@@ -652,13 +649,6 @@ Ctrl+R              → fuzzy search (fzf-enhanced)
 ---
 
 ## Tips & Tricks
-
-### Spell correction in action
-```zsh
-sl
-# zsh: correct 'sl' to 'ls' [nyae]?
-# y = yes, n = no, a = abort, e = edit
-```
 
 ### Combine AUTO_CD with zoxide
 ```zsh
