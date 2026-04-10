@@ -131,7 +131,7 @@ headers() {
     return 1
   fi
 
-  curl -sIL -- "$1"
+  curl -sSIL -- "$1"
 }
 
 # Preview file (uses bat if available)
@@ -416,12 +416,11 @@ if command -v nix >/dev/null 2>&1; then
     cache_file=$(_npkg_attr_index) || return 1
 
     selection=$(
-      command cat "$cache_file" |
-        command fzf -m \
-          --prompt='Nix install> ' \
-          --query="$query" \
-          --header='Type to filter attribute names, Tab marks packages, Enter adds' \
-          --preview '
+      command fzf -m \
+        --prompt='Nix install> ' \
+        --query="$query" \
+        --header='Type to filter attribute names, Tab marks packages, Enter adds' \
+        --preview '
             attr={}
             printf "\033[1;36mAttr:\033[0m %s\n" "$attr"
             printf "\033[1;36mInstall ref:\033[0m nixpkgs#%s\n\n" "$attr"
@@ -446,7 +445,8 @@ if command -v nix >/dev/null 2>&1; then
               printf "\033[1;33mHomepage:\033[0m %s\n" "$hp"
             fi
           ' \
-          --preview-window=right,45%,border-left,wrap
+        --preview-window=right,45%,border-left,wrap \
+        < "$cache_file"
     ) || return 0
 
     while IFS= read -r attr; do
@@ -575,7 +575,7 @@ if command -v nix >/dev/null 2>&1; then
 
         if (.elements | type) == "object" then
           .elements | to_entries[]
-          | select(.value.originalUrl // "" | test("nixpkgs"; "i"))
+          | select((.value.originalUrl // .value.originalUri // .value.url // .value.uri // "") | test("nixpkgs"; "i"))
           | select(.value.active // true)
           | .key as $name
           | (.value.attrPath // "") as $attr
@@ -585,7 +585,7 @@ if command -v nix >/dev/null 2>&1; then
         elif (.elements | type) == "array" then
           .elements[]
           | select(.active // true)
-          | select((.originalUrl // .url // "") | test("nixpkgs"; "i"))
+          | select((.originalUrl // .originalUri // .url // .uri // "") | test("nixpkgs"; "i"))
           | (.attrPath // "") as $attr
           | ($attr | split(".")[-1]) as $name
           | (.storePaths[0] // "") as $sp
@@ -620,7 +620,8 @@ if command -v nix >/dev/null 2>&1; then
 
     # Evaluate latest versions in parallel via temp files
     tmp_dir=$(command mktemp -d) || return 1
-    trap "command rm -rf '$tmp_dir'" INT TERM
+    trap "command rm -rf '$tmp_dir'; trap - EXIT INT TERM; return 1" INT TERM
+    trap "command rm -rf '$tmp_dir'" EXIT
 
     local max_jobs=8 running=0 idx attr_name
     for (( idx = 1; idx <= pkg_count; idx++ )); do
@@ -680,7 +681,7 @@ if command -v nix >/dev/null 2>&1; then
     fi
 
     command rm -rf "$tmp_dir"
-    trap - INT TERM
+    trap - EXIT INT TERM
   }
 
   npkg() {
