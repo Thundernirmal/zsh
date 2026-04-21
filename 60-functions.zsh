@@ -957,7 +957,7 @@ upkg() {
       --only)
         shift
         if (( $# == 0 )); then
-          echo 'Missing value for --only'
+          print -u2 -- 'Missing value for --only'
           _upkg_usage
           return 1
         fi
@@ -966,7 +966,7 @@ upkg() {
       --skip)
         shift
         if (( $# == 0 )); then
-          echo 'Missing value for --skip'
+          print -u2 -- 'Missing value for --skip'
           _upkg_usage
           return 1
         fi
@@ -980,14 +980,14 @@ upkg() {
         ;;
       outdated|check|list|upgrade|up|update|managers)
         if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
-          echo "Unexpected extra command: $1"
+          print -u2 -- "Unexpected extra command: $1"
           _upkg_usage
           return 1
         fi
         raw_cmd=$1
         ;;
       *)
-        echo "Unknown argument: $1"
+        print -u2 -- "Unknown argument: $1"
         _upkg_usage
         return 1
         ;;
@@ -1010,7 +1010,7 @@ upkg() {
   _upkg_detect_managers
 
   if (( ${#_UPKG_ACTIVE_MANAGERS[@]} == 0 && ${#_UPKG_ALTERNATE_MANAGERS[@]} == 0 )); then
-    echo 'No supported package managers detected.'
+    print -u2 -- 'No supported package managers detected.'
     return 1
   fi
 
@@ -1019,18 +1019,18 @@ upkg() {
     alternate_map[$manager]=1
   done
 
-  if [ -n "$only_raw" ] || [ -n "$skip_raw" ]; then
-    _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
-    filtered=1
-    for manager in "${_UPKG_SELECTED_MANAGERS[@]}"; do
-      selected_map[$manager]=1
-    done
-    for manager in "${_UPKG_SKIPPED_MANAGERS[@]}"; do
-      skipped_map[$manager]=1
-    done
-  fi
-
   if [ "$cmd" = 'managers' ]; then
+    if [ -n "$only_raw" ] || [ -n "$skip_raw" ]; then
+      _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
+      filtered=1
+      for manager in "${_UPKG_SELECTED_MANAGERS[@]}"; do
+        selected_map[$manager]=1
+      done
+      for manager in "${_UPKG_SKIPPED_MANAGERS[@]}"; do
+        skipped_map[$manager]=1
+      done
+    fi
+
     print 'Detected managers:'
     for manager in "${candidate_pool[@]}"; do
       if [ -n "${skipped_map[$manager]}" ]; then
@@ -1064,7 +1064,7 @@ upkg() {
   _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
 
   if (( ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
-    echo 'No package managers selected after applying filters.'
+    print -u2 -- 'No package managers selected after applying filters.'
     return 1
   fi
 
