@@ -92,6 +92,20 @@ if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -
   )
 fi
 
+if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v flatpak >/dev/null 2>&1 || (command -v nix >/dev/null 2>&1 && (( $+functions[npkg] ))) || command -v npm >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Run upkg to list outdated packages across detected package managers"
+    "Run upkg managers to see active backends and alternates like pacman via --only"
+    "Use upkg --only flatpak,npm to limit checks to selected managers"
+  )
+fi
+
+if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
+  _zsh_tip_pool+=(
+    "Run upkg upgrade --sudo to opt into system package upgrades explicitly"
+  )
+fi
+
 if alias gs >/dev/null 2>&1 && alias gco >/dev/null 2>&1; then
   _zsh_tip_pool+=(
     "Use gs, gd, ga, gaa, gco, gb for quick git operations when the OMZ git plugin is enabled"
