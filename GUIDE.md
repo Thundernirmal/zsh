@@ -495,7 +495,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` | `dnf check-update` exit `100` means updates are available |
 | `pacman` | `pacman -Qu` | `pacman -Syu` | Default only when `paru` is absent |
 | `paru` | `paru -Qua` | `paru -Syu` | Preferred on Arch-family systems; upgrade requires explicit `--sudo` opt-in but still runs unprefixed |
-| `flatpak` | `flatpak remote-ls --updates` | `flatpak update` | User-space by default |
+| `flatpak` | `flatpak remote-ls --user --updates` | `flatpak update --user` | User installation only by default |
 | `nix` | `npkg outdated` | `npkg upgrade` | Reuses the existing `npkg` wrapper instead of duplicating Nix logic |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` | Upgrade path is user-space only; `upkg` will not suggest `sudo npm` |
 
@@ -504,9 +504,15 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
 - Distro outdated results depend on the package metadata already present on the machine.
 - The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`.
+- When `--sudo` is requested from a non-root shell, `upkg` expects `sudo` to be installed; otherwise it blocks the backend and tells you to rerun it as root.
 - Multi-manager runs continue after a backend fails or is blocked, then print a final summary.
 - `blocked` means the backend needed explicit privilege or local setup that was not available.
 - `skipped` means the backend was intentionally omitted by `--skip`.
+
+Flatpak note:
+
+- `upkg` uses the user Flatpak installation via `--user`, so it stays in the unprivileged workflow by default.
+- System Flatpak installations are intentionally out of scope for the default `upkg` path in v1.
 
 Nix bridge details:
 

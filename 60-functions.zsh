@@ -311,7 +311,7 @@ _upkg_parse_manager_list() {
     item=${item//[[:space:]]/}
 
     if [ -z "$item" ]; then
-      echo "Empty manager id in list: $raw"
+      print -u2 -- "Empty manager id in list: $raw"
       return 1
     fi
 
@@ -320,7 +320,7 @@ _upkg_parse_manager_list() {
         parsed+=("$item")
         ;;
       *)
-        echo "Unsupported manager id: $item"
+        print -u2 -- "Unsupported manager id: $item"
         return 1
         ;;
     esac
@@ -397,7 +397,7 @@ _upkg_apply_filters() {
     done
 
     if (( ${#unavailable[@]} > 0 )); then
-      echo "Selected managers are not available: ${(j:, :)unavailable}"
+      print -u2 -- "Selected managers are not available: ${(j:, :)unavailable}"
       return 1
     fi
   else
@@ -516,6 +516,37 @@ _upkg_print_npm_prefix_hint() {
   print '  export PATH="$HOME/.local/npm/bin:$PATH"'
 }
 
+_upkg_require_sudo_command() {
+  emulate -L zsh
+
+  if (( EUID == 0 )); then
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    return 0
+  fi
+
+  print 'sudo is not installed; rerun this backend as root or install sudo first.'
+  _upkg_set_last_result 'blocked' 'sudo is not installed; rerun as root'
+  return 1
+}
+
+_upkg_npm_outdated_looks_valid() {
+  emulate -L zsh
+
+  local output=$1
+  local line
+
+  for line in ${(f)output}; do
+    [ -n "$line" ] || continue
+    [[ $line == Package[[:space:]]*Current[[:space:]]*Wanted[[:space:]]*Latest* ]]
+    return $?
+  done
+
+  return 1
+}
+
 _upkg_run_outdated_apt() {
   emulate -L zsh
 
@@ -531,8 +562,7 @@ _upkg_run_outdated_apt() {
   }
 
   for line in ${(f)output}; do
-    [ -z "$line" ] && continue
-    [[ $line == Listing...* ]] && continue
+    [[ $line == */* ]] || continue
     packages+=("$line")
   done
 
@@ -630,12 +660,12 @@ _upkg_run_outdated_flatpak() {
 
   _upkg_print_section flatpak
 
-  output=$(command flatpak remote-ls --updates 2>&1)
+  output=$(command flatpak remote-ls --user --updates 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
-    _upkg_set_last_result 'failed' 'flatpak remote-ls --updates failed'
+    _upkg_set_last_result 'failed' 'flatpak remote-ls --user --updates failed'
     return 1
   fi
 
@@ -681,17 +711,31 @@ _upkg_run_outdated_nix() {
 _upkg_run_outdated_npm() {
   emulate -L zsh
 
-  local output rc
+  local stdout_file stderr_file stdout_output stderr_output rc
 
   _upkg_print_section npm
 
-  output=$(command npm outdated -g --depth=0 2>&1)
+  stdout_file=$(command mktemp) || {
+    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
+    return 1
+  }
+  stderr_file=$(command mktemp) || {
+    command rm -f -- "$stdout_file"
+    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
+    return 1
+  }
+
+  command npm outdated -g --depth=0 >"$stdout_file" 2>"$stderr_file"
   rc=$?
+
+  stdout_output=$(<"$stdout_file")
+  stderr_output=$(<"$stderr_file")
+  command rm -f -- "$stdout_file" "$stderr_file"
 
   case $rc in
     0)
-      if [ -n "$output" ]; then
-        print -r -- "$output"
+      if [ -n "$stdout_output" ]; then
+        print -r -- "$stdout_output"
         _upkg_set_last_result 'updates available' ''
       else
         print 'No updates available.'
@@ -699,16 +743,19 @@ _upkg_run_outdated_npm() {
       fi
       ;;
     1)
-      if [ -n "$output" ]; then
-        print -r -- "$output"
+      if [ -z "$stderr_output" ] && _upkg_npm_outdated_looks_valid "$stdout_output"; then
+        print -r -- "$stdout_output"
         _upkg_set_last_result 'updates available' ''
       else
+        [ -n "$stdout_output" ] && print -r -- "$stdout_output"
+        [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
         _upkg_set_last_result 'failed' 'npm outdated -g failed'
         return 1
       fi
       ;;
     *)
-      [ -n "$output" ] && print -r -- "$output"
+      [ -n "$stdout_output" ] && print -r -- "$stdout_output"
+      [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
       _upkg_set_last_result 'failed' 'npm outdated -g failed'
       return 1
       ;;
@@ -718,7 +765,7 @@ _upkg_run_outdated_npm() {
 _upkg_run_upgrade_apt() {
   emulate -L zsh
 
-  local output rc
+  local rc
 
   _upkg_print_section apt
 
@@ -728,14 +775,14 @@ _upkg_run_upgrade_apt() {
     return 0
   fi
 
+  _upkg_require_sudo_command || return 0
+
   if (( EUID == 0 )); then
-    output=$({ command apt update && command apt full-upgrade; } 2>&1)
+    command apt update && command apt full-upgrade
   else
-    output=$({ command sudo apt update && command sudo apt full-upgrade; } 2>&1)
+    command sudo apt update && command sudo apt full-upgrade
   fi
   rc=$?
-
-  [ -n "$output" ] && print -r -- "$output"
 
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
@@ -748,7 +795,7 @@ _upkg_run_upgrade_apt() {
 _upkg_run_upgrade_dnf() {
   emulate -L zsh
 
-  local output rc
+  local rc
 
   _upkg_print_section dnf
 
@@ -758,14 +805,14 @@ _upkg_run_upgrade_dnf() {
     return 0
   fi
 
+  _upkg_require_sudo_command || return 0
+
   if (( EUID == 0 )); then
-    output=$(command dnf upgrade --refresh 2>&1)
+    command dnf upgrade --refresh
   else
-    output=$(command sudo dnf upgrade --refresh 2>&1)
+    command sudo dnf upgrade --refresh
   fi
   rc=$?
-
-  [ -n "$output" ] && print -r -- "$output"
 
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
@@ -778,7 +825,7 @@ _upkg_run_upgrade_dnf() {
 _upkg_run_upgrade_pacman() {
   emulate -L zsh
 
-  local output rc
+  local rc
 
   _upkg_print_section pacman
 
@@ -788,14 +835,14 @@ _upkg_run_upgrade_pacman() {
     return 0
   fi
 
+  _upkg_require_sudo_command || return 0
+
   if (( EUID == 0 )); then
-    output=$(command pacman -Syu 2>&1)
+    command pacman -Syu
   else
-    output=$(command sudo pacman -Syu 2>&1)
+    command sudo pacman -Syu
   fi
   rc=$?
-
-  [ -n "$output" ] && print -r -- "$output"
 
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
@@ -808,7 +855,7 @@ _upkg_run_upgrade_pacman() {
 _upkg_run_upgrade_paru() {
   emulate -L zsh
 
-  local output rc
+  local rc
 
   _upkg_print_section paru
 
@@ -818,10 +865,8 @@ _upkg_run_upgrade_paru() {
     return 0
   fi
 
-  output=$(command paru -Syu 2>&1)
+  command paru -Syu
   rc=$?
-
-  [ -n "$output" ] && print -r -- "$output"
 
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
@@ -834,19 +879,17 @@ _upkg_run_upgrade_paru() {
 _upkg_run_upgrade_flatpak() {
   emulate -L zsh
 
-  local output rc
+  local rc
 
   _upkg_print_section flatpak
 
-  output=$(command flatpak update 2>&1)
+  command flatpak update --user
   rc=$?
-
-  [ -n "$output" ] && print -r -- "$output"
 
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
   else
-    _upkg_set_last_result 'failed' 'flatpak update failed'
+    _upkg_set_last_result 'failed' 'flatpak update --user failed'
     return 1
   fi
 }
@@ -854,14 +897,12 @@ _upkg_run_upgrade_flatpak() {
 _upkg_run_upgrade_nix() {
   emulate -L zsh
 
-  local output rc
+  local rc
 
   _upkg_print_section nix
 
-  output=$(npkg upgrade 2>&1)
+  npkg upgrade
   rc=$?
-
-  [ -n "$output" ] && print -r -- "$output"
 
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
@@ -874,7 +915,7 @@ _upkg_run_upgrade_nix() {
 _upkg_run_upgrade_npm() {
   emulate -L zsh
 
-  local prefix output rc
+  local prefix rc
 
   _upkg_print_section npm
 
@@ -891,10 +932,8 @@ _upkg_run_upgrade_npm() {
     return 0
   fi
 
-  output=$(command npm update -g 2>&1)
+  command npm update -g
   rc=$?
-
-  [ -n "$output" ] && print -r -- "$output"
 
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''

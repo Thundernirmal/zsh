@@ -104,6 +104,7 @@ If something is missing, the script prints install hints for common package mana
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
 - `upkg upgrade` never injects `sudo` automatically; pass `--sudo` explicitly for `apt`, `dnf`, `pacman`, or `paru`.
+- when `--sudo` is requested from an unprivileged shell, `upkg` expects `sudo` to exist; otherwise it blocks the backend and tells you to rerun as root.
 - `upkg` keeps npm upgrades user-space only and blocks `npm` upgrades when the global prefix is not user-writable instead of suggesting `sudo npm`.
 - The `tips` function only includes dependency-specific tips when their supporting commands are available.
 - This shared config targets GNU/Linux environments; commands such as `ss`, GNU `ls`/`grep` color flags, and some `find`/`du` pipelines are intentionally Linux-oriented.
@@ -125,6 +126,7 @@ Filters and privilege policy:
 
 - `--only <list>` and `--skip <list>` accept comma-separated manager IDs such as `flatpak,npm`
 - `--sudo` is an explicit opt-in for privileged upgrade paths; `upkg` never adds it automatically
+- `flatpak` runs in the user installation by default via `--user`
 - `paru` still runs unprefixed even when `--sudo` is passed so it can handle its own escalation flow
 - `npm` upgrades are supported only as a user-space workflow
 
