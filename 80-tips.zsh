@@ -25,6 +25,7 @@ _zsh_tip_pool=(
   "Run myip to check your public IP address over HTTPS"
   "Run weather to get a quick forecast over HTTPS"
   "Run peek <file> to preview a file quickly"
+  "Run fanprofile to see the current laptop performance/fan profile"
   "Run headers <url> to follow redirects and print response headers"
   "Use global alias G anywhere: git log G fix pipes to grep"
   "Use global alias L anywhere: cat file.txt L pipes to less"

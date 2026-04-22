@@ -10,7 +10,7 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 30-zoxide.zsh           → Smart directory jumping
 ├── 40-fzf.zsh              → Fuzzy finder with previews
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
-├── 60-functions.zsh        → Shell functions (extract, search, kill, git helpers, npkg, etc.)
+├── 60-functions.zsh        → Shell functions (extract, search, fanprofile, git helpers, npkg, etc.)
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
 └── 80-tips.zsh             → On-demand tips function
 ```
@@ -367,6 +367,23 @@ peek config.json
 peek script.sh
 ```
 
+### fanprofile — Show current laptop performance profile
+
+Uses the standard Linux `platform_profile` interface when it exists, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF laptops.
+
+```zsh
+fanprofile
+# normal (fan_boost_mode=0)
+```
+
+On ASUS/TUF systems using `fan_boost_mode`, the values map as:
+
+| Raw value | Profile |
+|---|---|
+| `0` | `normal` |
+| `1` | `overboost` |
+| `2` | `silent` |
+
 ### headers — Quick HTTP header check
 
 ```zsh
@@ -618,6 +635,7 @@ weather             → weather forecast
 fkill               → fuzzy kill process
 headers <url>       → HTTP headers
 path                → print PATH entries one per line
+fanprofile          → current laptop performance profile
 tips                → print a random usage tip
 ```
 

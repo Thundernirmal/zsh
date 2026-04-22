@@ -14,7 +14,7 @@ This shared config currently manages:
 - `zoxide` integration
 - `fzf` settings and shell bindings
 - Tab completion tuning (case-insensitive matching, process completion)
-- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, headers, npkg, etc.)
+- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, headers, fanprofile, npkg, etc.)
 - Global aliases (G, L, W, H, T, NE, NUL)
 - On-demand `tips` function
 
@@ -100,6 +100,7 @@ If something is missing, the script prints install hints for common package mana
 - If `fd`/`fdfind` is missing, `ff` falls back to `find`.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
 - The `tips` function only includes dependency-specific tips when their supporting commands are available.
 - This shared config targets GNU/Linux environments; commands such as `ss`, GNU `ls`/`grep` color flags, and some `find`/`du` pipelines are intentionally Linux-oriented.
 
