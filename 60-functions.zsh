@@ -571,16 +571,19 @@ _upkg_npm_outdated_looks_valid() {
 _upkg_run_outdated_apt() {
   emulate -L zsh
 
-  local output line
+  local output line status
   local -a packages
 
   _upkg_print_section apt
 
-  output=$(command apt list --upgradable 2>/dev/null) || {
+  output=$(command apt list --upgradable 2>&1)
+  status=$?
+  output=$(print -r -- "$output" | sed '/^Listing\.\.\.$/d')
+  if (( status != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
     _upkg_set_last_result 'failed' 'apt list --upgradable failed'
     return 1
-  }
+  fi
 
   for line in ${(f)output}; do
     [[ $line == */* ]] || continue
