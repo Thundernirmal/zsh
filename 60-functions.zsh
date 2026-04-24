@@ -1040,6 +1040,11 @@ upkg() {
         ;;
       --only=*)
         only_raw=${1#--only=}
+        if [ -z "$only_raw" ]; then
+          print -u2 -- 'Missing value for --only'
+          _upkg_usage
+          return 1
+        fi
         ;;
       --skip)
         shift
@@ -1052,6 +1057,11 @@ upkg() {
         ;;
       --skip=*)
         skip_raw=${1#--skip=}
+        if [ -z "$skip_raw" ]; then
+          print -u2 -- 'Missing value for --skip'
+          _upkg_usage
+          return 1
+        fi
         ;;
       --sudo)
         allow_sudo=1
