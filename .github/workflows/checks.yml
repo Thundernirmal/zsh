@@ -1,0 +1,40 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  verify:
+    name: Verify Zsh config
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Zsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Check Zsh syntax
+        run: zsh -n *.zsh
+
+      - name: Check dependency script syntax
+        run: sh -n scripts/check-deps.sh
+
+      - name: Source shared config
+        run: |
+          mkdir -p "$RUNNER_TEMP/home/.config"
+          ln -s "$PWD" "$RUNNER_TEMP/home/.config/zsh"
+          HOME="$RUNNER_TEMP/home" zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
+
+      - name: Check upkg smoke test syntax
+        run: zsh -n scripts/test-upkg.zsh
+
+      - name: Run upkg smoke test
+        run: zsh scripts/test-upkg.zsh

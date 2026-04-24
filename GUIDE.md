@@ -474,16 +474,18 @@ If both `paru` and `pacman` are installed, `paru` is the default Arch-family bac
 | `upkg upgrade` | Run upgrades across selected managers |
 | `upkg up` | Alias for `upgrade` |
 | `upkg update` | Alias for `upgrade` |
-| `upkg managers` | Show detected managers in execution order |
+| `upkg plan` | Preview available upgrades without changing packages |
+| `upkg managers` | Show detected managers; filtered selections appear in execution order first |
 | `upkg help` | Show usage help |
 
 ### Flags
 
 | Flag | What it does |
 |---|---|
-| `--only <list>` | Include only the comma-separated manager IDs you name |
-| `--skip <list>` | Exclude the comma-separated manager IDs you name |
+| `--only <list>` / `--only=<list>` | Include only the comma-separated manager IDs you name |
+| `--skip <list>` / `--skip=<list>` | Exclude the comma-separated manager IDs you name |
 | `--sudo` | Explicitly allow privileged upgrade paths to run |
+| `--dry-run` | Preview upgrades instead of running them |
 
 Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 
@@ -494,7 +496,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 | `apt` | `apt list --upgradable` | `apt update && apt full-upgrade` | Upgrade path is blocked unless already root or `--sudo` is passed |
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` | `dnf check-update` exit `100` means updates are available |
 | `pacman` | `pacman -Qu` | `pacman -Syu` | Default only when `paru` is absent |
-| `paru` | `paru -Qua` | `paru -Syu` | Preferred on Arch-family systems; upgrade requires explicit `--sudo` opt-in but still runs unprefixed |
+| `paru` | `pacman -Qu` plus `paru -Qua` | `paru -Syu` | Preferred on Arch-family systems; preview includes repo and AUR updates, and still shows AUR results if the repo check fails; upgrade requires explicit `--sudo` opt-in but still runs unprefixed |
 | `flatpak` | `flatpak remote-ls --user --updates` | `flatpak update --user` | User installation only by default |
 | `nix` | `npkg outdated` | `npkg upgrade` | Reuses the existing `npkg` wrapper instead of duplicating Nix logic |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` | Upgrade path is user-space only; `upkg` will not suggest `sudo npm` |
@@ -502,12 +504,18 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 ### Behavior notes
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
+- `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
 - Distro outdated results depend on the package metadata already present on the machine.
 - The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`.
 - When `--sudo` is requested from a non-root shell, `upkg` expects `sudo` to be installed; otherwise it blocks the backend and tells you to rerun it as root.
 - Multi-manager runs continue after a backend fails or is blocked, then print a final summary.
 - `blocked` means the backend needed explicit privilege or local setup that was not available.
 - `skipped` means the backend was intentionally omitted by `--skip`.
+- `--only` runs managers in the order you name them; default runs use detection order.
+- `upkg managers --only ...` keeps the selected managers at the top in that same order.
+- Empty Arch-family outdated checks that exit `1` without output are treated as the normal "up to date" case.
+- `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
+- `paru` preview still returns nonzero if the repo-side check fails, even when it can show AUR results.
 
 Flatpak note:
 
@@ -532,6 +540,10 @@ npm note:
 upkg
 upkg managers
 upkg --only flatpak,npm
+upkg --only=npm,flatpak
+upkg plan
+upkg --dry-run --only flatpak
+upkg upgrade --dry-run --only npm
 upkg upgrade --sudo
 upkg upgrade --sudo --only apt
 upkg upgrade --only npm
