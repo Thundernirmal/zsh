@@ -431,13 +431,6 @@ _upkg_apply_filters() {
   _UPKG_SKIPPED_MANAGERS=( "${skipped[@]}" )
 }
 
-_upkg_needs_root() {
-  case $1 in
-    apt|dnf|pacman) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 _upkg_manager_title() {
   case $1 in
     apt) print 'APT' ;;
