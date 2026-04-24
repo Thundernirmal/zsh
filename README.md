@@ -106,7 +106,7 @@ If something is missing, the script prints install hints for common package mana
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
 - `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
 - `upkg upgrade` never injects `sudo` automatically; pass `--sudo` explicitly for `apt`, `dnf`, `pacman`, or `paru`.
-- when `--sudo` is requested from an unprivileged shell, `upkg` expects `sudo` to exist; otherwise it blocks the backend and tells you to rerun as root.
+- When `--sudo` is requested from an unprivileged shell, `upkg` expects `sudo` to exist; otherwise it blocks the backend and tells you to rerun as root.
 - On Arch-family backends, empty `pacman -Qu` or `paru -Qua` results with exit `1` are treated as "no updates available" rather than as failures.
 - `upkg` keeps npm upgrades user-space only and blocks `npm` upgrades when the global prefix is not user-writable instead of suggesting `sudo npm`.
 - The `tips` function only includes dependency-specific tips when their supporting commands are available.
