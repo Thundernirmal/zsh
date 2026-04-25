@@ -118,11 +118,31 @@ fi
 
 tips() {
   local total=${#_zsh_tip_pool}
+  local tip
 
   if (( total == 0 )); then
     print 'No tips configured.'
     return 1
   fi
 
-  print -P "%F{244}tip:%f ${_zsh_tip_pool[$(( RANDOM % total + 1 ))]}"
+  tip=${_zsh_tip_pool[$(( RANDOM % total + 1 ))]}
+
+  if (( $+functions[_ui_plain_mode] )) && ! _ui_plain_mode; then
+    _ui_panel_header 'Tip' 'shared zsh config' accent
+    _ui_panel_prefix
+    _ui_icon '󰛨' '*'
+    print -nr -- ' '
+    _ui_color text
+    print -nr -- "$tip"
+    _ui_reset
+    print ''
+    _ui_panel_footer 'Run tips again for another hint' accent
+    return 0
+  fi
+
+  if [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
+    print -P "%F{244}tip:%f $tip"
+  else
+    print -- "tip: $tip"
+  fi
 }

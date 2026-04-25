@@ -27,6 +27,7 @@ These files are loaded by the main entrypoint:
 - `40-fzf.zsh` - shared `fzf` configuration and shell bindings
 - `50-completion.zsh` - completion zstyles (case-insensitive, process completion)
 - `60-functions.zsh` - useful shell functions
+- `65-ui-helpers.zsh` - shared terminal UI helpers for rich dashboard output
 - `70-globals.zsh` - global aliases for command-line piping
 - `80-tips.zsh` - on-demand `tips` shell function
 
@@ -101,6 +102,7 @@ If something is missing, the script prints install hints for common package mana
 - If `tree` is missing, the `lt` alias is not created unless `lsd` is available.
 - If `zoxide` or `fzf` are missing, their init blocks are skipped cleanly.
 - `40-fzf.zsh` only loads `fzf --zsh` in interactive shells when `ZSH_EXECUTION_STRING` is empty, which keeps `zsh -i -c ...` startup paths free of `zle` warnings.
+- `65-ui-helpers.zsh` only affects commands at runtime; it does not add hooks, redraw loops, or startup-time terminal work.
 - `fkill` and `fbr` are interactive helpers: they require both `fzf` and a real terminal.
 - If `bat` is missing, `fzf` file previews fall back to `sed` and `peek` falls back to `cat`.
 - If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
@@ -109,9 +111,12 @@ If something is missing, the script prints install hints for common package mana
 - `50-completion.zsh` assumes your main `~/.zshrc` or framework already ran `compinit`; it only adds lightweight `zstyle` tuning.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- Rich dashboard output is enabled only for real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`.
+- Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bars.
 - `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
 - `headers` is a redirect-following header check built on `curl -sSIL` (silent, show errors, head, follow redirects).
-- `dusage` summarizes top-level entries in a directory, while `bigfiles` walks the tree recursively.
+- `dusage`, `bigfiles`, `ports`, `myip`, `upkg` read-only views, `npkg outdated`, and `tips` render Catppuccin Mocha dashboards in rich terminals and fall back to plain text for pipes, redirects, `TERM=dumb`, or narrow terminals.
+- `ports` and `myip` are now shell functions instead of aliases so they can render rich panels while keeping their original command names.
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
@@ -139,6 +144,7 @@ Default behavior is read-only:
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview the selected upgrade set without changing packages
 - `upkg upgrade`, `upkg up`, and `upkg update` run upgrades only when you ask for them
 - `upkg managers` shows detected backends, keeps filtered selections first in execution order, and labels alternates that are available only via `--only`
+- In rich terminals, the read-only `upkg` views add themed section headers and a summary card, while backend package-manager output stays mostly raw.
 
 Filters and privilege policy:
 
