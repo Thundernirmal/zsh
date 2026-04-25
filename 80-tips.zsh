@@ -19,6 +19,7 @@ _zsh_tip_pool=(
   "Run bigfiles to find the largest files recursively in the tree"
   "Run dusage [path] [count] to summarize any directory with a custom limit"
   "Run bigfiles [path] [count] to inspect any tree with a custom limit"
+  "dusage and bigfiles still show readable results even when one subtree is inaccessible"
   "Run fkill to fuzzy select and kill a process"
   "Run fkill 15 to send SIGTERM and select multiple processes"
   "Run ports to see all listening ports and their processes"

@@ -116,6 +116,7 @@ If something is missing, the script prints install hints for common package mana
 - `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
 - `headers` is a redirect-following header check built on `curl -sSIL` (silent, show errors, head, follow redirects).
 - `dusage`, `bigfiles`, `ports`, `myip`, `upkg` read-only views, `npkg outdated`, and `tips` render Catppuccin Mocha dashboards in rich terminals and fall back to plain text for pipes, redirects, `TERM=dumb`, or narrow terminals.
+- `dusage` and `bigfiles` skip unreadable paths when they can still produce readable results, instead of failing the whole listing because one subtree is inaccessible.
 - `ports` and `myip` are now shell functions instead of aliases so they can render rich panels while keeping their original command names.
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.

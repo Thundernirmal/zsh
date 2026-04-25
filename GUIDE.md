@@ -415,7 +415,7 @@ headers https://example.com  # follows redirects and prints response headers
 
 Shows the largest immediate children of a directory, including dotfiles, sorted by size.
 
-In rich terminals it renders a responsive dashboard with icons, sizes, and proportional bars. In pipes or narrow terminals it falls back to the traditional `du -sh | sort -rh | head` style output.
+In rich terminals it renders a responsive dashboard with icons, sizes, and proportional bars. In pipes or narrow terminals it falls back to the traditional `du -sh | sort -rh | head` style output. If one child is unreadable, `dusage` still shows the readable entries instead of failing the whole listing.
 
 ```zsh
 dusage           # top 20 largest items, human-readable
@@ -424,7 +424,7 @@ dusage /var 10   # top 10 items in /var
 
 ### bigfiles — Largest files in tree
 
-In rich terminals it renders a responsive dashboard with truncated paths and proportional bars. In pipes or narrow terminals it falls back to the original recursive plain-text listing.
+In rich terminals it renders a responsive dashboard with truncated paths and proportional bars. In pipes or narrow terminals it falls back to the original recursive plain-text listing. If one subtree is unreadable, `bigfiles` still reports the readable files it can inspect.
 
 ```zsh
 bigfiles         # top 20 largest files recursively

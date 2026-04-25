@@ -3,6 +3,7 @@
 set -u
 
 repo_dir=${0:A:h:h}
+original_path=$PATH
 fakebin=$(mktemp -d)
 tmp_prefix=$(mktemp -d)
 trap 'rm -rf "$fakebin" "$tmp_prefix"' EXIT INT TERM
@@ -80,7 +81,7 @@ assert_order() {
 }
 
 main() {
-  local output cmd_status
+  local output cmd_status inspect_tmp
 
 write_fake pacman '
 case "$*" in
@@ -123,7 +124,7 @@ write_fake rm '
 exec /usr/bin/rm "$@"
 '
 
-export PATH=$fakebin
+  export PATH=$fakebin:$original_path
 export UPKG_TEST_NPM_PREFIX=$tmp_prefix
 
 source "$repo_dir/55-ui-helpers.zsh"
@@ -207,10 +208,47 @@ assert_status "$cmd_status" 1 'paru plan returns nonzero on repo check failure' 
 assert_contains "$output" 'Repo update check failed; continuing with AUR preview.' 'paru plan warns when repo preview fails' || return 1
 assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when repo preview fails' || return 1
 
-output=$(upkg upgrade --only=paru 2>&1)
-cmd_status=$?
-assert_status "$cmd_status" 1 'paru upgrade remains gated' || return 1
-assert_contains "$output" 'rerun with: upkg upgrade --sudo --only paru' 'paru upgrade remains gated' || return 1
+  output=$(upkg upgrade --only=paru 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'paru upgrade remains gated' || return 1
+  assert_contains "$output" 'rerun with: upkg upgrade --sudo --only paru' 'paru upgrade remains gated' || return 1
+
+  inspect_tmp=$(mktemp -d)
+  /usr/bin/mkdir -p "$inspect_tmp/readable-dir" "$inspect_tmp/blocked-dir/inner" "$inspect_tmp/readable-tree" "$inspect_tmp/blocked-tree/inner"
+  print -r -- 'ok' >"$inspect_tmp/readable-dir/file.txt"
+  print -r -- 'ok' >"$inspect_tmp/blocked-dir/inner/file.txt"
+  print -r -- 'ok' >"$inspect_tmp/readable-tree/visible.txt"
+  print -r -- 'ok' >"$inspect_tmp/blocked-tree/inner/hidden.txt"
+  /usr/bin/chmod 000 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+
+  output=$(dusage "$inspect_tmp" 5 2>/dev/null)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'dusage tolerates unreadable entries when readable data exists' || {
+    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    /usr/bin/rm -rf "$inspect_tmp"
+    return 1
+  }
+  assert_contains "$output" 'readable-dir' 'dusage still reports readable entries' || {
+    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    /usr/bin/rm -rf "$inspect_tmp"
+    return 1
+  }
+
+  output=$(bigfiles "$inspect_tmp" 5 2>/dev/null)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'bigfiles tolerates unreadable subtrees when readable data exists' || {
+    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    /usr/bin/rm -rf "$inspect_tmp"
+    return 1
+  }
+  assert_contains "$output" 'visible.txt' 'bigfiles still reports readable files' || {
+    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    /usr/bin/rm -rf "$inspect_tmp"
+    return 1
+  }
+
+  /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+  /usr/bin/rm -rf "$inspect_tmp"
 }
 
 main "$@"

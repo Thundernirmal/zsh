@@ -250,12 +250,12 @@ fanprofile() {
 # Disk usage summary for current directory
 dusage() {
   emulate -L zsh
-  setopt pipefail
 
   local target=${1:-.}
   local limit=${2:-20}
   local output line kib entry_path label icon shown visible_count more total_kib bar_width name_width width size_width percent_width
   local size_text percent_text header_meta footer_text
+  local scan_status=0
   local -a entries
   local -a lines
 
@@ -277,12 +277,24 @@ dusage() {
     return 0
   fi
 
+  output=$(du -sh -- "${entries[@]}" 2>/dev/null)
+  scan_status=$?
+  if [ -z "$output" ] && (( scan_status != 0 )); then
+    return $scan_status
+  fi
+
   if _ui_plain_mode; then
-    du -sh -- "${entries[@]}" 2>/dev/null | command sort -rh | command sed -n "1,${limit}p"
+    output=$(print -r -- "$output" | command sort -rh) || return 1
+    print -r -- "$output" | command sed -n "1,${limit}p"
     return $?
   fi
 
-  output=$(du -sk -- "${entries[@]}" 2>/dev/null | command sort -rn) || return 1
+  output=$(du -sk -- "${entries[@]}" 2>/dev/null)
+  scan_status=$?
+  if [ -z "$output" ] && (( scan_status != 0 )); then
+    return $scan_status
+  fi
+  output=$(print -r -- "$output" | command sort -rn) || return 1
   lines=( ${(f)output} )
   (( ${#lines[@]} > 0 )) || {
     echo "No entries found in '$target'"
@@ -352,11 +364,11 @@ dusage() {
 # Largest files in current directory tree
 bigfiles() {
   emulate -L zsh
-  setopt pipefail
 
   local target=${1:-.}
   local limit=${2:-20}
   local output line kib file_path label shown more total_kib bar_width path_width footer_text icon width size_width
+  local scan_status=0
   local -a lines
 
   if [ ! -e "$target" ]; then
@@ -371,12 +383,24 @@ bigfiles() {
       ;;
   esac
 
+  output=$(command find "$target" -type f -exec du -h -- {} + 2>/dev/null)
+  scan_status=$?
+  if [ -z "$output" ] && (( scan_status != 0 )); then
+    return $scan_status
+  fi
+
   if _ui_plain_mode; then
-    command find "$target" -type f -exec du -h {} + 2>/dev/null | command sort -rh | command sed -n "1,${limit}p"
+    output=$(print -r -- "$output" | command sort -rh) || return 1
+    print -r -- "$output" | command sed -n "1,${limit}p"
     return $?
   fi
 
-  output=$(command find "$target" -type f -exec du -k {} + 2>/dev/null | command sort -rn) || return 1
+  output=$(command find "$target" -type f -exec du -k -- {} + 2>/dev/null)
+  scan_status=$?
+  if [ -z "$output" ] && (( scan_status != 0 )); then
+    return $scan_status
+  fi
+  output=$(print -r -- "$output" | command sort -rn) || return 1
   lines=( ${(f)output} )
 
   if (( ${#lines[@]} == 0 )); then
