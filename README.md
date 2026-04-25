@@ -8,7 +8,7 @@ The goal is to keep stable, reusable shell behavior here, while leaving machine-
 
 This shared config currently manages:
 
-- Zsh options (AUTO_CD, EXTENDED_GLOB, INTERACTIVE_COMMENTS, no CORRECT prompts)
+- Zsh options (AUTO_CD, EXTENDED_GLOB, INTERACTIVE_COMMENTS, NO_BEEP, no CORRECT prompts)
 - History settings
 - Aliases (ls, git extras, safety, network helpers over HTTPS)
 - `zoxide` integration
@@ -29,6 +29,8 @@ These files are loaded by the main entrypoint:
 - `60-functions.zsh` - useful shell functions
 - `70-globals.zsh` - global aliases for command-line piping
 - `80-tips.zsh` - on-demand `tips` shell function
+
+`init.zsh` is the executable source of truth. It sources those modules in order and skips any file that is not readable, so missing or intentionally removed modules fail soft instead of breaking shell startup.
 
 ## What does not live here
 
@@ -59,6 +61,8 @@ fi
 
 Place that block in `~/.zshrc` wherever you want the shared config to load.
 If you want shared aliases and shared shell behavior to apply after your framework setup, place it after Oh My Zsh is sourced.
+
+For command-by-command examples and a fuller walkthrough, see [`GUIDE.md`](./GUIDE.md).
 
 ## Dependency checker
 
@@ -92,15 +96,22 @@ If something is missing, the script prints install hints for common package mana
 
 ## Portability notes
 
+- `init.zsh` only sources readable module files, so absent modules are skipped cleanly.
 - If `lsd` is missing, aliases fall back to standard `ls` behavior.
 - If `tree` is missing, the `lt` alias is not created unless `lsd` is available.
 - If `zoxide` or `fzf` are missing, their init blocks are skipped cleanly.
+- `40-fzf.zsh` only loads `fzf --zsh` in interactive shells when `ZSH_EXECUTION_STRING` is empty, which keeps `zsh -i -c ...` startup paths free of `zle` warnings.
+- `fkill` and `fbr` are interactive helpers: they require both `fzf` and a real terminal.
 - If `bat` is missing, `fzf` file previews fall back to `sed` and `peek` falls back to `cat`.
 - If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
 - If `fd`/`fdfind` is missing, `ff` falls back to `find`.
+- `extract` supports many archive extensions, but some formats still depend on external tools such as `unzip`, `unrar`, `7z`, `gunzip`, `bunzip2`, or `uncompress`.
+- `50-completion.zsh` assumes your main `~/.zshrc` or framework already ran `compinit`; it only adds lightweight `zstyle` tuning.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
 - `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
+- `headers` is a redirect-following header check built on `curl -sSIL` (silent, show errors, head, follow redirects).
+- `dusage` summarizes top-level entries in a directory, while `bigfiles` walks the tree recursively.
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
@@ -114,6 +125,8 @@ If something is missing, the script prints install hints for common package mana
 - This shared config targets GNU/Linux environments; commands such as `ss`, GNU `ls`/`grep` color flags, and some `find`/`du` pipelines are intentionally Linux-oriented.
 
 ## Unified package updates
+
+For complete command examples, quick-reference workflows, and function-level notes, use [`GUIDE.md`](./GUIDE.md). The summary below keeps the repo README aligned with the code's package-update behavior.
 
 `upkg` is a portable package-update entrypoint defined in `60-functions.zsh`. It opportunistically uses the managers already present on the host:
 

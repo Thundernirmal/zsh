@@ -1,6 +1,6 @@
 # Zsh Configuration Guide
 
-Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the framework, plugins, and Starship prompt. The shared config in `~/.config/zsh/` adds portable features that work across your GNU/Linux machines.
+Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the framework, plugins, and prompt integrations, while the shared config in `~/.config/zsh/` adds the portable behavior that is actually versioned in this repo.
 
 ```
 ~/.zshrc                    → OMZ, Starship, plugins, PATH
@@ -92,6 +92,9 @@ Numbers in filenames sort numerically, not alphabetically.
 
 ### CORRECT is disabled
 This shared layer explicitly turns command spell-correction off, even if a higher-level config such as `~/.zshrc` enabled it earlier.
+
+### NO_BEEP
+The terminal bell is silenced. No audible or visible bell when hitting errors or the end of a completion list.
 
 ### INTERACTIVE_COMMENTS
 Allows `#` comments on the command line.
@@ -251,6 +254,8 @@ zi              # interactive picker with fzf
 
 ## FZF — Fuzzy Finder
 
+The shared `fzf` layer is guarded carefully: the bindings only initialize when `fzf` exists, the shell is interactive, and `ZSH_EXECUTION_STRING` is empty. That keeps `zsh -i -c ...` startup paths from tripping `zle` warnings.
+
 ### Ctrl+T — Insert file/directory
 
 Press `Ctrl+T` to fuzzy search files and insert the selected path at your cursor.
@@ -261,7 +266,7 @@ cat <Ctrl+T>    # opens fuzzy finder, select a file, path is inserted
 
 The preview pane (right side) shows:
 - **Directories:** tree view of contents
-- **Files:** first 200 lines with syntax highlighting (via `bat`)
+- **Files:** first 200 lines with syntax highlighting via `bat`, or a `sed -n 1,200p` fallback in the preview pane when `bat` is unavailable (the `peek` function falls back to `cat` separately)
 
 ### Ctrl+R — Search history
 
@@ -287,12 +292,14 @@ Press `Alt+C` to fuzzy search directories and cd into one.
 
 ### fkill function
 
-Fuzzy select and kill processes.
+Fuzzy select one or more processes and send a signal. This helper requires both `fzf` and an interactive terminal.
 
 ```zsh
 fkill           # opens process picker
 fkill 15        # send SIGTERM instead of SIGKILL
 ```
+
+By default `fkill` sends `SIGKILL` (`9`). Pass the signal number with or without a leading `-`.
 
 ---
 
@@ -336,6 +343,8 @@ extract archive.tar.xz
 
 Supports: `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.tar`, `.tbz2`, `.tgz`, `.tzst`, `.bz2`, `.Z`
 
+For single-format tools, `extract` checks the real binary at runtime and fails loudly if it is missing. For example, `.zip` needs `unzip`, `.rar` needs `unrar`, `.7z` needs `7z`, and bare `.gz` / `.bz2` / `.Z` files need `gunzip` / `bunzip2` / `uncompress`.
+
 ### mkcd — Create and enter directory
 
 ```zsh
@@ -345,9 +354,11 @@ mkcd new-project
 
 ### ff — Find files by name
 
+Uses `fd` first, then `fdfind`, and finally falls back to `find`. The second argument is an optional search root.
+
 ```zsh
 ff config        # find all files with "config" in the name
-ff ".js"         # find all .js files
+ff ".js" src     # find .js files under src/
 ```
 
 ### ft — Find text in files
@@ -388,10 +399,12 @@ On ASUS/TUF systems using `fan_boost_mode`, the values map as:
 ### headers — Quick HTTP header check
 
 ```zsh
-headers google.com  # shows response headers
+headers https://example.com  # follows redirects and prints response headers
 ```
 
-### dusage — Disk usage of current directory
+### dusage — Disk usage of top-level directory entries
+
+Shows the largest immediate children of a directory, including dotfiles, sorted by size.
 
 ```zsh
 dusage           # top 20 largest items, human-readable
@@ -420,13 +433,13 @@ path    # prints each PATH entry on its own line, one per line
 
 ### fbr — Fuzzy-pick and checkout a git branch
 
-Requires `fzf`. Shows local and remote branches sorted by most recent commit, with a log preview.
+Requires `fzf` and an interactive terminal. Shows local and remote branches sorted by most recent commit, with a log preview.
 
 ```zsh
-fbr              # opens branch picker — Tab to select, Enter to checkout
+fbr              # opens branch picker and checks out the selected branch
 ```
 
-Remote branches are tracked locally automatically.
+If you pick a remote branch that is not checked out locally yet, `fbr` creates a tracking branch automatically.
 
 ---
 
@@ -573,21 +586,21 @@ upkg --only pacman
 
 ## Nix Package Manager (npkg)
 
-Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require both `fzf` and `jq`.
+Defined in `60-functions.zsh`. Only available when `nix` is installed. It is an `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require `jq`, `fzf`, and a real terminal.
 
 ### Commands
 
 | Command | What it does |
 |---|---|
-| `npkg add <pkg>` | Install a package from nixpkgs |
-| `npkg add` | Open an fzf picker to choose packages |
-| `npkg find <query>` | Seed the fzf picker with an initial query |
-| `npkg search <query>` | Plain text search with descriptions |
-| `npkg list` | List installed packages in the current profile |
-| `npkg remove <pkg>` | Remove a package |
-| `npkg remove` | Open an fzf picker to choose packages to remove |
-| `npkg outdated` | Show available upgrades before running upgrade |
-| `npkg upgrade` | Upgrade all packages |
+| `npkg add <pkg>` / `npkg install <pkg>` / `npkg i <pkg>` | Install a package from nixpkgs |
+| `npkg add` / `npkg install` | Open an fzf picker to choose packages |
+| `npkg find <query>` / `npkg pick <query>` / `npkg fzf <query>` | Seed the fzf picker with an initial query |
+| `npkg search <query>` / `npkg s <query>` | Plain text search with descriptions |
+| `npkg list` / `npkg ls` | List installed packages in the current profile |
+| `npkg remove <pkg>` / `npkg rm <pkg>` / `npkg uninstall <pkg>` / `npkg delete <pkg>` | Remove a package |
+| `npkg remove` / `npkg rm` | Open an fzf picker to choose packages to remove |
+| `npkg outdated` / `npkg check` / `npkg diff` | Show available upgrades before running upgrade |
+| `npkg upgrade` / `npkg up` / `npkg update` | Upgrade all packages |
 | `npkg upgrade <pkg>` | Upgrade a specific package |
 | `npkg refresh` | Rebuild the cached nixpkgs attribute index |
 
@@ -606,6 +619,8 @@ The fzf picker preview shows the package description, version, and homepage from
 
 `npkg refresh` also needs `jq`, because the cache is built from JSON output.
 
+Bare install names are expanded to `nixpkgs#<name>`, so `npkg add ripgrep` and `nix profile add nixpkgs#ripgrep` land in the same place.
+
 ---
 
 ## Tips Function
@@ -623,10 +638,10 @@ Tips cover aliases, functions, glob patterns, history, and more. Dependency-spec
 
 ## OMZ Plugins
 
-These are loaded from `~/.zshrc`:
+These are **not** defined by this repo. They come from your own `~/.zshrc`, and the shared config here only assumes they may exist.
 
 ### git (built-in)
-Provides dozens of git aliases. Key ones:
+If you enable the OMZ `git` plugin, common aliases include:
 
 | Alias | Expands to |
 |---|---|
@@ -668,7 +683,7 @@ Colors commands as you type:
 
 ## Starship Prompt
 
-Starship is configured separately in `~/.config/starship.toml`. It shows:
+Starship is configured separately in `~/.config/starship.toml`; it is outside this repo's tracked shell modules. It typically shows:
 - Current directory
 - Git branch and status
 - Command execution time
@@ -697,10 +712,10 @@ dirs -v             → show directory stack
 ls / ll / la / lt   → list files (various views)
 extract <archive>   → unpack any archive
 peek <file>         → preview file with syntax highlighting
-ff <pattern>        → find files by name
-ft <pattern>        → find text in files
-dusage              → disk usage of current dir
-bigfiles            → largest files in tree
+ff <pattern> [path] → find files by name
+ft <pattern> [path] → find text in files
+dusage [path] [n]   → largest top-level entries
+bigfiles [path] [n] → largest files in tree
 ```
 
 ### FZF Keybindings
@@ -737,7 +752,7 @@ gcount              → contributor stats
 ports               → listening ports
 myip                → public IP
 weather             → weather forecast
-fkill               → fuzzy kill process
+fkill [signal]      → fuzzy kill one or more processes
 headers <url>       → HTTP headers
 path                → print PATH entries one per line
 fanprofile          → current laptop performance profile
@@ -747,6 +762,7 @@ tips                → print a random usage tip
 ### Package Updates
 ```
 upkg                → show outdated packages across detected managers
+upkg plan           → preview upgrades without changing packages
 upkg managers       → show active managers and alternates
 upkg --only a,b     → limit checks to selected managers
 upkg upgrade --sudo → explicitly allow privileged upgrades
