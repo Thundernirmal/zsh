@@ -14,7 +14,7 @@ This shared config currently manages:
 - `zoxide` integration
 - `fzf` settings and shell bindings
 - Tab completion tuning (case-insensitive matching, process completion)
-- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, headers, npkg, etc.)
+- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, headers, upkg, npkg, etc.)
 - Global aliases (G, L, W, H, T, NE, NUL)
 - On-demand `tips` function
 
@@ -100,8 +100,45 @@ If something is missing, the script prints install hints for common package mana
 - If `fd`/`fdfind` is missing, `ff` falls back to `find`.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
+- `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
+- `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
+- `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
+- `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
+- `upkg upgrade` never injects `sudo` automatically; pass `--sudo` explicitly for `apt`, `dnf`, `pacman`, or `paru`.
+- When `--sudo` is requested from an unprivileged shell, `upkg` expects `sudo` to exist; otherwise it blocks the backend and tells you to rerun as root.
+- On Arch-family backends, empty `pacman -Qu` or `paru -Qua` results with exit `1` are treated as "no updates available" rather than as failures.
+- `upkg` keeps npm upgrades user-space only and blocks `npm` upgrades when the global prefix is not user-writable instead of suggesting `sudo npm`.
 - The `tips` function only includes dependency-specific tips when their supporting commands are available.
 - This shared config targets GNU/Linux environments; commands such as `ss`, GNU `ls`/`grep` color flags, and some `find`/`du` pipelines are intentionally Linux-oriented.
+
+## Unified package updates
+
+`upkg` is a portable package-update entrypoint defined in `60-functions.zsh`. It opportunistically uses the managers already present on the host:
+
+- distro backend: `apt`, `dnf`, or `paru`/`pacman`
+- extras: `flatpak`, `nix` via `npkg`, and global `npm`
+
+Default behavior is read-only:
+
+- `upkg`, `upkg outdated`, `upkg check`, and `upkg list` show outdated packages using each manager's native output
+- `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview the selected upgrade set without changing packages
+- `upkg upgrade`, `upkg up`, and `upkg update` run upgrades only when you ask for them
+- `upkg managers` shows detected backends, keeps filtered selections first in execution order, and labels alternates that are available only via `--only`
+
+Filters and privilege policy:
+
+- `--only <list>` / `--only=<list>` and `--skip <list>` / `--skip=<list>` accept comma-separated manager IDs such as `flatpak,npm`
+- `--only` runs managers in the order you name them; default runs use detection order
+- `--dry-run` previews upgrades instead of running them
+- `--sudo` is an explicit opt-in for privileged upgrade paths; `upkg` never adds it automatically
+- `flatpak` runs in the user installation by default via `--user`
+- Empty `pacman -Qu` / `paru -Qu` / `paru -Qua` runs with exit `1` are treated as the normal no-update case
+- `paru` previews both repo updates and AUR updates when `pacman` is available; if the repo check fails, `upkg` still shows any AUR preview it can gather before returning nonzero
+- `paru` still runs unprefixed even when `--sudo` is passed so it can handle its own escalation flow
+- `npm` upgrades are supported only as a user-space workflow
+
+`upkg` does not add any new required shared dependency. It only uses managers already installed on the current machine.
 
 ## Suggested git usage
 

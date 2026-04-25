@@ -10,7 +10,7 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 30-zoxide.zsh           → Smart directory jumping
 ├── 40-fzf.zsh              → Fuzzy finder with previews
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
-├── 60-functions.zsh        → Shell functions (extract, search, kill, git helpers, npkg, etc.)
+├── 60-functions.zsh        → Shell functions (extract, search, kill, git helpers, upkg, npkg, etc.)
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
 └── 80-tips.zsh             → On-demand tips function
 ```
@@ -27,11 +27,12 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 6. [Tab Completion](#tab-completion)
 7. [Shell Functions](#shell-functions)
 8. [Global Aliases](#global-aliases)
-9. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
-10. [Tips Function](#tips-function)
-11. [OMZ Plugins](#omz-plugins)
-12. [Starship Prompt](#starship-prompt)
-13. [Quick Reference Card](#quick-reference-card)
+9. [Unified Package Updates (upkg)](#unified-package-updates-upkg)
+10. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
+11. [Tips Function](#tips-function)
+12. [OMZ Plugins](#omz-plugins)
+13. [Starship Prompt](#starship-prompt)
+14. [Quick Reference Card](#quick-reference-card)
 
 ---
 
@@ -449,6 +450,110 @@ docker ps G "running" W
 
 ---
 
+## Unified Package Updates (upkg)
+
+Defined in `60-functions.zsh`. `upkg` is a single entrypoint for checking outdated packages or running upgrades across the package managers available on the current machine. Runtime detection is the source of truth: there is no bootstrap variable to keep in sync, and `upkg` only uses managers that `command -v` can see right now.
+
+Detection order is:
+
+1. distro backend: `paru` when present, otherwise `pacman`, otherwise `apt`, otherwise `dnf`
+2. `flatpak`
+3. `nix` via the existing `npkg` wrapper
+4. global `npm`
+
+If both `paru` and `pacman` are installed, `paru` is the default Arch-family backend and `pacman` remains available only through `--only pacman`.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `upkg` | Show outdated packages across detected managers |
+| `upkg outdated` | Same as the default read-only check |
+| `upkg check` | Alias for `outdated` |
+| `upkg list` | Alias for `outdated` |
+| `upkg upgrade` | Run upgrades across selected managers |
+| `upkg up` | Alias for `upgrade` |
+| `upkg update` | Alias for `upgrade` |
+| `upkg plan` | Preview available upgrades without changing packages |
+| `upkg managers` | Show detected managers; filtered selections appear in execution order first |
+| `upkg help` | Show usage help |
+
+### Flags
+
+| Flag | What it does |
+|---|---|
+| `--only <list>` / `--only=<list>` | Include only the comma-separated manager IDs you name |
+| `--skip <list>` / `--skip=<list>` | Exclude the comma-separated manager IDs you name |
+| `--sudo` | Explicitly allow privileged upgrade paths to run |
+| `--dry-run` | Preview upgrades instead of running them |
+
+Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
+
+### Backends
+
+| Manager | Outdated command | Upgrade command | Notes |
+|---|---|---|---|
+| `apt` | `apt list --upgradable` | `apt update && apt full-upgrade` | Upgrade path is blocked unless already root or `--sudo` is passed |
+| `dnf` | `dnf check-update` | `dnf upgrade --refresh` | `dnf check-update` exit `100` means updates are available |
+| `pacman` | `pacman -Qu` | `pacman -Syu` | Default only when `paru` is absent |
+| `paru` | `pacman -Qu` plus `paru -Qua` | `paru -Syu` | Preferred on Arch-family systems; preview includes repo and AUR updates, and still shows AUR results if the repo check fails; upgrade requires explicit `--sudo` opt-in but still runs unprefixed |
+| `flatpak` | `flatpak remote-ls --user --updates` | `flatpak update --user` | User installation only by default |
+| `nix` | `npkg outdated` | `npkg upgrade` | Reuses the existing `npkg` wrapper instead of duplicating Nix logic |
+| `npm` | `npm outdated -g --depth=0` | `npm update -g` | Upgrade path is user-space only; `upkg` will not suggest `sudo npm` |
+
+### Behavior notes
+
+- `upkg` with no arguments is read-only and does not refresh package metadata automatically.
+- `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
+- Distro outdated results depend on the package metadata already present on the machine.
+- The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`.
+- When `--sudo` is requested from a non-root shell, `upkg` expects `sudo` to be installed; otherwise it blocks the backend and tells you to rerun it as root.
+- Multi-manager runs continue after a backend fails or is blocked, then print a final summary.
+- `blocked` means the backend needed explicit privilege or local setup that was not available.
+- `skipped` means the backend was intentionally omitted by `--skip`.
+- `--only` runs managers in the order you name them; default runs use detection order.
+- `upkg managers --only ...` keeps the selected managers at the top in that same order.
+- Empty Arch-family outdated checks that exit `1` without output are treated as the normal "up to date" case.
+- `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
+- `paru` preview still returns nonzero if the repo-side check fails, even when it can show AUR results.
+
+Flatpak note:
+
+- `upkg` uses the user Flatpak installation via `--user`, so it stays in the unprivileged workflow by default.
+- System Flatpak installations are intentionally out of scope for the default `upkg` path in v1.
+
+Nix bridge details:
+
+- `upkg` only exposes the `nix` backend when `nix` is installed and the `npkg` shell function is defined in the current shell.
+- `upkg outdated --only nix` is blocked when `jq` is missing because `npkg outdated` depends on it.
+- `upkg upgrade --only nix` still works without `jq`.
+
+npm note:
+
+- `upkg upgrade --only npm` checks the configured global prefix before running.
+- If that prefix is not writable by the current user, `upkg` blocks the npm backend and tells you to move the prefix under your home directory.
+- `upkg` never recommends `sudo npm`.
+
+### Examples
+
+```zsh
+upkg
+upkg managers
+upkg --only flatpak,npm
+upkg --only=npm,flatpak
+upkg plan
+upkg --dry-run --only flatpak
+upkg upgrade --dry-run --only npm
+upkg upgrade --sudo
+upkg upgrade --sudo --only apt
+upkg upgrade --only npm
+upkg --only pacman
+```
+
+`upkg managers` shows active backends in execution order and labels alternates that are only available via `--only`, which is especially useful on Arch or CachyOS systems that have both `paru` and `pacman`.
+
+---
+
 ## Nix Package Manager (npkg)
 
 Defined in `60-functions.zsh`. Only available when `nix` is installed. An `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require both `fzf` and `jq`.
@@ -495,7 +600,7 @@ tips    # prints one random tip, e.g.:
         # tip: Run mkcd <dir> to create a directory and cd into it in one step
 ```
 
-Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific tips only appear when the supporting commands are available. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are available.
+Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific tips only appear when the supporting commands are available. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are available, and `upkg` tips are added automatically whenever at least one supported package manager is detected.
 
 ---
 
@@ -619,6 +724,14 @@ fkill               → fuzzy kill process
 headers <url>       → HTTP headers
 path                → print PATH entries one per line
 tips                → print a random usage tip
+```
+
+### Package Updates
+```
+upkg                → show outdated packages across detected managers
+upkg managers       → show active managers and alternates
+upkg --only a,b     → limit checks to selected managers
+upkg upgrade --sudo → explicitly allow privileged upgrades
 ```
 
 ### Nix (npkg — requires nix)

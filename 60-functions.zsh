@@ -262,6 +262,993 @@ fbr() {
   return 1
 }
 
+# Unified package update/check wrapper across supported managers.
+_upkg_usage() {
+  print 'Usage: upkg [command] [--only <list>] [--skip <list>] [--sudo] [--dry-run]'
+  print ''
+  print 'Commands:'
+  print '  outdated            Show outdated packages across detected managers'
+  print '  check               Alias for outdated'
+  print '  list                Alias for outdated'
+  print '  upgrade             Run upgrades across selected managers'
+  print '  up                  Alias for upgrade'
+  print '  update              Alias for upgrade'
+  print '  plan                Preview available upgrades without changing packages'
+  print '  managers            Show detected managers and alternates'
+  print '  help                Show this help text'
+  print ''
+  print 'Flags:'
+  print '  --only <list>       Comma-separated manager IDs to include'
+  print '  --skip <list>       Comma-separated manager IDs to exclude'
+  print '  --sudo              Allow privileged upgrade backends to run'
+  print '  --dry-run           Preview upgrades instead of running them'
+  print ''
+  print 'Supported manager IDs:'
+  print '  apt, dnf, pacman, paru, flatpak, nix, npm'
+  print ''
+  print 'Examples:'
+  print '  upkg'
+  print '  upkg managers'
+  print '  upkg --only flatpak,npm'
+  print '  upkg upgrade --sudo'
+  print '  upkg upgrade --dry-run --only npm,flatpak'
+  print '  upkg upgrade --sudo --only apt'
+  print ''
+  print 'Notes:'
+  print '  - upkg with no command defaults to outdated'
+  print '  - plan and --dry-run use the read-only outdated checks'
+  print '  - upgrades never inject sudo automatically'
+  print '  - paru upgrades require explicit --sudo opt-in but still run unprefixed'
+  print '  - npm upgrades stay user-space only; upkg will not recommend sudo npm'
+}
+
+_upkg_parse_manager_list() {
+  emulate -L zsh
+
+  local raw=$1
+  local item
+  local -a parsed
+
+  [ -n "$raw" ] || return 0
+
+  for item in ${(s:,:)raw}; do
+    item=${item//[[:space:]]/}
+
+    if [ -z "$item" ]; then
+      print -u2 -- "Empty manager id in list: $raw"
+      return 1
+    fi
+
+    case $item in
+      apt|dnf|pacman|paru|flatpak|nix|npm)
+        parsed+=("$item")
+        ;;
+      *)
+        print -u2 -- "Unsupported manager id: $item"
+        return 1
+        ;;
+    esac
+  done
+
+  print -l -- "${parsed[@]}"
+}
+
+_upkg_detect_managers() {
+  emulate -L zsh
+
+  typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
+  _UPKG_ACTIVE_MANAGERS=()
+  _UPKG_ALTERNATE_MANAGERS=()
+
+  if command -v paru >/dev/null 2>&1; then
+    _UPKG_ACTIVE_MANAGERS+=(paru)
+    if command -v pacman >/dev/null 2>&1; then
+      _UPKG_ALTERNATE_MANAGERS+=(pacman)
+    fi
+  elif command -v pacman >/dev/null 2>&1; then
+    _UPKG_ACTIVE_MANAGERS+=(pacman)
+  elif command -v apt >/dev/null 2>&1; then
+    _UPKG_ACTIVE_MANAGERS+=(apt)
+  elif command -v dnf >/dev/null 2>&1; then
+    _UPKG_ACTIVE_MANAGERS+=(dnf)
+  fi
+
+  if command -v flatpak >/dev/null 2>&1; then
+    _UPKG_ACTIVE_MANAGERS+=(flatpak)
+  fi
+
+  if command -v nix >/dev/null 2>&1 && (( $+functions[npkg] )); then
+    _UPKG_ACTIVE_MANAGERS+=(nix)
+  fi
+
+  if command -v npm >/dev/null 2>&1; then
+    _UPKG_ACTIVE_MANAGERS+=(npm)
+  fi
+}
+
+_upkg_apply_filters() {
+  emulate -L zsh
+
+  local only_raw=$1
+  local skip_raw=$2
+  local parsed manager
+  local -a only_list skip_list candidate_pool selected filtered unavailable skipped
+  local -A available seen skipped_map
+
+  typeset -g -a _UPKG_SELECTED_MANAGERS _UPKG_SKIPPED_MANAGERS
+  _UPKG_SELECTED_MANAGERS=()
+  _UPKG_SKIPPED_MANAGERS=()
+
+  candidate_pool=( "${_UPKG_ACTIVE_MANAGERS[@]}" "${_UPKG_ALTERNATE_MANAGERS[@]}" )
+  for manager in "${candidate_pool[@]}"; do
+    available[$manager]=1
+  done
+
+  if [ -n "$only_raw" ]; then
+    parsed=$(_upkg_parse_manager_list "$only_raw") || return 1
+    only_list=( ${(f)parsed} )
+
+    for manager in "${only_list[@]}"; do
+      if [ -z "${available[$manager]}" ]; then
+        unavailable+=("$manager")
+        continue
+      fi
+
+      if [ -z "${seen[$manager]}" ]; then
+        selected+=("$manager")
+        seen[$manager]=1
+      fi
+    done
+
+    if (( ${#unavailable[@]} > 0 )); then
+      print -u2 -- "Selected managers are not available: ${(j:, :)unavailable}"
+      return 1
+    fi
+  else
+    selected=( "${_UPKG_ACTIVE_MANAGERS[@]}" )
+  fi
+
+  if [ -n "$skip_raw" ]; then
+    parsed=$(_upkg_parse_manager_list "$skip_raw") || return 1
+    skip_list=( ${(f)parsed} )
+
+    for manager in "${skip_list[@]}"; do
+      skipped_map[$manager]=1
+    done
+
+    filtered=()
+    for manager in "${selected[@]}"; do
+      if [ -n "${skipped_map[$manager]}" ]; then
+        skipped+=("$manager")
+      else
+        filtered+=("$manager")
+      fi
+    done
+    selected=( "${filtered[@]}" )
+  fi
+
+  _UPKG_SELECTED_MANAGERS=( "${selected[@]}" )
+  _UPKG_SKIPPED_MANAGERS=( "${skipped[@]}" )
+}
+
+_upkg_manager_title() {
+  case $1 in
+    apt) print 'APT' ;;
+    dnf) print 'DNF' ;;
+    pacman) print 'Pacman' ;;
+    paru) print 'Paru' ;;
+    flatpak) print 'Flatpak' ;;
+    nix) print 'Nix (npkg)' ;;
+    npm) print 'npm' ;;
+    *) print -r -- "$1" ;;
+  esac
+}
+
+_upkg_print_section() {
+  emulate -L zsh
+
+  local title
+
+  title=$(_upkg_manager_title "$1")
+  print ''
+  print "==> $title"
+}
+
+_upkg_set_last_result() {
+  typeset -g _UPKG_LAST_STATE=$1
+  typeset -g _UPKG_LAST_DETAIL=$2
+}
+
+_upkg_record_summary() {
+  emulate -L zsh
+
+  local manager=$1
+  local state=$2
+  local detail=$3
+
+  _UPKG_SUMMARY_ORDER+=("$manager")
+  _UPKG_SUMMARY_STATE[$manager]=$state
+  _UPKG_SUMMARY_DETAIL[$manager]=$detail
+}
+
+_upkg_print_summary() {
+  emulate -L zsh
+
+  local manager detail
+
+  print ''
+  print 'Summary:'
+
+  for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+    detail=${_UPKG_SUMMARY_DETAIL[$manager]}
+    if [ -n "$detail" ]; then
+      print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]} - $detail"
+    else
+      print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}"
+    fi
+  done
+}
+
+_upkg_finish_upgrade_result() {
+  emulate -L zsh
+
+  local rc=$1
+  local detail=$2
+
+  if (( rc == 0 )); then
+    _upkg_set_last_result 'upgraded' ''
+    return 0
+  fi
+
+  _upkg_set_last_result 'failed' "$detail"
+  return 1
+}
+
+_upkg_arch_outdated_has_no_updates() {
+  emulate -L zsh
+
+  local rc=$1
+  local output=$2
+
+  (( rc == 1 )) && [ -z "$output" ]
+}
+
+_upkg_npm_prefix() {
+  emulate -L zsh
+
+  local prefix
+
+  prefix=$(command npm config get prefix 2>/dev/null) || return 1
+  prefix=${prefix//$'\r'/}
+
+  if [ -z "$prefix" ] || [ "$prefix" = 'undefined' ] || [ "$prefix" = 'null' ]; then
+    return 1
+  fi
+
+  print -r -- "$prefix"
+}
+
+_upkg_print_npm_prefix_hint() {
+  emulate -L zsh
+
+  print 'Configure a user-space npm prefix under your home directory, for example:'
+  print '  mkdir -p "$HOME/.local/npm"'
+  print '  npm config set prefix "$HOME/.local/npm"'
+  print '  export PATH="$HOME/.local/npm/bin:$PATH"'
+}
+
+_upkg_require_sudo_command() {
+  emulate -L zsh
+
+  if (( EUID == 0 )); then
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    return 0
+  fi
+
+  print 'sudo is not installed; rerun this backend as root or install sudo first.'
+  _upkg_set_last_result 'blocked' 'sudo is not installed; rerun as root'
+  return 1
+}
+
+_upkg_npm_outdated_looks_valid() {
+  emulate -L zsh
+
+  local output=$1
+  local line
+
+  for line in ${(f)output}; do
+    [ -n "$line" ] || continue
+    [[ $line == Package[[:space:]]*Current[[:space:]]*Wanted[[:space:]]*Latest* ]] && return 0
+  done
+
+  return 1
+}
+
+_upkg_run_outdated_apt() {
+  emulate -L zsh
+
+  local output line status
+  local -a packages
+
+  _upkg_print_section apt
+
+  output=$(command apt list --upgradable 2>&1)
+  status=$?
+  output=$(print -r -- "$output" | sed '/^Listing\.\.\.$/d')
+  if (( status != 0 )); then
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'apt list --upgradable failed'
+    return 1
+  fi
+
+  for line in ${(f)output}; do
+    [[ $line == */* ]] || continue
+    packages+=("$line")
+  done
+
+  if (( ${#packages[@]} == 0 )); then
+    print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+    return 0
+  fi
+
+  print -l -- "${packages[@]}"
+  _upkg_set_last_result 'updates available' ''
+}
+
+_upkg_run_outdated_dnf() {
+  emulate -L zsh
+
+  local output rc
+
+  _upkg_print_section dnf
+
+  output=$(command dnf check-update 2>&1)
+  rc=$?
+
+  case $rc in
+    0)
+      print 'No updates available.'
+      _upkg_set_last_result 'up to date' ''
+      ;;
+    100)
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'updates available' ''
+      ;;
+    *)
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'failed' 'dnf check-update failed'
+      return 1
+      ;;
+  esac
+}
+
+_upkg_run_outdated_pacman() {
+  emulate -L zsh
+
+  local output rc
+
+  _upkg_print_section pacman
+
+  output=$(command pacman -Qu 2>&1)
+  rc=$?
+
+  if _upkg_arch_outdated_has_no_updates "$rc" "$output"; then
+    print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+    return 0
+  fi
+
+  if (( rc != 0 )); then
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'pacman -Qu failed'
+    return 1
+  fi
+
+  if [ -n "$output" ]; then
+    print -r -- "$output"
+    _upkg_set_last_result 'updates available' ''
+  else
+    print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+  fi
+}
+
+_upkg_run_outdated_paru() {
+  emulate -L zsh
+
+  local pacman_output='' paru_output='' repo_error=''
+  local pacman_rc=0 paru_rc=0
+  local had_updates=0 repo_failed=0
+
+  _upkg_print_section paru
+
+  if command -v pacman >/dev/null 2>&1; then
+    pacman_output=$(command pacman -Qu 2>&1)
+    pacman_rc=$?
+
+    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
+      pacman_output=''
+    elif (( pacman_rc != 0 )); then
+      repo_failed=1
+      repo_error='pacman -Qu failed while checking paru repo updates'
+    fi
+  else
+    pacman_output=$(command paru -Qu 2>&1)
+    pacman_rc=$?
+
+    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
+      pacman_output=''
+    elif (( pacman_rc != 0 )); then
+      repo_failed=1
+      repo_error='paru -Qu failed'
+    fi
+  fi
+
+  paru_output=$(command paru -Qua 2>&1)
+  paru_rc=$?
+
+  if _upkg_arch_outdated_has_no_updates "$paru_rc" "$paru_output"; then
+    paru_output=''
+    paru_rc=0
+  fi
+
+  if (( repo_failed )); then
+    print 'Repo updates:'
+    if [ -n "$pacman_output" ]; then
+      print -r -- "$pacman_output"
+    else
+      print 'Repo update check failed.'
+    fi
+    print 'Repo update check failed; continuing with AUR preview.'
+  elif [ -n "$pacman_output" ]; then
+    print 'Repo updates:'
+    print -r -- "$pacman_output"
+    had_updates=1
+  fi
+
+  if (( paru_rc != 0 )); then
+    (( repo_failed || had_updates )) && print ''
+    print 'AUR updates:'
+    [ -n "$paru_output" ] && print -r -- "$paru_output"
+    if (( repo_failed )); then
+      _upkg_set_last_result 'failed' "$repo_error; paru -Qua failed"
+    else
+      _upkg_set_last_result 'failed' 'paru -Qua failed'
+    fi
+    return 1
+  fi
+
+  if [ -n "$paru_output" ]; then
+    (( repo_failed || had_updates )) && print ''
+    print 'AUR updates:'
+    print -r -- "$paru_output"
+    had_updates=1
+  elif (( repo_failed )); then
+    print ''
+    print 'AUR updates:'
+    print 'No updates available.'
+  fi
+
+  if (( repo_failed )); then
+    _upkg_set_last_result 'failed' "$repo_error; AUR preview still shown"
+    return 1
+  fi
+
+  if (( had_updates )); then
+    _upkg_set_last_result 'updates available' ''
+  else
+    print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+  fi
+}
+
+_upkg_run_outdated_flatpak() {
+  emulate -L zsh
+
+  local output rc
+
+  _upkg_print_section flatpak
+
+  output=$(command flatpak remote-ls --user --updates 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'flatpak remote-ls --user --updates failed'
+    return 1
+  fi
+
+  if [ -n "$output" ]; then
+    print -r -- "$output"
+    _upkg_set_last_result 'updates available' ''
+  else
+    print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+  fi
+}
+
+_upkg_run_outdated_nix() {
+  emulate -L zsh
+
+  local output rc
+
+  _upkg_print_section nix
+
+  if ! command -v jq >/dev/null 2>&1; then
+    print 'jq is required for npkg outdated; install jq or run upkg upgrade --only nix.'
+    _upkg_set_last_result 'blocked' 'jq is required for nix outdated'
+    return 0
+  fi
+
+  output=$(npkg outdated 2>&1)
+  rc=$?
+
+  [ -n "$output" ] && print -r -- "$output"
+
+  if (( rc != 0 )); then
+    _upkg_set_last_result 'failed' 'npkg outdated failed'
+    return 1
+  fi
+
+  if [[ $output == *'upgrade(s) available.'* ]]; then
+    _upkg_set_last_result 'updates available' ''
+  else
+    _upkg_set_last_result 'up to date' ''
+  fi
+}
+
+_upkg_run_outdated_npm() {
+  emulate -L zsh
+
+  local stdout_file stderr_file stdout_output stderr_output rc
+
+  _upkg_print_section npm
+
+  stdout_file=$(command mktemp) || {
+    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
+    return 1
+  }
+  stderr_file=$(command mktemp) || {
+    command rm -f -- "$stdout_file"
+    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
+    return 1
+  }
+
+  command npm outdated -g --depth=0 >"$stdout_file" 2>"$stderr_file"
+  rc=$?
+
+  stdout_output=$(<"$stdout_file")
+  stderr_output=$(<"$stderr_file")
+  command rm -f -- "$stdout_file" "$stderr_file"
+
+  case $rc in
+    0)
+      if [ -n "$stdout_output" ]; then
+        print -r -- "$stdout_output"
+        _upkg_set_last_result 'updates available' ''
+      else
+        print 'No updates available.'
+        _upkg_set_last_result 'up to date' ''
+      fi
+      ;;
+    1)
+      if [ -z "$stderr_output" ] && _upkg_npm_outdated_looks_valid "$stdout_output"; then
+        print -r -- "$stdout_output"
+        _upkg_set_last_result 'updates available' ''
+      else
+        [ -n "$stdout_output" ] && print -r -- "$stdout_output"
+        [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
+        _upkg_set_last_result 'failed' 'npm outdated -g failed'
+        return 1
+      fi
+      ;;
+    *)
+      [ -n "$stdout_output" ] && print -r -- "$stdout_output"
+      [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
+      _upkg_set_last_result 'failed' 'npm outdated -g failed'
+      return 1
+      ;;
+  esac
+}
+
+_upkg_run_upgrade_apt() {
+  emulate -L zsh
+
+  local rc
+
+  _upkg_print_section apt
+
+  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+    print 'apt upgrade requires root; rerun with: upkg upgrade --sudo --only apt'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only apt'
+    return 0
+  fi
+
+  _upkg_require_sudo_command || return 0
+
+  if (( EUID == 0 )); then
+    command apt update
+    rc=$?
+    if (( rc != 0 )); then
+      _upkg_set_last_result 'failed' 'apt update failed'
+      return 1
+    fi
+    command apt full-upgrade
+  else
+    command sudo apt update
+    rc=$?
+    if (( rc != 0 )); then
+      _upkg_set_last_result 'failed' 'sudo apt update failed'
+      return 1
+    fi
+    command sudo apt full-upgrade
+  fi
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'apt full-upgrade failed'
+}
+
+_upkg_run_upgrade_dnf() {
+  emulate -L zsh
+
+  local rc
+
+  _upkg_print_section dnf
+
+  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+    print 'dnf upgrade requires root; rerun with: upkg upgrade --sudo --only dnf'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only dnf'
+    return 0
+  fi
+
+  _upkg_require_sudo_command || return 0
+
+  if (( EUID == 0 )); then
+    command dnf upgrade --refresh
+  else
+    command sudo dnf upgrade --refresh
+  fi
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'dnf upgrade --refresh failed'
+}
+
+_upkg_run_upgrade_pacman() {
+  emulate -L zsh
+
+  local rc
+
+  _upkg_print_section pacman
+
+  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+    print 'pacman upgrade requires root; rerun with: upkg upgrade --sudo --only pacman'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only pacman'
+    return 0
+  fi
+
+  _upkg_require_sudo_command || return 0
+
+  if (( EUID == 0 )); then
+    command pacman -Syu
+  else
+    command sudo pacman -Syu
+  fi
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'pacman -Syu failed'
+}
+
+_upkg_run_upgrade_paru() {
+  emulate -L zsh
+
+  local rc
+
+  _upkg_print_section paru
+
+  if (( ! _UPKG_ALLOW_SUDO )); then
+    print 'paru upgrade requires explicit --sudo opt-in; rerun with: upkg upgrade --sudo --only paru'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only paru'
+    return 0
+  fi
+
+  command paru -Syu
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'paru -Syu failed'
+}
+
+_upkg_run_upgrade_flatpak() {
+  emulate -L zsh
+
+  local rc
+
+  _upkg_print_section flatpak
+
+  command flatpak update --user
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'flatpak update --user failed'
+}
+
+_upkg_run_upgrade_nix() {
+  emulate -L zsh
+
+  local rc
+
+  _upkg_print_section nix
+
+  npkg upgrade
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'npkg upgrade failed'
+}
+
+_upkg_run_upgrade_npm() {
+  emulate -L zsh
+
+  local prefix rc
+
+  _upkg_print_section npm
+
+  prefix=$(_upkg_npm_prefix) || {
+    print 'Failed to determine the npm global prefix.'
+    _upkg_set_last_result 'failed' 'could not determine npm global prefix'
+    return 1
+  }
+
+  if [ ! -d "$prefix" ] || [ ! -w "$prefix" ]; then
+    print "npm global prefix '$prefix' is not writable by the current user."
+    _upkg_print_npm_prefix_hint
+    _upkg_set_last_result 'blocked' 'configure a user-writable npm prefix'
+    return 0
+  fi
+
+  command npm update -g
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'npm update -g failed'
+}
+
+upkg() {
+  emulate -L zsh
+
+  local raw_cmd='' cmd='outdated' manager
+  local only_raw='' skip_raw=''
+  local allow_sudo=0 dry_run=0 filtered=0 exit_code=0
+  local -a candidate_pool run_order display_order
+  local -A selected_map skipped_map alternate_map display_seen
+
+  while (( $# > 0 )); do
+    case $1 in
+      --only)
+        shift
+        if (( $# == 0 )); then
+          print -u2 -- 'Missing value for --only'
+          _upkg_usage
+          return 1
+        fi
+        only_raw=$1
+        ;;
+      --only=*)
+        only_raw=${1#--only=}
+        if [ -z "$only_raw" ]; then
+          print -u2 -- 'Missing value for --only'
+          _upkg_usage
+          return 1
+        fi
+        ;;
+      --skip)
+        shift
+        if (( $# == 0 )); then
+          print -u2 -- 'Missing value for --skip'
+          _upkg_usage
+          return 1
+        fi
+        skip_raw=$1
+        ;;
+      --skip=*)
+        skip_raw=${1#--skip=}
+        if [ -z "$skip_raw" ]; then
+          print -u2 -- 'Missing value for --skip'
+          _upkg_usage
+          return 1
+        fi
+        ;;
+      --sudo)
+        allow_sudo=1
+        ;;
+      --dry-run)
+        dry_run=1
+        ;;
+      help|-h|--help)
+        raw_cmd='help'
+        ;;
+      outdated|check|list|upgrade|up|update|plan|managers)
+        if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
+          print -u2 -- "Unexpected extra command: $1"
+          _upkg_usage
+          return 1
+        fi
+        raw_cmd=$1
+        ;;
+      *)
+        print -u2 -- "Unknown argument: $1"
+        _upkg_usage
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  case ${raw_cmd:-outdated} in
+    outdated|check|list) cmd='outdated' ;;
+    upgrade|up|update) cmd='upgrade' ;;
+    plan) cmd='plan' ;;
+    managers) cmd='managers' ;;
+    help) cmd='help' ;;
+  esac
+
+  if (( dry_run )); then
+    if [ "$cmd" = 'upgrade' ]; then
+      cmd='plan'
+    elif [ "$cmd" = 'outdated' ] || [ "$cmd" = 'plan' ]; then
+      cmd='plan'
+    else
+      print -u2 -- '--dry-run is only valid with upgrade or plan'
+      _upkg_usage
+      return 1
+    fi
+  fi
+
+  if [ "$cmd" = 'help' ]; then
+    _upkg_usage
+    return 0
+  fi
+
+  _upkg_detect_managers
+
+  if (( ${#_UPKG_ACTIVE_MANAGERS[@]} == 0 && ${#_UPKG_ALTERNATE_MANAGERS[@]} == 0 )); then
+    print -u2 -- 'No supported package managers detected.'
+    return 1
+  fi
+
+  candidate_pool=( "${_UPKG_ACTIVE_MANAGERS[@]}" "${_UPKG_ALTERNATE_MANAGERS[@]}" )
+  for manager in "${_UPKG_ALTERNATE_MANAGERS[@]}"; do
+    alternate_map[$manager]=1
+  done
+
+  if [ "$cmd" = 'managers' ]; then
+    if [ -n "$only_raw" ] || [ -n "$skip_raw" ]; then
+      _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
+      filtered=1
+      for manager in "${_UPKG_SELECTED_MANAGERS[@]}"; do
+        selected_map[$manager]=1
+      done
+      for manager in "${_UPKG_SKIPPED_MANAGERS[@]}"; do
+        skipped_map[$manager]=1
+      done
+    fi
+
+    display_order=( "${candidate_pool[@]}" )
+    if (( filtered )); then
+      display_order=()
+      for manager in "${_UPKG_SELECTED_MANAGERS[@]}" "${_UPKG_SKIPPED_MANAGERS[@]}" "${candidate_pool[@]}"; do
+        if [ -n "$manager" ] && [ -z "${display_seen[$manager]}" ]; then
+          display_order+=("$manager")
+          display_seen[$manager]=1
+        fi
+      done
+    fi
+
+    print 'Detected managers:'
+    for manager in "${display_order[@]}"; do
+      if [ -n "${skipped_map[$manager]}" ]; then
+        print "  - $manager (skipped by filter)"
+      elif [ -n "${selected_map[$manager]}" ]; then
+        if [ -n "${alternate_map[$manager]}" ]; then
+          print "  - $manager (selected via --only)"
+        else
+          print "  - $manager (selected)"
+        fi
+      elif (( filtered )); then
+        if [ -n "${alternate_map[$manager]}" ]; then
+          print "  - $manager (available via --only $manager)"
+        else
+          print "  - $manager (not selected)"
+        fi
+      elif [ -n "${alternate_map[$manager]}" ]; then
+        print "  - $manager (available via --only $manager)"
+      else
+        print "  - $manager"
+      fi
+    done
+
+    if (( filtered && ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
+      return 1
+    fi
+
+    return 0
+  fi
+
+  _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
+
+  if (( ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
+    print -u2 -- 'No package managers selected after applying filters.'
+    return 1
+  fi
+
+  typeset -g _UPKG_ALLOW_SUDO=$allow_sudo
+  typeset -g -a _UPKG_SUMMARY_ORDER
+  typeset -g -A _UPKG_SUMMARY_STATE _UPKG_SUMMARY_DETAIL
+  _UPKG_SUMMARY_ORDER=()
+  _UPKG_SUMMARY_STATE=()
+  _UPKG_SUMMARY_DETAIL=()
+
+  for manager in "${_UPKG_SELECTED_MANAGERS[@]}"; do
+    selected_map[$manager]=1
+  done
+  for manager in "${_UPKG_SKIPPED_MANAGERS[@]}"; do
+    skipped_map[$manager]=1
+  done
+
+  run_order=( "${_UPKG_SELECTED_MANAGERS[@]}" )
+
+  for manager in "${run_order[@]}"; do
+    if [ -n "${skipped_map[$manager]}" ]; then
+      _upkg_record_summary "$manager" 'skipped' ''
+      continue
+    fi
+
+    case "${cmd}:${manager}" in
+      outdated:apt) _upkg_run_outdated_apt ;;
+      outdated:dnf) _upkg_run_outdated_dnf ;;
+      outdated:pacman) _upkg_run_outdated_pacman ;;
+      outdated:paru) _upkg_run_outdated_paru ;;
+      outdated:flatpak) _upkg_run_outdated_flatpak ;;
+      outdated:nix) _upkg_run_outdated_nix ;;
+      outdated:npm) _upkg_run_outdated_npm ;;
+      plan:apt) _upkg_run_outdated_apt ;;
+      plan:dnf) _upkg_run_outdated_dnf ;;
+      plan:pacman) _upkg_run_outdated_pacman ;;
+      plan:paru) _upkg_run_outdated_paru ;;
+      plan:flatpak) _upkg_run_outdated_flatpak ;;
+      plan:nix) _upkg_run_outdated_nix ;;
+      plan:npm) _upkg_run_outdated_npm ;;
+      upgrade:apt) _upkg_run_upgrade_apt ;;
+      upgrade:dnf) _upkg_run_upgrade_dnf ;;
+      upgrade:pacman) _upkg_run_upgrade_pacman ;;
+      upgrade:paru) _upkg_run_upgrade_paru ;;
+      upgrade:flatpak) _upkg_run_upgrade_flatpak ;;
+      upgrade:nix) _upkg_run_upgrade_nix ;;
+      upgrade:npm) _upkg_run_upgrade_npm ;;
+      *)
+        _upkg_print_section "$manager"
+        print "No handler defined for $manager"
+        _upkg_set_last_result 'failed' 'missing handler'
+        ;;
+    esac
+
+    _upkg_record_summary "$manager" "$_UPKG_LAST_STATE" "$_UPKG_LAST_DETAIL"
+
+    case $_UPKG_LAST_STATE in
+      blocked|failed)
+        exit_code=1
+        ;;
+    esac
+  done
+
+  for manager in "${_UPKG_SKIPPED_MANAGERS[@]}"; do
+    _upkg_record_summary "$manager" 'skipped' ''
+  done
+
+  _upkg_print_summary
+  return $exit_code
+}
+
 # Thin apt-like wrapper around nix profile with optional fzf pickers.
 if command -v nix >/dev/null 2>&1; then
   _npkg_nix() {
