@@ -156,7 +156,7 @@ fanprofile() {
 
   if [ -r "$platform_profile_file" ]; then
     raw=$(<"$platform_profile_file")
-    printf '%s (platform_profile=%s)\n' "$raw" "$raw"
+    printf '%s (platform_profile)\n' "$raw"
     return 0
   fi
 
