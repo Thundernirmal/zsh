@@ -366,8 +366,9 @@ bigfiles() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local output line kib file_path label shown more total_kib bar_width path_width footer_text icon width size_width
+  local line kib file_path label shown more total_kib bar_width path_width footer_text icon width size_width
   local scan_status=0
+  local raw_output_file='' sorted_output_file='' line_count=0
   local -a lines
 
   if [ ! -e "$target" ]; then
@@ -382,42 +383,53 @@ bigfiles() {
       ;;
   esac
 
+  raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.raw.XXXXXX") || return 1
+
   if _ui_plain_mode; then
-    output=$(command find "$target" -type f -exec du -h -- {} + 2>/dev/null)
+    command find "$target" -type f -exec du -h -- {} + 2>/dev/null >"$raw_output_file"
     scan_status=$?
-    if [ -z "$output" ] && (( scan_status != 0 )); then
+    if [ ! -s "$raw_output_file" ] && (( scan_status != 0 )); then
+      command rm -f -- "$raw_output_file"
       return $scan_status
     fi
-    output=$(print -r -- "$output" | command sort -rh) || return 1
-    print -r -- "$output" | command sed -n "1,${limit}p"
-    return $?
-  fi
-
-  output=$(command find "$target" -type f -exec du -k -- {} + 2>/dev/null)
-  scan_status=$?
-  if [ -z "$output" ] && (( scan_status != 0 )); then
+    command sort -rh -- "$raw_output_file" | command sed -n "1,${limit}p"
+    scan_status=$?
+    command rm -f -- "$raw_output_file"
     return $scan_status
   fi
-  output=$(print -r -- "$output" | command sort -rn) || return 1
-  lines=( ${(f)output} )
 
-  if (( ${#lines[@]} == 0 )); then
+  sorted_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.sorted.XXXXXX") || {
+    command rm -f -- "$raw_output_file"
+    return 1
+  }
+
+  command find "$target" -type f -exec du -k -- {} + 2>/dev/null >"$raw_output_file"
+  scan_status=$?
+  if [ ! -s "$raw_output_file" ] && (( scan_status != 0 )); then
+    command rm -f -- "$raw_output_file" "$sorted_output_file"
+    return $scan_status
+  fi
+  command sort -rn -- "$raw_output_file" >"$sorted_output_file" || {
+    command rm -f -- "$raw_output_file" "$sorted_output_file"
+    return 1
+  }
+
+  line_count=$(command awk 'END { print NR + 0 }' "$sorted_output_file")
+
+  if (( line_count == 0 )); then
+    command rm -f -- "$raw_output_file" "$sorted_output_file"
     _ui_panel_header 'Big Files' "$target" accent
     _ui_panel_kv 'Status' 'No files found under target' muted text
     _ui_panel_footer 'Nothing to display' accent
     return 0
   fi
 
-  for line in "${lines[@]}"; do
-    kib=${line%%$'\t'*}
-    case $kib in
-      ''|*[!0-9]*) continue ;;
-    esac
-    total_kib=$(( total_kib + kib ))
-  done
+  total_kib=$(command awk '{ if ($1 ~ /^[0-9]+$/) sum += $1 } END { print sum + 0 }' "$sorted_output_file")
+  shown=$(_ui_visible_count "$limit" "$line_count" 6)
+  lines=( ${(f)"$(command sed -n "1,${shown}p" "$sorted_output_file")"} )
+  more=$(( line_count - shown ))
+  command rm -f -- "$raw_output_file" "$sorted_output_file"
 
-  shown=$(_ui_visible_count "$limit" "${#lines[@]}" 6)
-  more=$(( ${#lines[@]} - shown ))
   width=$(_ui_term_width)
   read -r path_width size_width bar_width _ <<< "$(_ui_list_widths "$width")"
   (( width >= 120 )) && path_width=52
@@ -425,7 +437,7 @@ bigfiles() {
   (( width < 80 )) && path_width=22
 
   _ui_panel_header 'Big Files' "$target" accent
-  _ui_panel_kv 'Files found' "${#lines[@]}" muted text
+  _ui_panel_kv 'Files found' "$line_count" muted text
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
   _ui_panel_divider
 
@@ -462,7 +474,7 @@ bigfiles() {
     _ui_panel_kv 'More' "+${more} not shown" muted muted
   fi
 
-  footer_text="showing ${shown}/${#lines[@]} files"
+  footer_text="showing ${shown}/${line_count} files"
   _ui_panel_footer "$footer_text" accent
 }
 
