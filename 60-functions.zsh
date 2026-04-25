@@ -476,7 +476,7 @@ ports() {
   fi
 
   parsed=$(print -r -- "$output" | command awk '
-    NR == 1 || NF == 0 { next }
+    NR == 1 || NF == 0 || NF < 5 { next }
     {
       netid = $1
       state = $2

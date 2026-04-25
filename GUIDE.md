@@ -10,8 +10,8 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 30-zoxide.zsh           → Smart directory jumping
 ├── 40-fzf.zsh              → Fuzzy finder with previews
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
+├── 55-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers
 ├── 60-functions.zsh        → Shell functions (extract, search, kill, fanprofile, git helpers, upkg, npkg, etc.)
-├── 65-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
 └── 80-tips.zsh             → On-demand tips function
 ```
@@ -197,6 +197,8 @@ weather   # current weather + 3-day forecast
 ```
 
 `ports` and `myip` render Catppuccin Mocha cards in rich terminals. They stay plain and pipe-friendly when stdout is not a TTY, when `TERM=dumb`, when `NO_COLOR=1`, or when the terminal is narrower than 60 columns.
+
+Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bar characters. This is useful on terminals that support color but do not have a Nerd Font installed.
 
 ### Git Extras
 
@@ -452,7 +454,7 @@ fbr              # opens branch picker and checks out the selected branch
 
 If you pick a remote branch that is not checked out locally yet, `fbr` creates a tracking branch automatically.
 
-The picker uses the shared Catppuccin Mocha `fzf` theme and adds matching pointer and marker glyphs when Nerd Fonts are enabled.
+The picker inherits your `FZF_DEFAULT_OPTS` theme (Catppuccin Mocha when configured globally) and adds matching pointer and marker glyphs when Nerd Fonts are enabled.
 
 ---
 

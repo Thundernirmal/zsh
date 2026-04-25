@@ -111,7 +111,7 @@ exec /usr/bin/rm "$@"
 export PATH=$fakebin
 export UPKG_TEST_NPM_PREFIX=$tmp_prefix
 
-source "$repo_dir/65-ui-helpers.zsh"
+source "$repo_dir/55-ui-helpers.zsh"
 source "$repo_dir/60-functions.zsh"
 
 output=$(upkg managers)

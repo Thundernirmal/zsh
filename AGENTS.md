@@ -3,7 +3,7 @@
 ## Repo Shape
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, test runner, or CI config at the root.
-- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `60-functions.zsh`, `70-globals.zsh`, `80-tips.zsh`.
+- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, `70-globals.zsh`, `80-tips.zsh`.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Edit Rules

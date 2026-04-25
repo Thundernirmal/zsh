@@ -27,7 +27,7 @@ These files are loaded by the main entrypoint:
 - `40-fzf.zsh` - shared `fzf` configuration and shell bindings
 - `50-completion.zsh` - completion zstyles (case-insensitive, process completion)
 - `60-functions.zsh` - useful shell functions
-- `65-ui-helpers.zsh` - shared terminal UI helpers for rich dashboard output
+- `55-ui-helpers.zsh` - shared terminal UI helpers for rich dashboard output
 - `70-globals.zsh` - global aliases for command-line piping
 - `80-tips.zsh` - on-demand `tips` shell function
 
@@ -102,7 +102,7 @@ If something is missing, the script prints install hints for common package mana
 - If `tree` is missing, the `lt` alias is not created unless `lsd` is available.
 - If `zoxide` or `fzf` are missing, their init blocks are skipped cleanly.
 - `40-fzf.zsh` only loads `fzf --zsh` in interactive shells when `ZSH_EXECUTION_STRING` is empty, which keeps `zsh -i -c ...` startup paths free of `zle` warnings.
-- `65-ui-helpers.zsh` only affects commands at runtime; it does not add hooks, redraw loops, or startup-time terminal work.
+- `55-ui-helpers.zsh` only affects commands at runtime; it does not add hooks, redraw loops, or startup-time terminal work.
 - `fkill` and `fbr` are interactive helpers: they require both `fzf` and a real terminal.
 - If `bat` is missing, `fzf` file previews fall back to `sed` and `peek` falls back to `cat`.
 - If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
