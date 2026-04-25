@@ -213,7 +213,14 @@ assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when
   assert_status "$cmd_status" 1 'paru upgrade remains gated' || return 1
   assert_contains "$output" 'rerun with: upkg upgrade --sudo --only paru' 'paru upgrade remains gated' || return 1
 
-  inspect_tmp=$(mktemp -d)
+  inspect_tmp=$(mktemp -d) || {
+    print -u2 -- 'not ok: mktemp creates inspect tmpdir'
+    return 1
+  }
+  if [ -z "$inspect_tmp" ]; then
+    print -u2 -- 'not ok: mktemp returned empty inspect tmpdir'
+    return 1
+  fi
   /usr/bin/mkdir -p "$inspect_tmp/readable-dir" "$inspect_tmp/blocked-dir/inner" "$inspect_tmp/readable-tree" "$inspect_tmp/blocked-tree/inner"
   print -r -- 'ok' >"$inspect_tmp/readable-dir/file.txt"
   print -r -- 'ok' >"$inspect_tmp/blocked-dir/inner/file.txt"

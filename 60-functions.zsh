@@ -277,13 +277,12 @@ dusage() {
     return 0
   fi
 
-  output=$(du -sh -- "${entries[@]}" 2>/dev/null)
-  scan_status=$?
-  if [ -z "$output" ] && (( scan_status != 0 )); then
-    return $scan_status
-  fi
-
   if _ui_plain_mode; then
+    output=$(du -sh -- "${entries[@]}" 2>/dev/null)
+    scan_status=$?
+    if [ -z "$output" ] && (( scan_status != 0 )); then
+      return $scan_status
+    fi
     output=$(print -r -- "$output" | command sort -rh) || return 1
     print -r -- "$output" | command sed -n "1,${limit}p"
     return $?
@@ -383,13 +382,12 @@ bigfiles() {
       ;;
   esac
 
-  output=$(command find "$target" -type f -exec du -h -- {} + 2>/dev/null)
-  scan_status=$?
-  if [ -z "$output" ] && (( scan_status != 0 )); then
-    return $scan_status
-  fi
-
   if _ui_plain_mode; then
+    output=$(command find "$target" -type f -exec du -h -- {} + 2>/dev/null)
+    scan_status=$?
+    if [ -z "$output" ] && (( scan_status != 0 )); then
+      return $scan_status
+    fi
     output=$(print -r -- "$output" | command sort -rh) || return 1
     print -r -- "$output" | command sed -n "1,${limit}p"
     return $?
