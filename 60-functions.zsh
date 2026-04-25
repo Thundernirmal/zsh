@@ -148,6 +148,38 @@ peek() {
   fi
 }
 
+# Show current laptop thermal/performance profile
+fanprofile() {
+  local platform_profile_file=/sys/firmware/acpi/platform_profile
+  local asus_profile_file=/sys/devices/platform/asus-nb-wmi/fan_boost_mode
+  local raw profile
+
+  if [ -r "$platform_profile_file" ]; then
+    raw=$(<"$platform_profile_file")
+    printf '%s (platform_profile)\n' "$raw"
+    return 0
+  fi
+
+  if [ -r "$asus_profile_file" ]; then
+    raw=$(<"$asus_profile_file")
+    case $raw in
+      0) profile="normal" ;;
+      1) profile="overboost" ;;
+      2) profile="silent" ;;
+      *)
+        echo "Unknown ASUS fan profile value: $raw"
+        return 1
+        ;;
+    esac
+
+    printf '%s (fan_boost_mode=%s)\n' "$profile" "$raw"
+    return 0
+  fi
+
+  echo "No supported laptop performance profile interface found"
+  return 1
+}
+
 # Disk usage summary for current directory
 dusage() {
   local target=${1:-.}

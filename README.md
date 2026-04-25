@@ -14,7 +14,7 @@ This shared config currently manages:
 - `zoxide` integration
 - `fzf` settings and shell bindings
 - Tab completion tuning (case-insensitive matching, process completion)
-- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, headers, upkg, npkg, etc.)
+- Shell functions (extract, mkcd, ff, ft, fkill, fbr, croot, path, headers, fanprofile, upkg, npkg, etc.)
 - Global aliases (G, L, W, H, T, NE, NUL)
 - On-demand `tips` function
 
@@ -100,6 +100,7 @@ If something is missing, the script prints install hints for common package mana
 - If `fd`/`fdfind` is missing, `ff` falls back to `find`.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
