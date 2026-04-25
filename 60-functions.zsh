@@ -561,8 +561,7 @@ _upkg_npm_outdated_looks_valid() {
 
   for line in ${(f)output}; do
     [ -n "$line" ] || continue
-    [[ $line == Package[[:space:]]*Current[[:space:]]*Wanted[[:space:]]*Latest* ]]
-    return $?
+    [[ $line == Package[[:space:]]*Current[[:space:]]*Wanted[[:space:]]*Latest* ]] && return 0
   done
 
   return 1
@@ -1017,7 +1016,7 @@ _upkg_run_upgrade_npm() {
 upkg() {
   emulate -L zsh
 
-  local raw_cmd='' cmd='outdated' manager parsed
+  local raw_cmd='' cmd='outdated' manager
   local only_raw='' skip_raw=''
   local allow_sudo=0 dry_run=0 filtered=0 exit_code=0
   local -a candidate_pool run_order display_order

@@ -133,11 +133,25 @@ assert_status "$cmd_status" 0 'paru plan succeeds when repo and AUR checks succe
 assert_contains "$output" 'Repo updates:' 'paru plan includes repo updates' || return 1
 assert_contains "$output" 'AUR updates:' 'paru plan includes AUR updates' || return 1
 
-output=$(upkg upgrade --dry-run --only=npm)
-assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'dry-run previews npm instead of upgrading' || return 1
+  output=$(upkg upgrade --dry-run --only=npm)
+  assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'dry-run previews npm instead of upgrading' || return 1
 
-output=$(upkg --dry-run --only=flatpak)
-assert_contains "$output" 'org.example.App stable' 'bare dry-run previews selected managers' || return 1
+  write_fake npm '
+case "$*" in
+  "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
+  "outdated -g --depth=0") printf "%s\n" "npm notice using cached metadata"; printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+  "update -g") printf "%s\n" "npm upgrade" ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'npm outdated accepts header after a notice line' || return 1
+  assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'npm outdated still prints package rows after a notice line' || return 1
+
+  output=$(upkg --dry-run --only=flatpak)
+  assert_contains "$output" 'org.example.App stable' 'bare dry-run previews selected managers' || return 1
 
 write_fake pacman '
 exit 1
