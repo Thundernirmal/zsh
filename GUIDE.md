@@ -196,7 +196,7 @@ myip      # your public IP
 weather   # current weather + 3-day forecast
 ```
 
-`ports` and `myip` render Catppuccin Mocha cards in rich terminals. They stay plain and pipe-friendly when stdout is not a TTY, when `TERM=dumb`, when `NO_COLOR=1`, or when the terminal is narrower than 60 columns.
+`ports` and `myip` render Catppuccin Mocha cards in rich terminals. They stay plain and pipe-friendly when stdout is not a TTY, when `TERM=dumb`, when `NO_COLOR=1`, or when the terminal is narrower than 60 columns. In the rich `ports` dashboard, normal UDP listeners keep their native `UNCONN` state without being treated as warnings.
 
 Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bar characters. This is useful on terminals that support color but do not have a Nerd Font installed.
 
@@ -559,6 +559,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 - `skipped` means the backend was intentionally omitted by `--skip`.
 - `--only` runs managers in the order you name them; default runs use detection order.
 - `upkg managers --only ...` keeps the selected managers at the top in that same order.
+- Plain `upkg managers` output keeps active managers as bare IDs for pipe- and script-friendly output; annotations are reserved for alternates, filtered selections, and skipped managers.
 - Empty Arch-family outdated checks that exit `1` without output are treated as the normal "up to date" case.
 - `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
 - `paru` preview still returns nonzero if the repo-side check fails, even when it can show AUR results.
@@ -631,7 +632,7 @@ npkg upgrade           # upgrade everything
 
 The fzf picker preview shows the package description, version, and homepage from nixpkgs using the shared Catppuccin Mocha palette. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
 
-`npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints a table in plain mode, or a responsive Mocha dashboard in rich terminals — run it before `npkg upgrade` to see what will change.
+`npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints an ASCII-safe table in plain mode, or a responsive Mocha dashboard in rich terminals — run it before `npkg upgrade` to see what will change.
 
 `npkg refresh` also needs `jq`, because the cache is built from JSON output.
 

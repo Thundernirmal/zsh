@@ -33,6 +33,21 @@ assert_contains() {
   print -- "ok: $label"
 }
 
+assert_not_contains() {
+  local haystack=$1
+  local needle=$2
+  local label=$3
+
+  if [[ $haystack == *"$needle"* ]]; then
+    print -u2 -- "not ok: $label"
+    print -u2 -- "unexpected: $needle"
+    print -u2 -- "$haystack"
+    return 1
+  fi
+
+  print -- "ok: $label"
+}
+
 assert_status() {
   local actual=$1
   local expected=$2
@@ -114,9 +129,11 @@ export UPKG_TEST_NPM_PREFIX=$tmp_prefix
 source "$repo_dir/55-ui-helpers.zsh"
 source "$repo_dir/60-functions.zsh"
 
-output=$(upkg managers)
-assert_contains "$output" 'paru' 'detects paru' || return 1
-assert_contains "$output" 'pacman (available via --only pacman)' 'labels pacman alternate' || return 1
+  output=$(upkg managers)
+  assert_contains "$output" 'paru' 'detects paru' || return 1
+  assert_not_contains "$output" 'paru (active)' 'active managers keep plain output stable' || return 1
+  assert_not_contains "$output" 'title=' 'manager listing stays free of debug leaks' || return 1
+  assert_contains "$output" 'pacman (available via --only pacman)' 'labels pacman alternate' || return 1
 
 output=$(upkg --only=npm,flatpak)
 assert_contains "$output" '==> npm' 'equals --only keeps first selected manager first' || return 1

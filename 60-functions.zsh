@@ -278,8 +278,8 @@ dusage() {
   fi
 
   if _ui_plain_mode; then
-    du -sh -- "${entries[@]}" 2>/dev/null | command sort -rh | command head -n "$limit"
-    return ${pipestatus[1]:-0}
+    du -sh -- "${entries[@]}" 2>/dev/null | command sort -rh | command sed -n "1,${limit}p"
+    return $?
   fi
 
   output=$(du -sk -- "${entries[@]}" 2>/dev/null | command sort -rn) || return 1
@@ -372,8 +372,8 @@ bigfiles() {
   esac
 
   if _ui_plain_mode; then
-    command find "$target" -type f -exec du -h {} + 2>/dev/null | command sort -rh | command head -n "$limit"
-    return ${pipestatus[1]:-0}
+    command find "$target" -type f -exec du -h {} + 2>/dev/null | command sort -rh | command sed -n "1,${limit}p"
+    return $?
   fi
 
   output=$(command find "$target" -type f -exec du -k {} + 2>/dev/null | command sort -rn) || return 1
@@ -541,8 +541,10 @@ ports() {
     line=${line#*${row_delim}}
     process=${line%%${row_delim}*}
     pid=${line#*${row_delim}}
-    state_role=warning
-    [ "$state" = 'LISTEN' ] && state_role=success
+    case $state in
+      LISTEN|UNCONN) state_role=success ;;
+      *) state_role=warning ;;
+    esac
 
     _ui_panel_prefix
     _ui_badge "$netid" info
@@ -857,18 +859,15 @@ _upkg_manager_title() {
 _upkg_print_section() {
   emulate -L zsh
 
-  local title
-  title=$(_upkg_manager_title "$1")
-
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
     print ''
     _ui_panel_prefix
     _ui_color accent
-    print -r -- "── $title"
+    print -r -- "── $(_upkg_manager_title "$1")"
     _ui_reset
   else
     print ''
-    print "==> $title"
+    print "==> $(_upkg_manager_title "$1")"
   fi
 }
 
@@ -1610,8 +1609,7 @@ upkg() {
     fi
 
     for manager in "${display_order[@]}"; do
-      local manager_status='' role='muted' title
-      title=$(_upkg_manager_title "$manager")
+      local manager_status='' role='muted'
 
       if [ -n "${skipped_map[$manager]}" ]; then
         manager_status='skipped by filter'
@@ -1639,13 +1637,17 @@ upkg() {
       fi
 
       if _ui_plain_mode || [ -z "${_UPKG_THEME_MODE:-}" ]; then
-        print "  - $manager ($manager_status)"
+        if [ "$manager_status" = 'active' ]; then
+          print "  - $manager"
+        else
+          print "  - $manager ($manager_status)"
+        fi
       else
         _ui_panel_prefix
         _ui_badge "$manager_status" "$role"
         print -nr -- ' '
         _ui_color text
-        print -nr -- "$title"
+        print -nr -- "$(_upkg_manager_title "$manager")"
         _ui_reset
         print ''
       fi
@@ -2162,62 +2164,32 @@ if command -v nix >/dev/null 2>&1; then
     local name inst avail marker role shown more width name_width version_width visible_count
 
     if _ui_plain_mode; then
-      if [ -n "${NO_COLOR:-}" ] || ! [ -t 1 ]; then
-        printf '\n'
-        printf '%-25s %-20s %-20s %s\n' 'Package' 'Installed' 'Available' 'Status'
-        printf '%-25s %-20s %-20s %s\n' '-------' '---------' '---------' '------'
+      printf '\n'
+      printf '%-25s %-20s %-20s %s\n' 'Package' 'Installed' 'Available' 'Status'
+      printf '%-25s %-20s %-20s %s\n' '-------' '---------' '---------' '------'
 
-        for (( idx = 1; idx <= pkg_count; idx++ )); do
-          name="${names[$idx]}"
-          inst="${installed_versions[$idx]}"
-          avail="${latest_versions[$idx]}"
+      for (( idx = 1; idx <= pkg_count; idx++ )); do
+        name="${names[$idx]}"
+        inst="${installed_versions[$idx]}"
+        avail="${latest_versions[$idx]}"
 
-          if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
-            marker='?'
-          elif [ "$inst" = "$avail" ]; then
-            marker='ok'
-          else
-            marker='upgrade'
-            (( upgrades++ ))
-          fi
-
-          printf '%-25s %-20s %-20s %s\n' "$name" "$inst" "$avail" "$marker"
-        done
-
-        printf '\n'
-        if (( upgrades > 0 )); then
-          printf '%d upgrade(s) available. Run: npkg upgrade\n' "$upgrades"
+        if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
+          marker='?'
+        elif [ "$inst" = "$avail" ]; then
+          marker='ok'
         else
-          printf 'Everything is up to date.\n'
+          marker='upgrade'
+          (( upgrades++ ))
         fi
+
+        printf '%-25s %-20s %-20s %s\n' "$name" "$inst" "$avail" "$marker"
+      done
+
+      printf '\n'
+      if (( upgrades > 0 )); then
+        printf '%d upgrade(s) available. Run: npkg upgrade\n' "$upgrades"
       else
-        printf '\n'
-        printf '\033[1m%-25s %-20s %-20s %s\033[0m\n' 'Package' 'Installed' 'Available' ''
-        printf '%-25s %-20s %-20s %s\n' '───────' '─────────' '─────────' ''
-
-        for (( idx = 1; idx <= pkg_count; idx++ )); do
-          name="${names[$idx]}"
-          inst="${installed_versions[$idx]}"
-          avail="${latest_versions[$idx]}"
-
-          if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
-            marker='—'
-          elif [ "$inst" = "$avail" ]; then
-            marker='\033[32m✓\033[0m'
-          else
-            marker='\033[33m⬆\033[0m'
-            (( upgrades++ ))
-          fi
-
-          printf '%-25s %-20s %-20s %b\n' "$name" "$inst" "$avail" "$marker"
-        done
-
-        printf '\n'
-        if (( upgrades > 0 )); then
-          printf '\033[33m%d upgrade(s) available.\033[0m Run \033[1mnpkg upgrade\033[0m to apply.\n' "$upgrades"
-        else
-          printf '\033[32mEverything is up to date.\033[0m\n'
-        fi
+        printf 'Everything is up to date.\n'
       fi
 
       command rm -rf "$tmp_dir"

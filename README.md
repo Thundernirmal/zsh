@@ -26,8 +26,8 @@ These files are loaded by the main entrypoint:
 - `30-zoxide.zsh` - guarded `zoxide` initialization
 - `40-fzf.zsh` - shared `fzf` configuration and shell bindings
 - `50-completion.zsh` - completion zstyles (case-insensitive, process completion)
-- `60-functions.zsh` - useful shell functions
 - `55-ui-helpers.zsh` - shared terminal UI helpers for rich dashboard output
+- `60-functions.zsh` - useful shell functions
 - `70-globals.zsh` - global aliases for command-line piping
 - `80-tips.zsh` - on-demand `tips` shell function
 
@@ -122,6 +122,7 @@ If something is missing, the script prints install hints for common package mana
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
 - `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
+- `upkg managers` keeps active managers as bare IDs in plain output so piping and simple scripts do not need to strip an `(active)` suffix.
 - `upkg upgrade` never injects `sudo` automatically; pass `--sudo` explicitly for `apt`, `dnf`, `pacman`, or `paru`.
 - When `--sudo` is requested from an unprivileged shell, `upkg` expects `sudo` to exist; otherwise it blocks the backend and tells you to rerun as root.
 - On Arch-family backends, empty `pacman -Qu` or `paru -Qua` results with exit `1` are treated as "no updates available" rather than as failures.
