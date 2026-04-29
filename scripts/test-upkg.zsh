@@ -81,7 +81,7 @@ assert_order() {
 }
 
 main() {
-  local output cmd_status inspect_tmp saved_path
+  local output cmd_status inspect_tmp
 
 write_fake pacman '
 case "$*" in
