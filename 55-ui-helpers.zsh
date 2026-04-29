@@ -47,7 +47,8 @@ _ui_is_rich_terminal() {
   local width
 
   [[ -t 1 ]] || return 1
-  [[ ${TERM:-} != dumb ]] || return 1
+  [[ -n ${TERM:-} ]] || return 1
+  [[ ${TERM} != dumb ]] || return 1
   [[ -z ${NO_COLOR:-} ]] || return 1
   _ui_locale_is_utf8 || return 1
 
