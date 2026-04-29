@@ -195,14 +195,18 @@ fanprofile() {
     source='platform_profile'
     [ -r "$platform_choices_file" ] && choices=$(<"$platform_choices_file")
 
-    _ui_panel_header 'Fan Profile' "$source" "$role"
+    _ui_title_line 'Fan Profile' "$source" "$role" '󰈐' '*'
     _ui_panel_prefix
     _ui_icon '󰈐' '*'
     print -nr -- ' '
     _ui_badge "$raw" "$role"
     print ''
     [ -n "$choices" ] && _ui_panel_kv 'Choices' "$choices" muted text
-    _ui_panel_footer 'Kernel platform profile interface' "$role"
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'Kernel platform profile interface'
+    _ui_reset
     return 0
   fi
 
@@ -225,7 +229,7 @@ fanprofile() {
 
     role=$(_ui_profile_role "$profile")
     meta="fan_boost_mode=${raw}"
-    _ui_panel_header 'Fan Profile' 'ASUS WMI fallback' "$role"
+    _ui_title_line 'Fan Profile' 'ASUS WMI fallback' "$role" '󰈐' '*'
     _ui_panel_prefix
     _ui_icon '󰈐' '*'
     print -nr -- ' '
@@ -233,16 +237,24 @@ fanprofile() {
     print ''
     _ui_panel_kv 'Source' 'fan_boost_mode' muted text
     _ui_panel_kv 'Raw' "$raw" muted text
-    _ui_panel_footer "$meta" "$role"
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- "$meta"
+    _ui_reset
     return 0
   fi
 
   if _ui_plain_mode; then
     echo "No supported laptop performance profile interface found"
   else
-    _ui_panel_header 'Fan Profile' 'unsupported host' warning
+    _ui_title_line 'Fan Profile' 'unsupported host' warning '󰈐' '*'
     _ui_panel_kv 'Status' 'No supported laptop performance profile interface found' muted text
-    _ui_panel_footer 'Checked platform_profile and ASUS fan_boost_mode' warning
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'Checked platform_profile and ASUS fan_boost_mode'
+    _ui_reset
   fi
   return 1
 }
@@ -312,14 +324,20 @@ dusage() {
   more=$(( ${#lines[@]} - shown ))
   visible_count=$shown
   width=$(_ui_term_width)
-  read -r name_width size_width bar_width percent_width <<< "$(_ui_list_widths "$width")"
+  size_width=9
+  bar_width=16
+  percent_width=5
+  (( width < 80 )) && bar_width=10
+
+  name_width=$(( width - size_width - percent_width - bar_width - 8 ))
+  (( name_width < 10 )) && name_width=10
 
   header_meta="$target"
   footer_text="showing ${visible_count}/${#lines[@]} entries"
-  _ui_panel_header 'Disk Usage' "$header_meta" accent
+  _ui_title_line 'Disk Usage' "$header_meta" accent '󰋊' '*'
   _ui_panel_kv 'Entries' "${#lines[@]}" muted text
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
-  _ui_panel_divider
+  _ui_section_break
 
   integer idx
   for (( idx = 1; idx <= visible_count; idx++ )); do
@@ -357,7 +375,11 @@ dusage() {
     _ui_panel_kv 'More' "+${more} not shown" muted muted
   fi
 
-  _ui_panel_footer "$footer_text" accent
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- "$footer_text"
+  _ui_reset
 }
 
 # Largest files in current directory tree
@@ -418,9 +440,13 @@ bigfiles() {
 
   if (( line_count == 0 )); then
     command rm -f -- "$raw_output_file" "$sorted_output_file"
-    _ui_panel_header 'Big Files' "$target" accent
+    _ui_title_line 'Big Files' "$target" accent '󰉋' '*'
     _ui_panel_kv 'Status' 'No files found under target' muted text
-    _ui_panel_footer 'Nothing to display' accent
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'Nothing to display'
+    _ui_reset
     return 0
   fi
 
@@ -431,15 +457,17 @@ bigfiles() {
   command rm -f -- "$raw_output_file" "$sorted_output_file"
 
   width=$(_ui_term_width)
-  read -r path_width size_width bar_width _ <<< "$(_ui_list_widths "$width")"
-  (( width >= 120 )) && path_width=52
-  (( width >= 80 && width < 120 )) && path_width=34
-  (( width < 80 )) && path_width=22
+  size_width=9
+  bar_width=16
+  (( width < 80 )) && bar_width=10
 
-  _ui_panel_header 'Big Files' "$target" accent
+  path_width=$(( width - size_width - bar_width - 7 ))
+  (( path_width < 10 )) && path_width=10
+
+  _ui_title_line 'Big Files' "$target" accent '󰉋' '*'
   _ui_panel_kv 'Files found' "$line_count" muted text
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
-  _ui_panel_divider
+  _ui_section_break
 
   integer idx
   for (( idx = 1; idx <= shown; idx++ )); do
@@ -475,7 +503,11 @@ bigfiles() {
   fi
 
   footer_text="showing ${shown}/${line_count} files"
-  _ui_panel_footer "$footer_text" accent
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- "$footer_text"
+  _ui_reset
 }
 
 # Show listening ports and owning processes
@@ -547,20 +579,14 @@ ports() {
   more=$(( ${#rows[@]} - shown ))
   width=$(_ui_term_width)
 
-  if (( width >= 120 )); then
-    addr_width=26
-    proc_width=22
-  elif (( width >= 80 )); then
-    addr_width=20
-    proc_width=16
-  else
-    addr_width=16
-    proc_width=12
-  fi
+  local available=$(( width - 42 ))
+  (( available < 20 )) && available=20
+  addr_width=$(( available * 3 / 5 ))
+  proc_width=$(( available - addr_width ))
 
-  _ui_panel_header 'Listening Ports' 'ss -tulnp' accent
+  _ui_title_line 'Listening Ports' 'ss -tulnp' accent '󰒋' '*'
   _ui_panel_kv 'Sockets' "${#rows[@]}" muted text
-  _ui_panel_divider
+  _ui_section_break
 
   integer idx
   for (( idx = 1; idx <= shown; idx++ )); do
@@ -607,7 +633,11 @@ ports() {
     _ui_panel_kv 'More' "+${more} not shown" muted muted
   fi
 
-  _ui_panel_footer 'Raw fallback: ss -tulnp' accent
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- 'Raw fallback: ss -tulnp'
+  _ui_reset
 }
 
 # Show public IP address over HTTPS
@@ -624,16 +654,18 @@ myip() {
 
   ip=$(curl -fsSL "$endpoint") || return $?
 
-  _ui_panel_header 'Public IP' 'HTTPS lookup' accent
-  _ui_panel_prefix
-  _ui_icon '󰩟' '*'
-  print -nr -- ' '
+  _ui_title_line 'Public IP' 'HTTPS lookup' accent '󰩟' '*'
+  print -nr -- '  '
   _ui_color text
   print -nr -- "$ip"
   _ui_reset
   print ''
   _ui_panel_kv 'Source' 'ifconfig.me/ip' muted text
-  _ui_panel_footer 'Use plain mode for scripting' accent
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- 'Use plain mode for scripting'
+  _ui_reset
 }
 
 # Jump to the root of the current git repository
@@ -893,15 +925,35 @@ _upkg_manager_title() {
 _upkg_print_section() {
   emulate -L zsh
 
+  local manager=$1
+  local title=$(_upkg_manager_title "$manager")
+  local width fill='─' lead='─ '
+
+  print ''
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
+    width=$(( $(_ui_term_width) - 2 ))
+    (( width < 32 )) && width=32
+    if _ui_ascii_mode; then
+      fill='-'
+      lead='- '
+    fi
+
+    _ui_color border
+    print -nr -- "$lead"
+    _ui_repeat "$width" "$fill"
+    _ui_reset
     print ''
-    _ui_panel_prefix
+
+    print -nr -- '  '
     _ui_color accent
-    print -r -- "── $(_upkg_manager_title "$1")"
+    _ui_manager_icon "$manager"
+    _ui_reset
+    print -nr -- ' '
+    _ui_color text
+    print -r -- "$title"
     _ui_reset
   else
-    print ''
-    print "==> $(_upkg_manager_title "$1")"
+    print "==> $title"
   fi
 }
 
@@ -925,17 +977,51 @@ _upkg_record_summary() {
 _upkg_print_summary() {
   emulate -L zsh
 
-  local manager detail state role
+  local manager detail state role title
+  local ok_count=0 updates_count=0 blocked_count=0 failed_count=0 skipped_count=0
+
+  for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+    state=${_UPKG_SUMMARY_STATE[$manager]}
+    case $state in
+      'up to date'|upgraded) (( ok_count++ )) ;;
+      'updates available')   (( updates_count++ )) ;;
+      blocked)               (( blocked_count++ )) ;;
+      failed)                (( failed_count++ )) ;;
+      skipped)               (( skipped_count++ )) ;;
+    esac
+  done
 
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
-    _ui_panel_divider
-    _ui_panel_prefix
+    _upkg_print_section summary
     _ui_color muted
-    print -r -- 'Summary'
+    _ui_icon '󰍹' '>'
     _ui_reset
+    print -nr -- ' '
+    _ui_color text
+    print -nr -- 'Summary'
+    _ui_reset
+    print -nr -- ' '
+    _ui_badge "$ok_count ok" success
+    print -nr -- ' '
+    _ui_badge "$updates_count updates" warning
+    if (( blocked_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$blocked_count blocked" warning
+    fi
+    if (( failed_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$failed_count failed" danger
+    fi
+    if (( skipped_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$skipped_count skipped" muted
+    fi
+    print ''
+
     for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
       detail=${_UPKG_SUMMARY_DETAIL[$manager]}
       state=${_UPKG_SUMMARY_STATE[$manager]}
+      title=$(_upkg_manager_title "$manager")
       case $state in
         'up to date'|upgraded)    role='success' ;;
         'updates available')      role='warning' ;;
@@ -944,12 +1030,19 @@ _upkg_print_summary() {
         skipped)                  role='muted'   ;;
         *)                        role='accent'  ;;
       esac
-      _ui_panel_prefix
-      _ui_badge "$state" "$role"
+
+      print -nr -- '  '
+      _ui_color "$role"
+      _ui_status_icon "$state"
+      _ui_reset
+      print -nr -- ' '
+      _ui_manager_icon "$manager"
       print -nr -- ' '
       _ui_color text
-      print -nr -- "$(_upkg_manager_title "$manager")"
+      print -nr -- "$title"
       _ui_reset
+      print -nr -- ' '
+      _ui_badge "$state" "$role"
       if [ -n "$detail" ]; then
         print -nr -- ' '
         _ui_color muted
@@ -1636,10 +1729,10 @@ upkg() {
     if _ui_plain_mode || [ -z "${_UPKG_THEME_MODE:-}" ]; then
       print 'Detected managers:'
     else
-      _ui_panel_header 'Detected Managers' 'upkg managers' accent
+      _ui_title_line 'Detected Managers' 'upkg managers' accent '󰒓' '*'
       [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
       [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
-      _ui_panel_divider
+      _ui_section_break
     fi
 
     for manager in "${display_order[@]}"; do
@@ -1688,7 +1781,11 @@ upkg() {
     done
 
     if ! _ui_plain_mode && [ -n "${_UPKG_THEME_MODE:-}" ]; then
-      _ui_panel_footer 'Selection order follows execution order' accent
+      _ui_section_break
+      print -nr -- '  '
+      _ui_color muted
+      print -r -- 'Selection order follows execution order'
+      _ui_reset
     fi
 
     if (( filtered && ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
@@ -1703,10 +1800,9 @@ upkg() {
   if [ "$cmd" = 'outdated' ] || [ "$cmd" = 'plan' ]; then
     if ! _ui_plain_mode; then
       _UPKG_THEME_MODE=1
-      _ui_panel_header 'Package Dashboard' "$cmd" accent
+      _ui_title_line 'Package Dashboard' "$cmd" accent '󰏖' '*'
       [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
       [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
-      _ui_panel_divider
     fi
   fi
 
@@ -1780,9 +1876,6 @@ upkg() {
   done
 
   _upkg_print_summary
-  if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
-    _ui_panel_footer 'Backend output remains mostly raw inside each section' accent
-  fi
   return $exit_code
 }
 
@@ -2199,8 +2292,8 @@ if command -v nix >/dev/null 2>&1; then
 
     if _ui_plain_mode; then
       printf '\n'
-      printf '%-25s %-20s %-20s %s\n' 'Package' 'Installed' 'Available' 'Status'
-      printf '%-25s %-20s %-20s %s\n' '-------' '---------' '---------' '------'
+      printf '%-20s %-16s %-16s %s\n' 'Package' 'Installed' 'Available' 'Status'
+      printf '%-20s %-16s %-16s %s\n' '-------' '---------' '---------' '------'
 
       for (( idx = 1; idx <= pkg_count; idx++ )); do
         name="${names[$idx]}"
@@ -2216,7 +2309,7 @@ if command -v nix >/dev/null 2>&1; then
           (( upgrades++ ))
         fi
 
-        printf '%-25s %-20s %-20s %s\n' "$name" "$inst" "$avail" "$marker"
+        printf '%-20.20s %-16.16s %-16.16s %s\n' "$name" "$inst" "$avail" "$marker"
       done
 
       printf '\n'
@@ -2246,9 +2339,9 @@ if command -v nix >/dev/null 2>&1; then
     visible_count=$(_ui_visible_count "$pkg_count" "$pkg_count" 9)
     more=$(( pkg_count - visible_count ))
 
-    _ui_panel_header 'Nix Package Drift' "$pkg_count package(s) checked" accent
+    _ui_title_line 'Nix Package Drift' "$pkg_count package(s) checked" accent '󱄅' '*'
     _ui_panel_kv 'Command' 'npkg outdated' muted text
-    _ui_panel_divider
+    _ui_section_break
 
     for (( idx = 1; idx <= visible_count; idx++ )); do
       name="${names[$idx]}"
@@ -2288,11 +2381,16 @@ if command -v nix >/dev/null 2>&1; then
       _ui_panel_kv 'More' "+${more} not shown" muted muted
     fi
 
+    _ui_section_break
+    print -nr -- '  '
     if (( upgrades > 0 )); then
-      _ui_panel_footer "$upgrades upgrade(s) available. Run npkg upgrade to apply." warning
+      _ui_color warning
+      print -r -- "$upgrades upgrade(s) available. Run npkg upgrade to apply."
     else
-      _ui_panel_footer 'Everything is up to date.' success
+      _ui_color success
+      print -r -- 'Everything is up to date.'
     fi
+    _ui_reset
 
     command rm -rf "$tmp_dir"
     trap - EXIT INT TERM

@@ -10,7 +10,7 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 30-zoxide.zsh           → Smart directory jumping
 ├── 40-fzf.zsh              → Fuzzy finder with previews
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
-├── 55-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers
+├── 55-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers, title lines, and consistent section separators
 ├── 60-functions.zsh        → Shell functions (extract, search, kill, fanprofile, git helpers, upkg, npkg, etc.)
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
 └── 80-tips.zsh             → On-demand tips function
@@ -550,7 +550,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
-- In rich terminals, `upkg`, `upkg plan`, and `upkg managers` add themed wrapper sections and summary cards while preserving mostly raw backend output inside each manager section.
+- In rich terminals, `upkg`, `upkg plan`, and `upkg managers` use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available, while preserving mostly raw backend output inside each manager section.
 - Distro outdated results depend on the package metadata already present on the machine.
 - The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`.
 - When `--sudo` is requested from a non-root shell, `upkg` expects `sudo` to be installed; otherwise it blocks the backend and tells you to rerun it as root.

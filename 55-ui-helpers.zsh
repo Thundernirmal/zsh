@@ -167,6 +167,48 @@ _ui_icon() {
   fi
 }
 
+_ui_status_icon() {
+  emulate -L zsh
+
+  local state=$1
+
+  case $state in
+    'up to date'|upgraded)
+      _ui_icon '󰄬' '*'
+      ;;
+    'updates available')
+      _ui_icon '󰚰' '!'
+      ;;
+    blocked)
+      _ui_icon '󰍛' '-'
+      ;;
+    failed)
+      _ui_icon '󰅚' 'x'
+      ;;
+    skipped)
+      _ui_icon '󰒭' '~'
+      ;;
+    *)
+      _ui_icon '󰘥' '>'
+      ;;
+  esac
+}
+
+_ui_manager_icon() {
+  emulate -L zsh
+
+  case $1 in
+    apt) _ui_icon '󰏖' '*' ;;
+    dnf) _ui_icon '󰏖' '*' ;;
+    pacman) _ui_icon '󰮯' '*' ;;
+    paru) _ui_icon '󰣇' '*' ;;
+    flatpak) _ui_icon '󰏖' '*' ;;
+    nix) _ui_icon '󱄅' '*' ;;
+    npm) _ui_icon '' '*' ;;
+    *) _ui_icon '󰈔' '*' ;;
+  esac
+}
+
 _ui_repeat() {
   emulate -L zsh
 
@@ -345,6 +387,73 @@ _ui_badge() {
   _ui_reset
 }
 
+_ui_bold() {
+  _ui_is_rich_terminal && printf '\033[1m'
+}
+
+_ui_title_line() {
+  emulate -L zsh
+
+  local title=$1
+  local meta=${2:-}
+  local role=${3:-accent}
+  local icon=${4:-}
+  local fallback=${5:-*}
+
+  if _ui_plain_mode; then
+    if [ -n "$meta" ]; then
+      print -r -- "$title - $meta"
+    else
+      print -r -- "$title"
+    fi
+    return 0
+  fi
+
+  print ''
+  if [ -n "$icon" ]; then
+    _ui_color "$role"
+    _ui_icon "$icon" "$fallback"
+    _ui_reset
+    print -nr -- ' '
+  fi
+  _ui_color "$role"
+  _ui_bold
+  print -nr -- "$title"
+  _ui_reset
+  if [ -n "$meta" ]; then
+    print -nr -- '  '
+    _ui_color muted
+    print -nr -- "$meta"
+    _ui_reset
+  fi
+  print ''
+}
+
+_ui_section_break() {
+  emulate -L zsh
+
+  local width fill='─' lead='─ '
+
+  if _ui_plain_mode; then
+    return 0
+  fi
+
+  width=$(( $(_ui_term_width) - 2 ))
+  (( width < 32 )) && width=32
+
+  if _ui_ascii_mode; then
+    fill='-'
+    lead='- '
+  fi
+
+  print ''
+  _ui_color border
+  print -nr -- "$lead"
+  _ui_repeat "$width" "$fill"
+  _ui_reset
+  print ''
+}
+
 _ui_panel_header() {
   emulate -L zsh
 
@@ -483,29 +592,4 @@ _ui_visible_count() {
   (( requested < 0 )) && requested=0
 
   print -r -- "$requested"
-}
-
-_ui_list_widths() {
-  emulate -L zsh
-
-  integer width=${1:-80}
-  integer label_width size_width bar_width percent_width=0
-
-  if (( width >= 120 )); then
-    label_width=36
-    size_width=9
-    bar_width=22
-    percent_width=5
-  elif (( width >= 80 )); then
-    label_width=24
-    size_width=9
-    bar_width=16
-    percent_width=5
-  else
-    label_width=18
-    size_width=9
-    bar_width=10
-  fi
-
-  print -r -- "$label_width $size_width $bar_width $percent_width"
 }

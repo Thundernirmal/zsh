@@ -115,7 +115,7 @@ If something is missing, the script prints install hints for common package mana
 - Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bars.
 - `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
 - `headers` is a redirect-following header check built on `curl -sSIL` (silent, show errors, head, follow redirects).
-- `dusage`, `bigfiles`, `ports`, `myip`, `upkg` read-only views, `npkg outdated`, and `tips` render Catppuccin Mocha dashboards in rich terminals and fall back to plain text for pipes, redirects, `TERM=dumb`, or narrow terminals.
+- `dusage`, `bigfiles`, `ports`, `myip`, `fanprofile`, `upkg` read-only views, `upkg managers`, `npkg outdated`, and `tips` now share the same Catppuccin Mocha dashboard treatment in rich terminals: bold title lines, consistent section separators, and plain-text fallbacks for pipes, redirects, `TERM=dumb`, or narrow terminals.
 - `dusage` and `bigfiles` skip unreadable paths when they can still produce readable results, instead of failing the whole listing because one subtree is inaccessible.
 - `ports` and `myip` are now shell functions instead of aliases so they can render rich panels while keeping their original command names.
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
@@ -146,7 +146,7 @@ Default behavior is read-only:
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview the selected upgrade set without changing packages
 - `upkg upgrade`, `upkg up`, and `upkg update` run upgrades only when you ask for them
 - `upkg managers` shows detected backends, keeps filtered selections first in execution order, and labels alternates that are available only via `--only`
-- In rich terminals, the read-only `upkg` views add themed section headers and a summary card, while backend package-manager output stays mostly raw.
+- In rich terminals, the read-only `upkg` views use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available, while backend package-manager output stays mostly raw.
 
 Filters and privilege policy:
 

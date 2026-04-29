@@ -96,7 +96,7 @@ fi
 
 if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v flatpak >/dev/null 2>&1 || (command -v nix >/dev/null 2>&1 && (( $+functions[npkg] ))) || command -v npm >/dev/null 2>&1; then
   _zsh_tip_pool+=(
-    "Run upkg to list outdated packages across detected package managers"
+    "Run upkg to list outdated packages across detected package managers with the same shared dashboard styling used across the repo, plus Nerd Font icons when available"
     "Run upkg managers to see active backends and alternates like pacman via --only"
     "Pipe upkg managers when you want plain active-manager IDs without extra status tags"
     "Run upkg managers --only=npm,flatpak to confirm selected execution order before upgrading"
@@ -130,15 +130,18 @@ tips() {
   tip=${_zsh_tip_pool[$(( RANDOM % total + 1 ))]}
 
   if (( $+functions[_ui_plain_mode] )) && ! _ui_plain_mode; then
-    _ui_panel_header 'Tip' 'shared zsh config' accent
-    _ui_panel_prefix
-    _ui_icon '󰛨' '*'
-    print -nr -- ' '
+    _ui_title_line 'Tip' 'shared zsh config' accent '󰛨' '*'
+    _ui_section_break
+    print -nr -- '  '
     _ui_color text
     print -nr -- "$tip"
     _ui_reset
     print ''
-    _ui_panel_footer 'Run tips again for another hint' accent
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'Run tips again for another hint'
+    _ui_reset
     return 0
   fi
 
