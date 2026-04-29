@@ -514,7 +514,7 @@ bigfiles() {
 ports() {
   emulate -L zsh
 
-  local output header parsed line netid state state_role localaddr port address process pid shown more
+  local output header parsed line netid state state_role localaddr port address process pid shown more pid_text
   local -a lines rows
   local row_delim=$'\t'
   integer width addr_width proc_width
@@ -555,14 +555,31 @@ ports() {
       sub(/^.*:/, "", port)
       sub(/:[^:]*$/, "", address)
 
-      if (match($0, /users:\(\("[^"]+"/)) {
-        proc = substr($0, RSTART, RLENGTH)
-        sub(/^users:\(\("/, "", proc)
-        sub(/"$/, "", proc)
+      rest = $0
+      owners = ""
+      pids = ""
+      while (match(rest, /\("[^"]+",pid=[^,()]+[^)]*\)/)) {
+        entry = substr(rest, RSTART, RLENGTH)
+        owner = entry
+        sub(/^\("/, "", owner)
+        sub(/",pid=.*$/, "", owner)
+        entry_pid = entry
+        sub(/^.*pid=/, "", entry_pid)
+        sub(/[,)].*$/, "", entry_pid)
+
+        if (owners != "") owners = owners ", "
+        owners = owners owner
+        if (pids != "") pids = pids ","
+        pids = pids entry_pid
+
+        rest = substr(rest, RSTART + RLENGTH)
       }
 
-      if (match($0, /pid=[0-9]+/)) {
-        pid = substr($0, RSTART + 4, RLENGTH - 4)
+      if (owners != "") {
+        proc = owners
+        pid = pids
+      } else if (match($0, /users:\(\(.*\)\)/)) {
+        proc = substr($0, RSTART, RLENGTH)
       }
 
       print netid "\t" state "\t" address "\t" port "\t" proc "\t" pid
@@ -623,8 +640,9 @@ ports() {
     _ui_pad left "$proc_width" "$(_ui_truncate "$proc_width" "$process")"
     _ui_reset
     print -nr -- ' '
+    pid_text=$(_ui_truncate 18 "pid=$pid")
     _ui_color muted
-    print -nr -- "pid=$pid"
+    print -nr -- "$pid_text"
     _ui_reset
     print ''
   done
@@ -2279,11 +2297,18 @@ if command -v nix >/dev/null 2>&1; then
     # Collect results and build output
     local -a latest_versions
     local upgrades=0
+    local latest_version inst
     for (( idx = 1; idx <= pkg_count; idx++ )); do
       if [ -f "${tmp_dir}/${idx}" ]; then
-        latest_versions+=("$(< "${tmp_dir}/${idx}")")
+        latest_version=$(< "${tmp_dir}/${idx}")
       else
-        latest_versions+=("??")
+        latest_version='??'
+      fi
+
+      latest_versions+=("$latest_version")
+      inst="${installed_versions[$idx]}"
+      if [ "$inst" != '??' ] && [ "$latest_version" != '??' ] && [ "$inst" != "$latest_version" ]; then
+        (( upgrades++ ))
       fi
     done
 
@@ -2292,8 +2317,8 @@ if command -v nix >/dev/null 2>&1; then
 
     if _ui_plain_mode; then
       printf '\n'
-      printf '%-20s %-16s %-16s %s\n' 'Package' 'Installed' 'Available' 'Status'
-      printf '%-20s %-16s %-16s %s\n' '-------' '---------' '---------' '------'
+      printf '%-25s %-20s %-20s %s\n' 'Package' 'Installed' 'Available' 'Status'
+      printf '%-25s %-20s %-20s %s\n' '-------' '---------' '---------' '------'
 
       for (( idx = 1; idx <= pkg_count; idx++ )); do
         name="${names[$idx]}"
@@ -2306,10 +2331,9 @@ if command -v nix >/dev/null 2>&1; then
           marker='ok'
         else
           marker='upgrade'
-          (( upgrades++ ))
         fi
 
-        printf '%-20.20s %-16.16s %-16.16s %s\n' "$name" "$inst" "$avail" "$marker"
+        printf '%-25s %-20s %-20s %s\n' "$name" "$inst" "$avail" "$marker"
       done
 
       printf '\n'
@@ -2357,7 +2381,6 @@ if command -v nix >/dev/null 2>&1; then
       else
         marker='upgrade'
         role='warning'
-        (( upgrades++ ))
       fi
 
       _ui_panel_prefix

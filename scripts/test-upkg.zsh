@@ -81,7 +81,7 @@ assert_order() {
 }
 
 main() {
-  local output cmd_status inspect_tmp
+  local output cmd_status inspect_tmp saved_path
 
 write_fake pacman '
 case "$*" in
@@ -122,6 +122,37 @@ exec /usr/bin/mktemp "$@"
 
 write_fake rm '
 exec /usr/bin/rm "$@"
+'
+
+write_fake ss '
+cat <<'"'"'EOF'"'"'
+Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+tcp LISTEN 0 128 0.0.0.0:3000 0.0.0.0:* users:(("node",pid=111,fd=20),("node",pid=112,fd=21),("node",pid=113,fd=22))
+EOF
+'
+
+write_fake nix '
+while [ "$1" = "--extra-experimental-features" ]; do
+  shift 2
+done
+
+case "$*" in
+  "profile list --json")
+    cat <<'"'"'EOF'"'"'
+{"elements":[
+  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.one","storePaths":["/nix/store/hash-pkg-one-1.0"]},
+  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.two","storePaths":["/nix/store/hash-pkg-two-1.0"]},
+  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.three","storePaths":["/nix/store/hash-pkg-three-1.0"]},
+  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.four","storePaths":["/nix/store/hash-pkg-four-1.0"]}
+]}
+EOF
+    ;;
+  "eval --raw nixpkgs#pkg.one.version") printf "%s\n" "1.0" ;;
+  "eval --raw nixpkgs#pkg.two.version") printf "%s\n" "2.0" ;;
+  "eval --raw nixpkgs#pkg.three.version") printf "%s\n" "1.0" ;;
+  "eval --raw nixpkgs#pkg.four.version") printf "%s\n" "3.0" ;;
+  *) exit 2 ;;
+esac
 '
 
   export PATH=$fakebin:$original_path
@@ -253,6 +284,35 @@ assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when
     /usr/bin/rm -rf "$inspect_tmp"
     return 1
   }
+
+  functions[_ui_is_rich_terminal]='return 0'
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_height]='print -r -- 12'
+  functions[_ui_color]=':'
+  functions[_ui_reset]=':'
+  functions[_ui_bold]=':'
+  functions[_ui_has_icons]='return 1'
+
+  output=$(ports)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'ports rich parser succeeds for multi-owner sockets' || return 1
+  assert_contains "$output" 'node, node, node' 'ports preserves all socket owners' || return 1
+  assert_contains "$output" 'pid=111,112,113' 'ports preserves all socket pids' || return 1
+
+  if command -v jq >/dev/null 2>&1; then
+    output=$(npkg outdated)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 'npkg outdated rich mode succeeds with fake nix data' || return 1
+    assert_contains "$output" '2 upgrade(s) available. Run npkg upgrade to apply.' 'npkg rich summary counts hidden upgrades' || return 1
+
+    functions[_ui_is_rich_terminal]='return 1'
+    functions[_ui_plain_mode]='return 0'
+    output=$(npkg outdated)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 'npkg outdated plain mode succeeds with full-width formatting' || return 1
+    assert_contains "$output" 'Package                   Installed            Available            Status' 'npkg plain output restores wide columns' || return 1
+  fi
 
   /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
   /usr/bin/rm -rf "$inspect_tmp"
