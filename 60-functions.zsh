@@ -259,6 +259,102 @@ fanprofile() {
   return 1
 }
 
+# Minimal fallbacks when UI helpers are unavailable so functions degrade to plain output.
+if ! (( $+functions[_ui_plain_mode] )); then
+  _ui_plain_mode() { return 0; }
+fi
+if ! (( $+functions[_ui_term_width] )); then
+  _ui_term_width() { print -r -- 80; }
+fi
+if ! (( $+functions[_ui_color] )); then
+  _ui_color() { :; }
+fi
+if ! (( $+functions[_ui_reset] )); then
+  _ui_reset() { :; }
+fi
+if ! (( $+functions[_ui_bold] )); then
+  _ui_bold() { :; }
+fi
+if ! (( $+functions[_ui_has_icons] )); then
+  _ui_has_icons() { return 1; }
+fi
+if ! (( $+functions[_ui_icon] )); then
+  _ui_icon() {
+    emulate -L zsh
+    print -nr -- "${2:-*}"
+  }
+fi
+if ! (( $+functions[_ui_title_line] )); then
+  _ui_title_line() {
+    emulate -L zsh
+    local title=$1 meta=${2:-}
+    if [ -n "$meta" ]; then
+      print -r -- "$title - $meta"
+    else
+      print -r -- "$title"
+    fi
+  }
+fi
+if ! (( $+functions[_ui_section_break] )); then
+  _ui_section_break() { :; }
+fi
+if ! (( $+functions[_ui_panel_prefix] )); then
+  _ui_panel_prefix() { :; }
+fi
+if ! (( $+functions[_ui_panel_kv] )); then
+  _ui_panel_kv() {
+    emulate -L zsh
+    print -r -- "$1: $2"
+  }
+fi
+if ! (( $+functions[_ui_badge] )); then
+  _ui_badge() {
+    emulate -L zsh
+    print -nr -- "[$1]"
+  }
+fi
+if ! (( $+functions[_ui_human_kib] )); then
+  _ui_human_kib() {
+    emulate -L zsh
+    print -r -- "$1 KiB"
+  }
+fi
+if ! (( $+functions[_ui_usage_entry_icon] )); then
+  _ui_usage_entry_icon() {
+    emulate -L zsh
+    print -nr -- '*'
+  }
+fi
+if ! (( $+functions[_ui_truncate] )); then
+  _ui_truncate() {
+    emulate -L zsh
+    print -r -- "$2"
+  }
+fi
+if ! (( $+functions[_ui_pad] )); then
+  _ui_pad() {
+    emulate -L zsh
+    local align=$1 width=$2 text=$3
+    if [ "$align" = 'right' ]; then
+      printf '%*s' "$width" "$text"
+    else
+      printf '%-*s' "$width" "$text"
+    fi
+  }
+fi
+if ! (( $+functions[_ui_bar] )); then
+  _ui_bar() { :; }
+fi
+if ! (( $+functions[_ui_visible_count] )); then
+  _ui_visible_count() {
+    emulate -L zsh
+    integer requested=$1 available=$2 max_rows=$3
+    (( requested < available )) && available=$requested
+    (( available > max_rows )) && available=$max_rows
+    print -r -- "$available"
+  }
+fi
+
 # Disk usage summary for current directory
 dusage() {
   emulate -L zsh
@@ -2048,7 +2144,7 @@ if command -v nix >/dev/null 2>&1; then
 
     _npkg_require_picker 'install' || return 1
 
-    if ! _ui_plain_mode && [ -z "${NO_COLOR:-}" ]; then
+    if (( $+functions[_ui_is_rich_terminal] )) && _ui_is_rich_terminal; then
       _c_attr='\033[38;2;245;224;220m'
       _c_muted='\033[38;2;166;173;200m'
       _c_success='\033[38;2;166;227;161m'
@@ -2113,7 +2209,7 @@ if command -v nix >/dev/null 2>&1; then
 
     _npkg_require_picker 'remove' || return 1
 
-    if ! _ui_plain_mode && [ -z "${NO_COLOR:-}" ]; then
+    if (( $+functions[_ui_is_rich_terminal] )) && _ui_is_rich_terminal; then
       _c_attr='\033[38;2;245;224;220m'
       _c_muted='\033[38;2;166;173;200m'
       _c_info='\033[38;2;137;180;250m'

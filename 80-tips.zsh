@@ -145,9 +145,5 @@ tips() {
     return 0
   fi
 
-  if ! (( $+functions[_ui_plain_mode] )) && [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
-    print -P "%F{244}tip:%f $tip"
-  else
-    print -- "tip: $tip"
-  fi
+  print -- "tip: $tip"
 }
