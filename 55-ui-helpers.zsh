@@ -454,40 +454,6 @@ _ui_section_break() {
   print ''
 }
 
-_ui_panel_header() {
-  emulate -L zsh
-
-  local title=$1
-  local meta=${2:-}
-  local role=${3:-accent}
-  local lead='╭─ '
-
-  if _ui_plain_mode; then
-    if [ -n "$meta" ]; then
-      print -r -- "$title - $meta"
-    else
-      print -r -- "$title"
-    fi
-    return 0
-  fi
-
-  if _ui_ascii_mode; then
-    lead='+- '
-  fi
-
-  _ui_color "$role"
-  print -nr -- "$lead"
-  _ui_reset
-  print -nr -- "$title"
-  if [ -n "$meta" ]; then
-    print -nr -- ' '
-    _ui_color muted
-    print -nr -- "$meta"
-    _ui_reset
-  fi
-  print ''
-}
-
 _ui_panel_prefix() {
   emulate -L zsh
 
@@ -502,55 +468,6 @@ _ui_panel_prefix() {
     print -nr -- '│ '
   fi
   _ui_reset
-}
-
-_ui_panel_divider() {
-  emulate -L zsh
-
-  local width
-  local lead='├'
-  local fill='─'
-
-  if _ui_plain_mode; then
-    return 0
-  fi
-
-  width=$(( $(_ui_term_width) - 3 ))
-  (( width < 8 )) && width=8
-
-  if _ui_ascii_mode; then
-    lead='|-'
-    fill='-'
-  fi
-
-  _ui_color border
-  print -nr -- "$lead"
-  _ui_repeat "$width" "$fill"
-  _ui_reset
-  print ''
-}
-
-_ui_panel_footer() {
-  emulate -L zsh
-
-  local text=${1:-}
-  local role=${2:-accent}
-  local lead='╰─ '
-
-  if _ui_plain_mode; then
-    [ -n "$text" ] && print -r -- "$text"
-    return 0
-  fi
-
-  if _ui_ascii_mode; then
-    lead='+- '
-  fi
-
-  _ui_color "$role"
-  print -nr -- "$lead"
-  _ui_reset
-  [ -n "$text" ] && print -nr -- "$text"
-  print ''
 }
 
 _ui_panel_kv() {
