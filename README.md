@@ -26,6 +26,7 @@ These files are loaded by the main entrypoint:
 - `30-zoxide.zsh` - guarded `zoxide` initialization
 - `40-fzf.zsh` - shared `fzf` configuration and shell bindings
 - `50-completion.zsh` - completion zstyles (case-insensitive, process completion)
+- `55-ui-helpers.zsh` - shared terminal UI helpers for rich dashboard output
 - `60-functions.zsh` - useful shell functions
 - `70-globals.zsh` - global aliases for command-line piping
 - `80-tips.zsh` - on-demand `tips` shell function
@@ -101,6 +102,7 @@ If something is missing, the script prints install hints for common package mana
 - If `tree` is missing, the `lt` alias is not created unless `lsd` is available.
 - If `zoxide` or `fzf` are missing, their init blocks are skipped cleanly.
 - `40-fzf.zsh` only loads `fzf --zsh` in interactive shells when `ZSH_EXECUTION_STRING` is empty, which keeps `zsh -i -c ...` startup paths free of `zle` warnings.
+- `55-ui-helpers.zsh` only affects commands at runtime; it does not add hooks, redraw loops, or startup-time terminal work.
 - `fkill` and `fbr` are interactive helpers: they require both `fzf` and a real terminal.
 - If `bat` is missing, `fzf` file previews fall back to `sed` and `peek` falls back to `cat`.
 - If `rg` (ripgrep) is missing, `ft` falls back to `grep`.
@@ -109,14 +111,19 @@ If something is missing, the script prints install hints for common package mana
 - `50-completion.zsh` assumes your main `~/.zshrc` or framework already ran `compinit`; it only adds lightweight `zstyle` tuning.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- Rich dashboard output is enabled only for real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`.
+- Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bars.
 - `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
 - `headers` is a redirect-following header check built on `curl -sSIL` (silent, show errors, head, follow redirects).
-- `dusage` summarizes top-level entries in a directory, while `bigfiles` walks the tree recursively.
+- `dusage`, `bigfiles`, `ports`, `myip`, `fanprofile`, `upkg` read-only views, `upkg managers`, `npkg outdated`, and `tips` now share the same Catppuccin Mocha dashboard treatment in rich terminals: bold title lines, consistent section separators, and plain-text fallbacks for pipes, redirects, `TERM=dumb`, or narrow terminals.
+- `dusage` and `bigfiles` skip unreadable paths when they can still produce readable results, instead of failing the whole listing because one subtree is inaccessible.
+- `ports` and `myip` are now shell functions instead of aliases so they can render rich panels while keeping their original command names.
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
 - `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
+- `upkg managers` keeps active managers as bare IDs in plain output so piping and simple scripts do not need to strip an `(active)` suffix.
 - `upkg upgrade` never injects `sudo` automatically; pass `--sudo` explicitly for `apt`, `dnf`, `pacman`, or `paru`.
 - When `--sudo` is requested from an unprivileged shell, `upkg` expects `sudo` to exist; otherwise it blocks the backend and tells you to rerun as root.
 - On Arch-family backends, empty `pacman -Qu` or `paru -Qua` results with exit `1` are treated as "no updates available" rather than as failures.
@@ -139,6 +146,7 @@ Default behavior is read-only:
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview the selected upgrade set without changing packages
 - `upkg upgrade`, `upkg up`, and `upkg update` run upgrades only when you ask for them
 - `upkg managers` shows detected backends, keeps filtered selections first in execution order, and labels alternates that are available only via `--only`
+- In rich terminals, the read-only `upkg` views use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available, while backend package-manager output stays mostly raw.
 
 Filters and privilege policy:
 

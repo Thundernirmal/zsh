@@ -46,8 +46,6 @@ if command diff --color=auto /dev/null /dev/null >/dev/null 2>&1; then
 fi
 
 # Network & system
-alias ports='ss -tulnp'
-alias myip='curl -fsSL https://ifconfig.me/ip && printf "\n"'
 alias weather='curl --http1.1 -fsSL https://wttr.in'
 
 # Git extras (OMZ git plugin covers basics, these fill gaps)
