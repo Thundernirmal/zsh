@@ -631,7 +631,7 @@ bigfiles() {
 ports() {
   emulate -L zsh
 
-  local output header parsed line netid state state_role localaddr port address process pid shown more pid_text
+  local output header parsed line netid state state_role port address process pid shown more pid_text
   local -a lines rows
   local row_delim=$'\t'
   integer width addr_width proc_width
