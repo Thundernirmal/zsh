@@ -204,10 +204,10 @@ esac
     print -- "source '$repo_dir/55-ui-helpers.zsh'"
     print -- 'if _ui_is_rich_terminal; then print -- rich; else print -- plain; fi'
   } > "$rich_check_file"
-  output=$(TERM= LANG=en_US.UTF-8 zsh "$rich_check_file")
+  output=$(TERM=xterm LANG=en_US.UTF-8 zsh "$rich_check_file")
   cmd_status=$?
   assert_status "$cmd_status" 0 'ui helper TERM check script runs' || return 1
-  assert_contains "$output" 'plain' 'unset TERM no longer enables rich mode' || return 1
+  assert_contains "$output" 'plain' 'non-TTY output keeps rich mode disabled' || return 1
 
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
