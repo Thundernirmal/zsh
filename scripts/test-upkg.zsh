@@ -4,8 +4,10 @@ set -u
 
 repo_dir=${0:A:h:h}
 original_path=$PATH
-fakebin=$(mktemp -d)
-tmp_prefix=$(mktemp -d)
+fakebin=$(mktemp -d) || { print -u2 -- 'fatal: mktemp failed for fakebin'; exit 1; }
+[ -n "$fakebin" ] || { print -u2 -- 'fatal: mktemp returned empty fakebin'; exit 1; }
+tmp_prefix=$(mktemp -d) || { print -u2 -- 'fatal: mktemp failed for tmp_prefix'; exit 1; }
+[ -n "$tmp_prefix" ] || { print -u2 -- 'fatal: mktemp returned empty tmp_prefix'; exit 1; }
 inspect_tmp=''
 
 cleanup() {
@@ -365,6 +367,36 @@ assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when
 
   /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
   /usr/bin/rm -rf "$inspect_tmp"
+
+  write_fake curl '
+case "$*" in
+  "-fsSL https://ifconfig.me/ip") printf "%s" "203.0.113.42" ;;
+  *) exit 2 ;;
+esac
+'
+
+  functions[_ui_is_rich_terminal]='return 1'
+  functions[_ui_plain_mode]='return 0'
+  output=$(myip)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'myip plain mode exits 0 with stubbed curl' || return 1
+  assert_contains "$output" '203.0.113.42' 'myip plain mode prints the IP address' || return 1
+
+  functions[_ui_is_rich_terminal]='return 0'
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_height]='print -r -- 12'
+  functions[_ui_color]=':'
+  functions[_ui_reset]=':'
+  functions[_ui_bold]=':'
+  functions[_ui_has_icons]='return 1'
+  functions[_ui_title_line]=':'
+  functions[_ui_panel_kv]=':'
+  functions[_ui_section_break]=':'
+  output=$(myip)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'myip rich mode exits 0 with stubbed curl' || return 1
+  assert_contains "$output" '203.0.113.42' 'myip rich mode includes the IP address' || return 1
 }
 
 main "$@"
