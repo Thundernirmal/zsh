@@ -1733,7 +1733,7 @@ upkg() {
   local -a candidate_pool run_order display_order
   local -A selected_map skipped_map alternate_map display_seen
 
-  typeset -g _UPKG_THEME_MODE=''
+  local _UPKG_THEME_MODE=''
 
   while (( $# > 0 )); do
     case $1 in
