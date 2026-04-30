@@ -6,7 +6,17 @@ repo_dir=${0:A:h:h}
 original_path=$PATH
 fakebin=$(mktemp -d)
 tmp_prefix=$(mktemp -d)
-trap 'rm -rf "$fakebin" "$tmp_prefix"' EXIT INT TERM
+inspect_tmp=''
+
+cleanup() {
+  if [ -n "${inspect_tmp:-}" ] && [ -d "$inspect_tmp" ]; then
+    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree" 2>/dev/null || true
+    /usr/bin/rm -rf "$inspect_tmp"
+  fi
+  /usr/bin/rm -rf "$fakebin" "$tmp_prefix"
+}
+
+trap cleanup EXIT INT TERM
 
 write_fake() {
   local name=$1
@@ -81,7 +91,7 @@ assert_order() {
 }
 
 main() {
-  local output cmd_status inspect_tmp
+  local output cmd_status
 
 write_fake pacman '
 case "$*" in

@@ -263,8 +263,27 @@ fanprofile() {
 if ! (( $+functions[_ui_plain_mode] )); then
   _ui_plain_mode() { return 0; }
 fi
+if ! (( $+functions[_ui_ascii_mode] )); then
+  _ui_ascii_mode() { return 0; }
+fi
 if ! (( $+functions[_ui_term_width] )); then
   _ui_term_width() { print -r -- 80; }
+fi
+if ! (( $+functions[_ui_repeat] )); then
+  _ui_repeat() {
+    emulate -L zsh
+    local count=${1:-0} chunk=${2:- }
+    local out=''
+    integer i
+
+    (( count > 0 )) || return 0
+
+    for (( i = 0; i < count; i++ )); do
+      out+="$chunk"
+    done
+
+    print -nr -- "$out"
+  }
 fi
 if ! (( $+functions[_ui_color] )); then
   _ui_color() { :; }
@@ -2287,7 +2306,7 @@ if command -v nix >/dev/null 2>&1; then
 
   _npkg_outdated() {
     emulate -L zsh
-    setopt pipefail NO_MONITOR NO_NOTIFY
+    setopt pipefail localtraps NO_MONITOR NO_NOTIFY
 
     if ! command -v jq >/dev/null 2>&1; then
       echo "jq is required for npkg outdated"
