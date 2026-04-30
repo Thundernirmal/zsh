@@ -90,6 +90,21 @@ assert_order() {
   print -- "ok: $label"
 }
 
+assert_file_contains() {
+  local file=$1
+  local needle=$2
+  local label=$3
+  local content
+
+  content=$(/usr/bin/cat -- "$file") || {
+    print -u2 -- "not ok: $label"
+    print -u2 -- "failed to read: $file"
+    return 1
+  }
+
+  assert_contains "$content" "$needle" "$label"
+}
+
 main() {
   local output cmd_status
 
@@ -166,10 +181,34 @@ esac
 '
 
   export PATH=$fakebin:$original_path
-export UPKG_TEST_NPM_PREFIX=$tmp_prefix
+  export UPKG_TEST_NPM_PREFIX=$tmp_prefix
 
-source "$repo_dir/55-ui-helpers.zsh"
-source "$repo_dir/60-functions.zsh"
+  local fallback_file rich_check_file
+  fallback_file="$tmp_prefix/fallback-load.zsh"
+  rich_check_file="$tmp_prefix/rich-check.zsh"
+
+  {
+    print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_has_icons _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width 2>/dev/null || true'
+    print -- "source '$repo_dir/60-functions.zsh'"
+    print -- '_ui_truncate 10 "My File.txt"'
+    print -- '_ui_pad left 20 "My File.txt"'
+  } > "$fallback_file"
+  output=$(TERM=xterm zsh "$fallback_file")
+  cmd_status=$?
+  assert_status "$cmd_status" 0 '60-functions fallback helpers load without ui module' || return 1
+  assert_contains "$output" 'My File.txt' 'fallback helpers preserve spaced text' || return 1
+
+  {
+    print -- "source '$repo_dir/55-ui-helpers.zsh'"
+    print -- 'if _ui_is_rich_terminal; then print -- rich; else print -- plain; fi'
+  } > "$rich_check_file"
+  output=$(TERM= LANG=en_US.UTF-8 zsh "$rich_check_file")
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'ui helper TERM check script runs' || return 1
+  assert_contains "$output" 'plain' 'unset TERM no longer enables rich mode' || return 1
+
+  source "$repo_dir/55-ui-helpers.zsh"
+  source "$repo_dir/60-functions.zsh"
 
   output=$(upkg managers)
   assert_contains "$output" 'paru' 'detects paru' || return 1

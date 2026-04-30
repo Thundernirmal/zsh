@@ -347,17 +347,19 @@ fi
 if ! (( $+functions[_ui_truncate] )); then
   _ui_truncate() {
     emulate -L zsh
-    print -r -- "$2"
+    shift
+    print -r -- "$*"
   }
 fi
 if ! (( $+functions[_ui_pad] )); then
   _ui_pad() {
     emulate -L zsh
-    local align=$1 width=$2 text=$3
+    local align=$1 width=$2
+    shift 2
     if [ "$align" = 'right' ]; then
-      printf '%*s' "$width" "$text"
+      printf '%*s' "$width" "$*"
     else
-      printf '%-*s' "$width" "$text"
+      printf '%-*s' "$width" "$*"
     fi
   }
 fi
@@ -1517,11 +1519,11 @@ _upkg_run_outdated_npm() {
 
   _upkg_print_section npm
 
-  stdout_file=$(command mktemp) || {
+  stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stdout.XXXXXX") || {
     _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
     return 1
   }
-  stderr_file=$(command mktemp) || {
+  stderr_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stderr.XXXXXX") || {
     command rm -f -- "$stdout_file"
     _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
     return 1
@@ -2389,7 +2391,7 @@ if command -v nix >/dev/null 2>&1; then
     echo "Checking $pkg_count package(s) for updates..."
 
     # Evaluate latest versions in parallel via temp files
-    tmp_dir=$(command mktemp -d) || return 1
+    tmp_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-outdated.XXXXXX") || return 1
     trap "command rm -rf '$tmp_dir'; trap - EXIT INT TERM; return 1" INT TERM
     trap "command rm -rf '$tmp_dir'" EXIT
 
