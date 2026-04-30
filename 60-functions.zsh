@@ -407,14 +407,17 @@ dusage() {
   fi
 
   if _ui_plain_mode; then
-    output=$(du -sh -- "${entries[@]}" 2>/dev/null)
+    plain_output_file=$(mktemp) || return 1
+    du -sh -- "${entries[@]}" 2>/dev/null > "$plain_output_file"
     scan_status=$?
-    if [ -z "$output" ] && (( scan_status != 0 )); then
+    if [ ! -s "$plain_output_file" ] && (( scan_status != 0 )); then
+      command rm -f -- "$plain_output_file"
       return $scan_status
     fi
-    output=$(print -r -- "$output" | command sort -rh) || return 1
-    print -r -- "$output" | command sed -n "1,${limit}p"
-    return $?
+    command sort -rh -- "$plain_output_file" | command sed -n "1,${limit}p"
+    pipeline_status=$?
+    command rm -f -- "$plain_output_file"
+    return $pipeline_status
   fi
 
   output=$(du -sk -- "${entries[@]}" 2>/dev/null)
