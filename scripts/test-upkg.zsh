@@ -92,25 +92,10 @@ assert_order() {
   print -- "ok: $label"
 }
 
-assert_file_contains() {
-  local file=$1
-  local needle=$2
-  local label=$3
-  local content
-
-  content=$(/usr/bin/cat -- "$file") || {
-    print -u2 -- "not ok: $label"
-    print -u2 -- "failed to read: $file"
-    return 1
-  }
-
-  assert_contains "$content" "$needle" "$label"
-}
-
 main() {
   local output cmd_status
 
-write_fake pacman '
+  write_fake pacman '
 case "$*" in
   "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
   "-Syu") printf "%s\n" "pacman upgrade" ;;
@@ -218,21 +203,21 @@ esac
   assert_not_contains "$output" 'title=' 'manager listing stays free of debug leaks' || return 1
   assert_contains "$output" 'pacman (available via --only pacman)' 'labels pacman alternate' || return 1
 
-output=$(upkg --only=npm,flatpak)
-assert_contains "$output" '==> npm' 'equals --only keeps first selected manager first' || return 1
-assert_contains "$output" '==> Flatpak' 'equals --only includes second selected manager' || return 1
-assert_order "$output" '==> npm' '==> Flatpak' 'selected manager order' || return 1
+  output=$(upkg --only=npm,flatpak)
+  assert_contains "$output" '==> npm' 'equals --only keeps first selected manager first' || return 1
+  assert_contains "$output" '==> Flatpak' 'equals --only includes second selected manager' || return 1
+  assert_order "$output" '==> npm' '==> Flatpak' 'selected manager order' || return 1
 
-output=$(upkg managers --only=npm,flatpak)
-assert_contains "$output" '  - npm (selected)' 'manager listing marks npm selected' || return 1
-assert_contains "$output" '  - flatpak (selected)' 'manager listing marks flatpak selected' || return 1
-assert_order "$output" '  - npm (selected)' '  - flatpak (selected)' 'manager listing follows selected order' || return 1
+  output=$(upkg managers --only=npm,flatpak)
+  assert_contains "$output" '  - npm (selected)' 'manager listing marks npm selected' || return 1
+  assert_contains "$output" '  - flatpak (selected)' 'manager listing marks flatpak selected' || return 1
+  assert_order "$output" '  - npm (selected)' '  - flatpak (selected)' 'manager listing follows selected order' || return 1
 
-output=$(upkg plan --only=paru)
-cmd_status=$?
-assert_status "$cmd_status" 0 'paru plan succeeds when repo and AUR checks succeed' || return 1
-assert_contains "$output" 'Repo updates:' 'paru plan includes repo updates' || return 1
-assert_contains "$output" 'AUR updates:' 'paru plan includes AUR updates' || return 1
+  output=$(upkg plan --only=paru)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'paru plan succeeds when repo and AUR checks succeed' || return 1
+  assert_contains "$output" 'Repo updates:' 'paru plan includes repo updates' || return 1
+  assert_contains "$output" 'AUR updates:' 'paru plan includes AUR updates' || return 1
 
   output=$(upkg upgrade --dry-run --only=npm)
   assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'dry-run previews npm instead of upgrading' || return 1
@@ -254,11 +239,11 @@ esac
   output=$(upkg --dry-run --only=flatpak)
   assert_contains "$output" 'org.example.App stable' 'bare dry-run previews selected managers' || return 1
 
-write_fake pacman '
+  write_fake pacman '
 exit 1
 '
 
-write_fake paru '
+  write_fake paru '
 case "$*" in
   "-Qua"|"-Qu") exit 1 ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
@@ -266,17 +251,17 @@ case "$*" in
 esac
 '
 
-output=$(upkg plan --only=paru)
-cmd_status=$?
-assert_status "$cmd_status" 0 'paru plan treats empty Arch rc=1 checks as up to date' || return 1
-assert_contains "$output" 'No updates available.' 'paru plan reports no updates for empty Arch rc=1 checks' || return 1
+  output=$(upkg plan --only=paru)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'paru plan treats empty Arch rc=1 checks as up to date' || return 1
+  assert_contains "$output" 'No updates available.' 'paru plan reports no updates for empty Arch rc=1 checks' || return 1
 
-write_fake pacman '
+  write_fake pacman '
 printf "%s\n" "pacman database is locked" >&2
 exit 1
 '
 
-write_fake paru '
+  write_fake paru '
 case "$*" in
   "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
@@ -284,11 +269,11 @@ case "$*" in
 esac
 '
 
-output=$(upkg plan --only=paru 2>&1)
-cmd_status=$?
-assert_status "$cmd_status" 1 'paru plan returns nonzero on repo check failure' || return 1
-assert_contains "$output" 'Repo update check failed; continuing with AUR preview.' 'paru plan warns when repo preview fails' || return 1
-assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when repo preview fails' || return 1
+  output=$(upkg plan --only=paru 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'paru plan returns nonzero on repo check failure' || return 1
+  assert_contains "$output" 'Repo update check failed; continuing with AUR preview.' 'paru plan warns when repo preview fails' || return 1
+  assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when repo preview fails' || return 1
 
   output=$(upkg upgrade --only=paru 2>&1)
   cmd_status=$?

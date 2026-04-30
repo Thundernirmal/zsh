@@ -383,8 +383,8 @@ dusage() {
   local target=${1:-.}
   local limit=${2:-20}
   local output line kib entry_path label icon shown visible_count more total_kib bar_width name_width width size_width percent_width
-  local size_text percent_text header_meta footer_text
-  local scan_status=0
+  local size_text percent_text header_meta footer_text plain_output_file=''
+  local scan_status=0 pipeline_status=0
   local -a entries
   local -a lines
 
@@ -407,8 +407,8 @@ dusage() {
   fi
 
   if _ui_plain_mode; then
-    plain_output_file=$(mktemp) || return 1
-    du -sh -- "${entries[@]}" 2>/dev/null > "$plain_output_file"
+    plain_output_file=$(command mktemp "${TMPDIR:-/tmp}/dusage.plain.XXXXXX") || return 1
+    du -sh -- "${entries[@]}" 2>/dev/null >"$plain_output_file"
     scan_status=$?
     if [ ! -s "$plain_output_file" ] && (( scan_status != 0 )); then
       command rm -f -- "$plain_output_file"
