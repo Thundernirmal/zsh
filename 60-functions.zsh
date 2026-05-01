@@ -1130,7 +1130,7 @@ _upkg_print_summary() {
   done
 
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
-    _upkg_print_section summary
+    _ui_section_break
     _ui_color muted
     _ui_icon '󰍹' '>'
     _ui_reset
