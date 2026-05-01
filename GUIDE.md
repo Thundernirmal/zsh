@@ -10,6 +10,7 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 30-zoxide.zsh           → Smart directory jumping
 ├── 40-fzf.zsh              → Fuzzy finder with previews
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
+├── 55-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers, title lines, and consistent section separators
 ├── 60-functions.zsh        → Shell functions (extract, search, kill, fanprofile, git helpers, upkg, npkg, etc.)
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
 └── 80-tips.zsh             → On-demand tips function
@@ -183,7 +184,7 @@ lt    # tree structure
 
 ### Network & System
 
-| Alias | What it does |
+| Command | What it does |
 |---|---|
 | `ports` | Show all listening ports and their processes |
 | `myip` | Show your public IP address over HTTPS |
@@ -194,6 +195,10 @@ ports     # what's listening on your machine
 myip      # your public IP
 weather   # current weather + 3-day forecast
 ```
+
+`ports` and `myip` render Catppuccin Mocha cards in rich terminals. They stay plain and pipe-friendly when stdout is not a TTY, when `TERM=dumb`, when `NO_COLOR=1`, or when the terminal is narrower than 60 columns. In the rich `ports` dashboard, normal UDP listeners keep their native `UNCONN` state without being treated as warnings.
+
+Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bar characters. This is useful on terminals that support color but do not have a Nerd Font installed.
 
 ### Git Extras
 
@@ -301,6 +306,8 @@ fkill 15        # send SIGTERM instead of SIGKILL
 
 By default `fkill` sends `SIGKILL` (`9`). Pass the signal number with or without a leading `-`.
 
+The picker uses matching pointer and marker glyphs when Nerd Fonts are enabled.
+
 ---
 
 ## Tab Completion
@@ -383,6 +390,8 @@ peek script.sh
 
 Uses the standard Linux `platform_profile` interface when it exists, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF laptops.
 
+In rich terminals it renders a status card with a profile badge, source details, and available choices when the kernel exposes them.
+
 ```zsh
 fanprofile
 # normal (fan_boost_mode=0)
@@ -406,12 +415,16 @@ headers https://example.com  # follows redirects and prints response headers
 
 Shows the largest immediate children of a directory, including dotfiles, sorted by size.
 
+In rich terminals it renders a responsive dashboard with icons, sizes, and proportional bars. In pipes or narrow terminals it falls back to the traditional `du -sh | sort -rh | head` style output. If one child is unreadable, `dusage` still shows the readable entries instead of failing the whole listing.
+
 ```zsh
 dusage           # top 20 largest items, human-readable
 dusage /var 10   # top 10 items in /var
 ```
 
 ### bigfiles — Largest files in tree
+
+In rich terminals it renders a responsive dashboard with truncated paths and proportional bars. In pipes or narrow terminals it falls back to the original recursive plain-text listing. If one subtree is unreadable, `bigfiles` still reports the readable files it can inspect.
 
 ```zsh
 bigfiles         # top 20 largest files recursively
@@ -440,6 +453,8 @@ fbr              # opens branch picker and checks out the selected branch
 ```
 
 If you pick a remote branch that is not checked out locally yet, `fbr` creates a tracking branch automatically.
+
+The picker inherits your `FZF_DEFAULT_OPTS` theme (Catppuccin Mocha when configured globally) and adds matching pointer and marker glyphs when Nerd Fonts are enabled.
 
 ---
 
@@ -535,6 +550,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
+- In rich terminals, `upkg`, `upkg plan`, and `upkg managers` use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available, while preserving mostly raw backend output inside each manager section.
 - Distro outdated results depend on the package metadata already present on the machine.
 - The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`.
 - When `--sudo` is requested from a non-root shell, `upkg` expects `sudo` to be installed; otherwise it blocks the backend and tells you to rerun it as root.
@@ -543,6 +559,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 - `skipped` means the backend was intentionally omitted by `--skip`.
 - `--only` runs managers in the order you name them; default runs use detection order.
 - `upkg managers --only ...` keeps the selected managers at the top in that same order.
+- Plain `upkg managers` output keeps active managers as bare IDs for pipe- and script-friendly output; annotations are reserved for alternates, filtered selections, and skipped managers.
 - Empty Arch-family outdated checks that exit `1` without output are treated as the normal "up to date" case.
 - `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
 - `paru` preview still returns nonzero if the repo-side check fails, even when it can show AUR results.
@@ -613,9 +630,9 @@ npkg outdated          # see what would be upgraded
 npkg upgrade           # upgrade everything
 ```
 
-The fzf picker preview shows the package description, version, and homepage from nixpkgs. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
+The fzf picker preview shows the package description, version, and homepage from nixpkgs using the shared Catppuccin Mocha palette. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
 
-`npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints a table — run it before `npkg upgrade` to see what will change.
+`npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints an ASCII-safe table in plain mode, or a responsive Mocha dashboard in rich terminals — run it before `npkg upgrade` to see what will change.
 
 `npkg refresh` also needs `jq`, because the cache is built from JSON output.
 
@@ -633,6 +650,8 @@ tips    # prints one random tip, e.g.:
 ```
 
 Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific tips only appear when the supporting commands are available. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are available, and `upkg` tips are added automatically whenever at least one supported package manager is detected.
+
+In rich terminals, `tips` renders a compact Rosewater card. In plain contexts it stays a one-line `tip:` message.
 
 ---
 

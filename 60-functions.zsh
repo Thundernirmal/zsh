@@ -103,6 +103,8 @@ fkill() {
   local signal=${1:-9}
   local selected pid
   local -a pids
+  local _fzf_pointer='>' _fzf_marker='+'
+  (( $+functions[_ui_has_icons] )) && _ui_has_icons && { _fzf_pointer='󰘳'; _fzf_marker='󰄬'; }
 
   signal=${signal#-}
   selected=$(
@@ -113,7 +115,11 @@ fkill() {
         sub(/^ +/, "")
         print pid "\t" $0
       }
-    ' | fzf -m --delimiter=$'\t' --with-nth=2.. --header="Select process(es) to kill with SIG${signal}"
+    ' | fzf -m --delimiter=$'\t' --with-nth=2.. \
+      --prompt='Kill> ' \
+      --header="Select process(es) to kill with SIG${signal}" \
+      --pointer="$_fzf_pointer" \
+      --marker="$_fzf_marker"
   ) || return 0
 
   while IFS=$'\t' read -r pid _; do
@@ -148,15 +154,59 @@ peek() {
   fi
 }
 
+_ui_usage_entry_icon() {
+  local target=$1
+
+  if [ -L "$target" ]; then
+    _ui_icon '󰌷' '@'
+  elif [ -d "$target" ]; then
+    _ui_icon '󰉋' '/'
+  else
+    _ui_icon '󰈔' '-'
+  fi
+}
+
+_ui_profile_role() {
+  case $1 in
+    silent|quiet|low-power) print -r -- 'success' ;;
+    balanced|balanced-performance|cool|normal) print -r -- 'info' ;;
+    performance|overboost|turbo) print -r -- 'danger' ;;
+    *) print -r -- 'accent' ;;
+  esac
+}
+
 # Show current laptop thermal/performance profile
 fanprofile() {
+  emulate -L zsh
+
   local platform_profile_file=/sys/firmware/acpi/platform_profile
+  local platform_choices_file=/sys/firmware/acpi/platform_profile_choices
   local asus_profile_file=/sys/devices/platform/asus-nb-wmi/fan_boost_mode
-  local raw profile
+  local raw profile role source choices meta
 
   if [ -r "$platform_profile_file" ]; then
     raw=$(<"$platform_profile_file")
-    printf '%s (platform_profile)\n' "$raw"
+    if _ui_plain_mode; then
+      printf '%s (platform_profile)\n' "$raw"
+      return 0
+    fi
+
+    role=$(_ui_profile_role "$raw")
+    source='platform_profile'
+    [ -r "$platform_choices_file" ] && choices=$(<"$platform_choices_file")
+
+    _ui_title_line 'Fan Profile' "$source" "$role" '󰈐' '*'
+    _ui_panel_prefix
+    _ui_icon '󰈐' '*'
+    print -nr -- ' '
+    _ui_badge "$raw" "$role"
+    print ''
+    [ -n "$choices" ] && _ui_panel_kv 'Choices' "$choices" muted text
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'Kernel platform profile interface'
+    _ui_reset
     return 0
   fi
 
@@ -172,19 +222,171 @@ fanprofile() {
         ;;
     esac
 
-    printf '%s (fan_boost_mode=%s)\n' "$profile" "$raw"
+    if _ui_plain_mode; then
+      printf '%s (fan_boost_mode=%s)\n' "$profile" "$raw"
+      return 0
+    fi
+
+    role=$(_ui_profile_role "$profile")
+    meta="fan_boost_mode=${raw}"
+    _ui_title_line 'Fan Profile' 'ASUS WMI fallback' "$role" '󰈐' '*'
+    _ui_panel_prefix
+    _ui_icon '󰈐' '*'
+    print -nr -- ' '
+    _ui_badge "$profile" "$role"
+    print ''
+    _ui_panel_kv 'Source' 'fan_boost_mode' muted text
+    _ui_panel_kv 'Raw' "$raw" muted text
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- "$meta"
+    _ui_reset
     return 0
   fi
 
-  echo "No supported laptop performance profile interface found"
+  if _ui_plain_mode; then
+    echo "No supported laptop performance profile interface found"
+  else
+    _ui_title_line 'Fan Profile' 'unsupported host' warning '󰈐' '*'
+    _ui_panel_kv 'Status' 'No supported laptop performance profile interface found' muted text
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'Checked platform_profile and ASUS fan_boost_mode'
+    _ui_reset
+  fi
   return 1
 }
 
+# Minimal fallbacks when UI helpers are unavailable so functions degrade to plain output.
+if ! (( $+functions[_ui_plain_mode] )); then
+  _ui_plain_mode() { return 0; }
+fi
+if ! (( $+functions[_ui_ascii_mode] )); then
+  _ui_ascii_mode() { return 0; }
+fi
+if ! (( $+functions[_ui_term_width] )); then
+  _ui_term_width() { print -r -- 80; }
+fi
+if ! (( $+functions[_ui_repeat] )); then
+  _ui_repeat() {
+    emulate -L zsh
+    local count=${1:-0} chunk=${2:- }
+    local out=''
+    integer i
+
+    (( count > 0 )) || return 0
+
+    for (( i = 0; i < count; i++ )); do
+      out+="$chunk"
+    done
+
+    print -nr -- "$out"
+  }
+fi
+if ! (( $+functions[_ui_color] )); then
+  _ui_color() { :; }
+fi
+if ! (( $+functions[_ui_reset] )); then
+  _ui_reset() { :; }
+fi
+if ! (( $+functions[_ui_bold] )); then
+  _ui_bold() { :; }
+fi
+if ! (( $+functions[_ui_has_icons] )); then
+  _ui_has_icons() { return 1; }
+fi
+if ! (( $+functions[_ui_icon] )); then
+  _ui_icon() {
+    emulate -L zsh
+    print -nr -- "${2:-*}"
+  }
+fi
+if ! (( $+functions[_ui_title_line] )); then
+  _ui_title_line() {
+    emulate -L zsh
+    local title=$1 meta=${2:-}
+    if [ -n "$meta" ]; then
+      print -r -- "$title - $meta"
+    else
+      print -r -- "$title"
+    fi
+  }
+fi
+if ! (( $+functions[_ui_section_break] )); then
+  _ui_section_break() { :; }
+fi
+if ! (( $+functions[_ui_panel_prefix] )); then
+  _ui_panel_prefix() { :; }
+fi
+if ! (( $+functions[_ui_panel_kv] )); then
+  _ui_panel_kv() {
+    emulate -L zsh
+    print -r -- "$1: $2"
+  }
+fi
+if ! (( $+functions[_ui_badge] )); then
+  _ui_badge() {
+    emulate -L zsh
+    print -nr -- "[$1]"
+  }
+fi
+if ! (( $+functions[_ui_human_kib] )); then
+  _ui_human_kib() {
+    emulate -L zsh
+    print -r -- "$1 KiB"
+  }
+fi
+if ! (( $+functions[_ui_usage_entry_icon] )); then
+  _ui_usage_entry_icon() {
+    emulate -L zsh
+    print -nr -- '*'
+  }
+fi
+if ! (( $+functions[_ui_truncate] )); then
+  _ui_truncate() {
+    emulate -L zsh
+    shift
+    print -r -- "$*"
+  }
+fi
+if ! (( $+functions[_ui_pad] )); then
+  _ui_pad() {
+    emulate -L zsh
+    local align=$1 width=$2
+    shift 2
+    if [ "$align" = 'right' ]; then
+      printf '%*s' "$width" "$*"
+    else
+      printf '%-*s' "$width" "$*"
+    fi
+  }
+fi
+if ! (( $+functions[_ui_bar] )); then
+  _ui_bar() { :; }
+fi
+if ! (( $+functions[_ui_visible_count] )); then
+  _ui_visible_count() {
+    emulate -L zsh
+    integer requested=$1 available=$2 max_rows=$3
+    (( requested < available )) && available=$requested
+    (( available > max_rows )) && available=$max_rows
+    print -r -- "$available"
+  }
+fi
+
 # Disk usage summary for current directory
 dusage() {
+  emulate -L zsh
+
   local target=${1:-.}
   local limit=${2:-20}
+  local output line kib entry_path label icon shown visible_count more total_kib bar_width name_width width size_width percent_width
+  local size_text percent_text header_meta footer_text plain_output_file=''
+  local scan_status=0 pipeline_status=0
   local -a entries
+  local -a lines
 
   if [ ! -d "$target" ]; then
     echo "'$target' is not a directory"
@@ -204,13 +406,112 @@ dusage() {
     return 0
   fi
 
-  du -sh -- "${entries[@]}" 2>/dev/null | sort -rh | head -n "$limit"
+  if _ui_plain_mode; then
+    plain_output_file=$(command mktemp "${TMPDIR:-/tmp}/dusage.plain.XXXXXX") || return 1
+    du -sh -- "${entries[@]}" 2>/dev/null >"$plain_output_file"
+    scan_status=$?
+    if [ ! -s "$plain_output_file" ] && (( scan_status != 0 )); then
+      command rm -f -- "$plain_output_file"
+      return $scan_status
+    fi
+    command sort -rh -- "$plain_output_file" | command sed -n "1,${limit}p"
+    pipeline_status=$?
+    command rm -f -- "$plain_output_file"
+    return $pipeline_status
+  fi
+
+  output=$(du -sk -- "${entries[@]}" 2>/dev/null)
+  scan_status=$?
+  if [ -z "$output" ] && (( scan_status != 0 )); then
+    return $scan_status
+  fi
+  output=$(print -r -- "$output" | command sort -rn) || return 1
+  lines=( ${(f)output} )
+  (( ${#lines[@]} > 0 )) || {
+    echo "No entries found in '$target'"
+    return 0
+  }
+
+  for line in "${lines[@]}"; do
+    kib=${line%%$'\t'*}
+    case $kib in
+      ''|*[!0-9]*) continue ;;
+    esac
+    total_kib=$(( total_kib + kib ))
+  done
+
+  shown=$(_ui_visible_count "$limit" "${#lines[@]}" 6)
+  more=$(( ${#lines[@]} - shown ))
+  visible_count=$shown
+  width=$(_ui_term_width)
+  size_width=9
+  bar_width=16
+  percent_width=5
+  (( width < 80 )) && bar_width=10
+
+  name_width=$(( width - size_width - percent_width - bar_width - 8 ))
+  (( name_width < 10 )) && name_width=10
+
+  header_meta="$target"
+  footer_text="showing ${visible_count}/${#lines[@]} entries"
+  _ui_title_line 'Disk Usage' "$header_meta" accent '󰋊' '*'
+  _ui_panel_kv 'Entries' "${#lines[@]}" muted text
+  _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
+  _ui_section_break
+
+  integer idx
+  for (( idx = 1; idx <= visible_count; idx++ )); do
+    line=${lines[$idx]}
+    kib=${line%%$'\t'*}
+    entry_path=${line#*$'\t'}
+    size_text=$(_ui_human_kib "$kib")
+    percent_text=''
+
+    if (( total_kib > 0 && percent_width > 0 )); then
+      percent_text="$(( kib * 100 / total_kib ))%"
+    fi
+
+    label=${entry_path##*/}
+    [ -n "$label" ] || label=$entry_path
+    icon=$(_ui_usage_entry_icon "$entry_path")
+    label=$(_ui_truncate "$name_width" "$label")
+
+    _ui_panel_prefix
+    print -nr -- "$icon "
+    _ui_color text
+    _ui_pad left "$name_width" "$label"
+    _ui_reset
+    print -nr -- ' '
+    _ui_color muted
+    _ui_pad right "$size_width" "$size_text"
+    _ui_reset
+    (( percent_width > 0 )) && printf ' %*s' "$percent_width" "$percent_text"
+    print -nr -- ' '
+    _ui_bar "$bar_width" "$kib" "$total_kib" info
+    print ''
+  done
+
+  if (( more > 0 )); then
+    _ui_panel_kv 'More' "+${more} not shown" muted muted
+  fi
+
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- "$footer_text"
+  _ui_reset
 }
 
 # Largest files in current directory tree
 bigfiles() {
+  emulate -L zsh
+
   local target=${1:-.}
   local limit=${2:-20}
+  local line kib file_path label shown more total_kib bar_width path_width footer_text icon width size_width
+  local scan_status=0
+  local raw_output_file='' sorted_output_file='' line_count=0
+  local -a lines
 
   if [ ! -e "$target" ]; then
     echo "'$target' does not exist"
@@ -224,7 +525,285 @@ bigfiles() {
       ;;
   esac
 
-  command find "$target" -type f -exec du -h {} + 2>/dev/null | sort -rh | head -n "$limit"
+  raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.raw.XXXXXX") || return 1
+
+  if _ui_plain_mode; then
+    command find "$target" -type f -exec du -h -- {} + 2>/dev/null >"$raw_output_file"
+    scan_status=$?
+    if [ ! -s "$raw_output_file" ] && (( scan_status != 0 )); then
+      command rm -f -- "$raw_output_file"
+      return $scan_status
+    fi
+    command sort -rh -- "$raw_output_file" | command sed -n "1,${limit}p"
+    scan_status=$?
+    command rm -f -- "$raw_output_file"
+    return $scan_status
+  fi
+
+  sorted_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.sorted.XXXXXX") || {
+    command rm -f -- "$raw_output_file"
+    return 1
+  }
+
+  command find "$target" -type f -exec du -k -- {} + 2>/dev/null >"$raw_output_file"
+  scan_status=$?
+  if [ ! -s "$raw_output_file" ] && (( scan_status != 0 )); then
+    command rm -f -- "$raw_output_file" "$sorted_output_file"
+    return $scan_status
+  fi
+  command sort -rn -- "$raw_output_file" >"$sorted_output_file" || {
+    command rm -f -- "$raw_output_file" "$sorted_output_file"
+    return 1
+  }
+
+  line_count=$(command awk 'END { print NR + 0 }' "$sorted_output_file")
+
+  if (( line_count == 0 )); then
+    command rm -f -- "$raw_output_file" "$sorted_output_file"
+    _ui_title_line 'Big Files' "$target" accent '󰉋' '*'
+    _ui_panel_kv 'Status' 'No files found under target' muted text
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'Nothing to display'
+    _ui_reset
+    return 0
+  fi
+
+  total_kib=$(command awk '{ if ($1 ~ /^[0-9]+$/) sum += $1 } END { print sum + 0 }' "$sorted_output_file")
+  shown=$(_ui_visible_count "$limit" "$line_count" 6)
+  lines=( ${(f)"$(command sed -n "1,${shown}p" "$sorted_output_file")"} )
+  more=$(( line_count - shown ))
+  command rm -f -- "$raw_output_file" "$sorted_output_file"
+
+  width=$(_ui_term_width)
+  size_width=9
+  bar_width=16
+  (( width < 80 )) && bar_width=10
+
+  path_width=$(( width - size_width - bar_width - 7 ))
+  (( path_width < 10 )) && path_width=10
+
+  _ui_title_line 'Big Files' "$target" accent '󰉋' '*'
+  _ui_panel_kv 'Files found' "$line_count" muted text
+  _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
+  _ui_section_break
+
+  integer idx
+  for (( idx = 1; idx <= shown; idx++ )); do
+    line=${lines[$idx]}
+    kib=${line%%$'\t'*}
+    file_path=${line#*$'\t'}
+    icon=$(_ui_usage_entry_icon "$file_path")
+
+    if (( width < 80 )); then
+      label=${file_path##*/}
+    else
+      label=$file_path
+    fi
+
+    label=$(_ui_truncate "$path_width" "$label")
+
+    _ui_panel_prefix
+    print -nr -- "$icon "
+    _ui_color text
+    _ui_pad left "$path_width" "$label"
+    _ui_reset
+    print -nr -- ' '
+    _ui_color muted
+    _ui_pad right "$size_width" "$(_ui_human_kib "$kib")"
+    _ui_reset
+    print -nr -- ' '
+    _ui_bar "$bar_width" "$kib" "$total_kib" accent
+    print ''
+  done
+
+  if (( more > 0 )); then
+    _ui_panel_kv 'More' "+${more} not shown" muted muted
+  fi
+
+  footer_text="showing ${shown}/${line_count} files"
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- "$footer_text"
+  _ui_reset
+}
+
+# Show listening ports and owning processes
+ports() {
+  emulate -L zsh
+
+  local output header parsed line netid state state_role port address process pid shown more pid_text
+  local -a lines rows
+  local row_delim=$'\t'
+  integer width addr_width proc_width
+
+  if _ui_plain_mode; then
+    command ss -tulnp
+    return $?
+  fi
+
+  output=$(command ss -tulnp 2>/dev/null) || {
+    command ss -tulnp
+    return $?
+  }
+
+  lines=( ${(f)output} )
+  for line in "${lines[@]}"; do
+    [ -n "${line//[[:space:]]/}" ] || continue
+    header=$line
+    break
+  done
+
+  if [[ $header != *Netid* || $header != *State* || $header != *Recv-Q* || $header != *Local\ Address:Port* || $header != *Process* ]]; then
+    print -r -- "$output"
+    return 0
+  fi
+
+  parsed=$(print -r -- "$output" | command awk '
+    NR == 1 || NF == 0 || NF < 5 { next }
+    {
+      netid = $1
+      state = $2
+      localaddr = $5
+      port = localaddr
+      address = localaddr
+      proc = "-"
+      pid = "-"
+
+      sub(/^.*:/, "", port)
+      sub(/:[^:]*$/, "", address)
+
+      rest = $0
+      owners = ""
+      pids = ""
+      while (match(rest, /\("[^"]+",pid=[^,()]+[^)]*\)/)) {
+        entry = substr(rest, RSTART, RLENGTH)
+        owner = entry
+        sub(/^\("/, "", owner)
+        sub(/",pid=.*$/, "", owner)
+        entry_pid = entry
+        sub(/^.*pid=/, "", entry_pid)
+        sub(/[,)].*$/, "", entry_pid)
+
+        if (owners != "") owners = owners ", "
+        owners = owners owner
+        if (pids != "") pids = pids ","
+        pids = pids entry_pid
+
+        rest = substr(rest, RSTART + RLENGTH)
+      }
+
+      if (owners != "") {
+        proc = owners
+        pid = pids
+      } else if (match($0, /users:\(\(.*\)\)/)) {
+        proc = substr($0, RSTART, RLENGTH)
+      }
+
+      print netid "\t" state "\t" address "\t" port "\t" proc "\t" pid
+    }
+  ')
+
+  rows=( ${(f)parsed} )
+  (( ${#rows[@]} > 0 )) || {
+    print -r -- "$output"
+    return 0
+  }
+
+  shown=$(_ui_visible_count 999 "${#rows[@]}" 8)
+  more=$(( ${#rows[@]} - shown ))
+  width=$(_ui_term_width)
+
+  local available=$(( width - 42 ))
+  (( available < 20 )) && available=20
+  addr_width=$(( available * 3 / 5 ))
+  proc_width=$(( available - addr_width ))
+
+  _ui_title_line 'Listening Ports' 'ss -tulnp' accent '󰒋' '*'
+  _ui_panel_kv 'Sockets' "${#rows[@]}" muted text
+  _ui_section_break
+
+  integer idx
+  for (( idx = 1; idx <= shown; idx++ )); do
+    line=${rows[$idx]}
+    netid=${line%%${row_delim}*}
+    line=${line#*${row_delim}}
+    state=${line%%${row_delim}*}
+    line=${line#*${row_delim}}
+    address=${line%%${row_delim}*}
+    line=${line#*${row_delim}}
+    port=${line%%${row_delim}*}
+    line=${line#*${row_delim}}
+    process=${line%%${row_delim}*}
+    pid=${line#*${row_delim}}
+    case $state in
+      LISTEN|UNCONN) state_role=success ;;
+      *) state_role=warning ;;
+    esac
+
+    _ui_panel_prefix
+    _ui_badge "$netid" info
+    print -nr -- ' '
+    _ui_badge "$state" "$state_role"
+    print -nr -- ' '
+    _ui_color text
+    _ui_pad left "$addr_width" "$(_ui_truncate "$addr_width" "$address")"
+    _ui_reset
+    print -nr -- ':'
+    _ui_color accent
+    _ui_pad right 5 "$port"
+    _ui_reset
+    print -nr -- ' '
+    _ui_color muted
+    _ui_pad left "$proc_width" "$(_ui_truncate "$proc_width" "$process")"
+    _ui_reset
+    print -nr -- ' '
+    pid_text=$(_ui_truncate 18 "pid=$pid")
+    _ui_color muted
+    print -nr -- "$pid_text"
+    _ui_reset
+    print ''
+  done
+
+  if (( more > 0 )); then
+    _ui_panel_kv 'More' "+${more} not shown" muted muted
+  fi
+
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- 'Raw fallback: ss -tulnp'
+  _ui_reset
+}
+
+# Show public IP address over HTTPS
+myip() {
+  emulate -L zsh
+
+  local endpoint='https://ifconfig.me/ip'
+  local ip
+
+  if _ui_plain_mode; then
+    curl -fsSL "$endpoint" && printf '\n'
+    return $?
+  fi
+
+  ip=$(curl -fsSL "$endpoint") || return $?
+
+  _ui_title_line 'Public IP' 'HTTPS lookup' accent '󰩟' '*'
+  print -nr -- '  '
+  _ui_color text
+  print -nr -- "$ip"
+  _ui_reset
+  print ''
+  _ui_panel_kv 'Source' 'ifconfig.me/ip' muted text
+  _ui_section_break
+  print -nr -- '  '
+  _ui_color muted
+  print -r -- 'Use plain mode for scripting'
+  _ui_reset
 }
 
 # Jump to the root of the current git repository
@@ -262,6 +841,9 @@ fbr() {
   }
 
   local selection branch local_branch
+  local _fzf_pointer='>' _fzf_marker='+'
+  (( $+functions[_ui_has_icons] )) && _ui_has_icons && { _fzf_pointer='󰘳'; _fzf_marker='󰄬'; }
+
   selection=$(
     git for-each-ref --sort=-committerdate \
       --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \
@@ -269,6 +851,8 @@ fbr() {
       command grep -v $'^[^[:space:]]+/HEAD\t' |
       fzf --ansi --height=50% --delimiter=$'\t' --with-nth=1,2,3 \
         --prompt='Branch> ' \
+        --pointer="$_fzf_pointer" \
+        --marker="$_fzf_marker" \
         --preview 'git log --oneline --decorate --color=always -20 {1}' \
         --preview-window=right,60%,border-left,wrap
   ) || return 0
@@ -479,11 +1063,36 @@ _upkg_manager_title() {
 _upkg_print_section() {
   emulate -L zsh
 
-  local title
+  local manager=$1
+  local title=$(_upkg_manager_title "$manager")
+  local width fill='─' lead='─ '
 
-  title=$(_upkg_manager_title "$1")
   print ''
-  print "==> $title"
+  if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
+    width=$(( $(_ui_term_width) - 2 ))
+    (( width < 32 )) && width=32
+    if _ui_ascii_mode; then
+      fill='-'
+      lead='- '
+    fi
+
+    _ui_color border
+    print -nr -- "$lead"
+    _ui_repeat "$width" "$fill"
+    _ui_reset
+    print ''
+
+    print -nr -- '  '
+    _ui_color accent
+    _ui_manager_icon "$manager"
+    _ui_reset
+    print -nr -- ' '
+    _ui_color text
+    print -r -- "$title"
+    _ui_reset
+  else
+    print "==> $title"
+  fi
 }
 
 _upkg_set_last_result() {
@@ -506,19 +1115,92 @@ _upkg_record_summary() {
 _upkg_print_summary() {
   emulate -L zsh
 
-  local manager detail
-
-  print ''
-  print 'Summary:'
+  local manager detail state role title
+  local ok_count=0 updates_count=0 blocked_count=0 failed_count=0 skipped_count=0
 
   for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-    detail=${_UPKG_SUMMARY_DETAIL[$manager]}
-    if [ -n "$detail" ]; then
-      print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]} - $detail"
-    else
-      print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}"
-    fi
+    state=${_UPKG_SUMMARY_STATE[$manager]}
+    case $state in
+      'up to date'|upgraded) (( ok_count++ )) ;;
+      'updates available')   (( updates_count++ )) ;;
+      blocked)               (( blocked_count++ )) ;;
+      failed)                (( failed_count++ )) ;;
+      skipped)               (( skipped_count++ )) ;;
+    esac
   done
+
+  if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
+    _upkg_print_section summary
+    _ui_color muted
+    _ui_icon '󰍹' '>'
+    _ui_reset
+    print -nr -- ' '
+    _ui_color text
+    print -nr -- 'Summary'
+    _ui_reset
+    print -nr -- ' '
+    _ui_badge "$ok_count ok" success
+    print -nr -- ' '
+    _ui_badge "$updates_count updates" warning
+    if (( blocked_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$blocked_count blocked" warning
+    fi
+    if (( failed_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$failed_count failed" danger
+    fi
+    if (( skipped_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$skipped_count skipped" muted
+    fi
+    print ''
+
+    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+      detail=${_UPKG_SUMMARY_DETAIL[$manager]}
+      state=${_UPKG_SUMMARY_STATE[$manager]}
+      title=$(_upkg_manager_title "$manager")
+      case $state in
+        'up to date'|upgraded)    role='success' ;;
+        'updates available')      role='warning' ;;
+        blocked)                  role='warning' ;;
+        failed)                   role='danger'  ;;
+        skipped)                  role='muted'   ;;
+        *)                        role='accent'  ;;
+      esac
+
+      print -nr -- '  '
+      _ui_color "$role"
+      _ui_status_icon "$state"
+      _ui_reset
+      print -nr -- ' '
+      _ui_manager_icon "$manager"
+      print -nr -- ' '
+      _ui_color text
+      print -nr -- "$title"
+      _ui_reset
+      print -nr -- ' '
+      _ui_badge "$state" "$role"
+      if [ -n "$detail" ]; then
+        print -nr -- ' '
+        _ui_color muted
+        print -nr -- "($detail)"
+        _ui_reset
+      fi
+      print ''
+    done
+  else
+    print ''
+    print 'Summary:'
+    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+      detail=${_UPKG_SUMMARY_DETAIL[$manager]}
+      if [ -n "$detail" ]; then
+        print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]} - $detail"
+      else
+        print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}"
+      fi
+    done
+  fi
 }
 
 _upkg_finish_upgrade_result() {
@@ -840,11 +1522,11 @@ _upkg_run_outdated_npm() {
 
   _upkg_print_section npm
 
-  stdout_file=$(command mktemp) || {
+  stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stdout.XXXXXX") || {
     _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
     return 1
   }
-  stderr_file=$(command mktemp) || {
+  stderr_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stderr.XXXXXX") || {
     command rm -f -- "$stdout_file"
     _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
     return 1
@@ -1054,6 +1736,8 @@ upkg() {
   local -a candidate_pool run_order display_order
   local -A selected_map skipped_map alternate_map display_seen
 
+  local _UPKG_THEME_MODE=''
+
   while (( $# > 0 )); do
     case $1 in
       --only)
@@ -1154,6 +1838,10 @@ upkg() {
   done
 
   if [ "$cmd" = 'managers' ]; then
+    if ! _ui_plain_mode; then
+      _UPKG_THEME_MODE=1
+    fi
+
     if [ -n "$only_raw" ] || [ -n "$skip_raw" ]; then
       _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
       filtered=1
@@ -1176,28 +1864,67 @@ upkg() {
       done
     fi
 
-    print 'Detected managers:'
+    if _ui_plain_mode || [ -z "${_UPKG_THEME_MODE:-}" ]; then
+      print 'Detected managers:'
+    else
+      _ui_title_line 'Detected Managers' 'upkg managers' accent '󰒓' '*'
+      [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
+      [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
+      _ui_section_break
+    fi
+
     for manager in "${display_order[@]}"; do
+      local manager_status='' role='muted'
+
       if [ -n "${skipped_map[$manager]}" ]; then
-        print "  - $manager (skipped by filter)"
+        manager_status='skipped by filter'
+        role='muted'
       elif [ -n "${selected_map[$manager]}" ]; then
         if [ -n "${alternate_map[$manager]}" ]; then
-          print "  - $manager (selected via --only)"
+          manager_status='selected via --only'
         else
-          print "  - $manager (selected)"
+          manager_status='selected'
         fi
+        role='accent'
       elif (( filtered )); then
         if [ -n "${alternate_map[$manager]}" ]; then
-          print "  - $manager (available via --only $manager)"
+          manager_status="available via --only $manager"
         else
-          print "  - $manager (not selected)"
+          manager_status='not selected'
         fi
+        role='warning'
       elif [ -n "${alternate_map[$manager]}" ]; then
-        print "  - $manager (available via --only $manager)"
+        manager_status="available via --only $manager"
+        role='warning'
       else
-        print "  - $manager"
+        manager_status='active'
+        role='success'
+      fi
+
+      if _ui_plain_mode || [ -z "${_UPKG_THEME_MODE:-}" ]; then
+        if [ "$manager_status" = 'active' ]; then
+          print "  - $manager"
+        else
+          print "  - $manager ($manager_status)"
+        fi
+      else
+        _ui_panel_prefix
+        _ui_badge "$manager_status" "$role"
+        print -nr -- ' '
+        _ui_color text
+        print -nr -- "$(_upkg_manager_title "$manager")"
+        _ui_reset
+        print ''
       fi
     done
+
+    if ! _ui_plain_mode && [ -n "${_UPKG_THEME_MODE:-}" ]; then
+      _ui_section_break
+      print -nr -- '  '
+      _ui_color muted
+      print -r -- 'Selection order follows execution order'
+      _ui_reset
+    fi
 
     if (( filtered && ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
       return 1
@@ -1207,6 +1934,15 @@ upkg() {
   fi
 
   _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
+
+  if [ "$cmd" = 'outdated' ] || [ "$cmd" = 'plan' ]; then
+    if ! _ui_plain_mode; then
+      _UPKG_THEME_MODE=1
+      _ui_title_line 'Package Dashboard' "$cmd" accent '󰏖' '*'
+      [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
+      [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
+    fi
+  fi
 
   if (( ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
     print -u2 -- 'No package managers selected after applying filters.'
@@ -1428,21 +2164,32 @@ if command -v nix >/dev/null 2>&1; then
 
     local cache_file selection attr query
     local -a installables
+    local _c_attr='' _c_muted='' _c_success='' _c_info='' _c0=''
 
     _npkg_require_picker 'install' || return 1
+
+    if (( $+functions[_ui_is_rich_terminal] )) && _ui_is_rich_terminal; then
+      _c_attr='\033[38;2;245;224;220m'
+      _c_muted='\033[38;2;166;173;200m'
+      _c_success='\033[38;2;166;227;161m'
+      _c_info='\033[38;2;137;180;250m'
+      _c0='\033[0m'
+    fi
 
     query="${(j: :)@}"
     cache_file=$(_npkg_attr_index) || return 1
 
     selection=$(
+      _c_attr="$_c_attr" _c_muted="$_c_muted" _c_success="$_c_success" \
+      _c_info="$_c_info" _c0="$_c0" \
       command fzf -m \
         --prompt='Nix install> ' \
         --query="$query" \
         --header='Type to filter attribute names, Tab marks packages, Enter adds' \
         --preview '
             attr={}
-            printf "\033[1;36mAttr:\033[0m %s\n" "$attr"
-            printf "\033[1;36mInstall ref:\033[0m nixpkgs#%s\n\n" "$attr"
+            printf "${_c_attr}Attr:${_c0} %s\n" "$attr"
+            printf "${_c_attr}Install ref:${_c0} nixpkgs#%s\n\n" "$attr"
             meta_json=$(command nix --extra-experimental-features "nix-command flakes" \
               eval --json --apply "p: { v = p.version or \"\"; d = p.meta.description or \"\"; h = p.meta.homepage or \"\"; }" "nixpkgs#$attr" 2>/dev/null || echo "{}")
 
@@ -1451,17 +2198,17 @@ if command -v nix >/dev/null 2>&1; then
             hp=$(echo "$meta_json" | command jq -r ".h | select(. != \"\") // empty")
 
             if [ -n "$desc" ]; then
-              printf "\033[1;33mDescription:\033[0m\n%s\n\n" "$desc"
+              printf "${_c_muted}Description:${_c0}\n%s\n\n" "$desc"
             else
-              printf "\033[2m(no description available)\033[0m\n\n"
+              printf "${_c_muted}(no description available)${_c0}\n\n"
             fi
 
             if [ -n "$ver" ]; then
-              printf "\033[1;33mVersion:\033[0m %s\n" "$ver"
+              printf "${_c_success}Version:${_c0} %s\n" "$ver"
             fi
 
             if [ -n "$hp" ]; then
-              printf "\033[1;33mHomepage:\033[0m %s\n" "$hp"
+              printf "${_c_info}Homepage:${_c0} %s\n" "$hp"
             fi
           ' \
         --preview-window=right,45%,border-left,wrap \
@@ -1482,8 +2229,16 @@ if command -v nix >/dev/null 2>&1; then
 
     local candidates selection
     local -a targets
+    local _c_attr='' _c_muted='' _c_info='' _c0=''
 
     _npkg_require_picker 'remove' || return 1
+
+    if (( $+functions[_ui_is_rich_terminal] )) && _ui_is_rich_terminal; then
+      _c_attr='\033[38;2;245;224;220m'
+      _c_muted='\033[38;2;166;173;200m'
+      _c_info='\033[38;2;137;180;250m'
+      _c0='\033[0m'
+    fi
 
     candidates=$(
       _npkg_nix profile list --json |
@@ -1538,10 +2293,11 @@ if command -v nix >/dev/null 2>&1; then
 
     selection=$(
       print -r -- "$candidates" |
+        _c_attr="$_c_attr" _c_muted="$_c_muted" _c_info="$_c_info" _c0="$_c0" \
         command fzf -m --delimiter=$'\t' --with-nth=2,3,4 \
           --prompt='Nix remove> ' \
           --header='Tab marks packages, Enter removes' \
-          --preview 'printf "Name: %s\nAttr: %s\nSource: %s\n" {2} {3} {4}' \
+          --preview 'printf "${_c_attr}Name:${_c0} %s\n${_c_muted}Attr:${_c0} %s\n${_c_info}Source:${_c0} %s\n" {2} {3} {4}' \
           --preview-window=right,60%,border-left,wrap
     ) || return 0
 
@@ -1555,7 +2311,7 @@ if command -v nix >/dev/null 2>&1; then
 
   _npkg_outdated() {
     emulate -L zsh
-    setopt pipefail NO_MONITOR NO_NOTIFY
+    setopt pipefail localtraps NO_MONITOR NO_NOTIFY
 
     if ! command -v jq >/dev/null 2>&1; then
       echo "jq is required for npkg outdated"
@@ -1638,7 +2394,7 @@ if command -v nix >/dev/null 2>&1; then
     echo "Checking $pkg_count package(s) for updates..."
 
     # Evaluate latest versions in parallel via temp files
-    tmp_dir=$(command mktemp -d) || return 1
+    tmp_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-outdated.XXXXXX") || return 1
     trap "command rm -rf '$tmp_dir'; trap - EXIT INT TERM; return 1" INT TERM
     trap "command rm -rf '$tmp_dir'" EXIT
 
@@ -1661,43 +2417,123 @@ if command -v nix >/dev/null 2>&1; then
     # Collect results and build output
     local -a latest_versions
     local upgrades=0
+    local latest_version inst
     for (( idx = 1; idx <= pkg_count; idx++ )); do
       if [ -f "${tmp_dir}/${idx}" ]; then
-        latest_versions+=("$(< "${tmp_dir}/${idx}")")
+        latest_version=$(< "${tmp_dir}/${idx}")
       else
-        latest_versions+=("??")
+        latest_version='??'
+      fi
+
+      latest_versions+=("$latest_version")
+      inst="${installed_versions[$idx]}"
+      if [ "$inst" != '??' ] && [ "$latest_version" != '??' ] && [ "$inst" != "$latest_version" ]; then
+        (( upgrades++ ))
       fi
     done
 
     # Print table
-    local name inst avail marker
-    printf '\n'
-    printf '\033[1m%-25s %-20s %-20s %s\033[0m\n' 'Package' 'Installed' 'Available' ''
-    printf '%-25s %-20s %-20s %s\n' '───────' '─────────' '─────────' ''
+    local name inst avail marker role shown more width name_width version_width visible_count
 
-    for (( idx = 1; idx <= pkg_count; idx++ )); do
+    if _ui_plain_mode; then
+      printf '\n'
+      printf '%-25s %-20s %-20s %s\n' 'Package' 'Installed' 'Available' 'Status'
+      printf '%-25s %-20s %-20s %s\n' '-------' '---------' '---------' '------'
+
+      for (( idx = 1; idx <= pkg_count; idx++ )); do
+        name="${names[$idx]}"
+        inst="${installed_versions[$idx]}"
+        avail="${latest_versions[$idx]}"
+
+        if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
+          marker='?'
+        elif [ "$inst" = "$avail" ]; then
+          marker='ok'
+        else
+          marker='upgrade'
+        fi
+
+        printf '%-25s %-20s %-20s %s\n' "$name" "$inst" "$avail" "$marker"
+      done
+
+      printf '\n'
+      if (( upgrades > 0 )); then
+        printf '%d upgrade(s) available. Run: npkg upgrade\n' "$upgrades"
+      else
+        printf 'Everything is up to date.\n'
+      fi
+
+      command rm -rf "$tmp_dir"
+      trap - EXIT INT TERM
+      return 0
+    fi
+
+    width=$(_ui_term_width)
+    if (( width >= 120 )); then
+      name_width=28
+      version_width=18
+    elif (( width >= 80 )); then
+      name_width=22
+      version_width=14
+    else
+      name_width=16
+      version_width=10
+    fi
+
+    visible_count=$(_ui_visible_count "$pkg_count" "$pkg_count" 9)
+    more=$(( pkg_count - visible_count ))
+
+    _ui_title_line 'Nix Package Drift' "$pkg_count package(s) checked" accent '󱄅' '*'
+    _ui_panel_kv 'Command' 'npkg outdated' muted text
+    _ui_section_break
+
+    for (( idx = 1; idx <= visible_count; idx++ )); do
       name="${names[$idx]}"
       inst="${installed_versions[$idx]}"
       avail="${latest_versions[$idx]}"
 
       if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
-        marker='—'
+        marker='unknown'
+        role='muted'
       elif [ "$inst" = "$avail" ]; then
-        marker='\033[32m✓\033[0m'
+        marker='up to date'
+        role='success'
       else
-        marker='\033[33m⬆\033[0m'
-        (( upgrades++ ))
+        marker='upgrade'
+        role='warning'
       fi
 
-      printf '%-25s %-20s %-20s %b\n' "$name" "$inst" "$avail" "$marker"
+      _ui_panel_prefix
+      _ui_badge "$marker" "$role"
+      print -nr -- ' '
+      _ui_color text
+      _ui_pad left "$name_width" "$(_ui_truncate "$name_width" "$name")"
+      _ui_reset
+      print -nr -- ' '
+      _ui_color muted
+      _ui_pad left "$version_width" "$inst"
+      _ui_reset
+      print -nr -- ' '
+      _ui_color info
+      _ui_pad left "$version_width" "$avail"
+      _ui_reset
+      print ''
     done
 
-    printf '\n'
-    if (( upgrades > 0 )); then
-      printf '\033[33m%d upgrade(s) available.\033[0m Run \033[1mnpkg upgrade\033[0m to apply.\n' "$upgrades"
-    else
-      printf '\033[32mEverything is up to date.\033[0m\n'
+    if (( more > 0 )); then
+      _ui_panel_kv 'More' "+${more} not shown" muted muted
     fi
+
+    _ui_section_break
+    print -nr -- '  '
+    if (( upgrades > 0 )); then
+      _ui_color warning
+      print -r -- "$upgrades upgrade(s) available. Run npkg upgrade to apply."
+    else
+      _ui_color success
+      print -r -- 'Everything is up to date.'
+    fi
+    _ui_reset
 
     command rm -rf "$tmp_dir"
     trap - EXIT INT TERM
