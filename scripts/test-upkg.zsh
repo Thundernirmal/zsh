@@ -11,11 +11,13 @@ tmp_prefix=$(mktemp -d) || { print -u2 -- 'fatal: mktemp failed for tmp_prefix';
 inspect_tmp=''
 
 cleanup() {
+  local PATH=$original_path
+
   if [ -n "${inspect_tmp:-}" ] && [ -d "$inspect_tmp" ]; then
-    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree" 2>/dev/null || true
-    /usr/bin/rm -rf "$inspect_tmp"
+    command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree" 2>/dev/null || true
+    command rm -rf "$inspect_tmp"
   fi
-  /usr/bin/rm -rf "$fakebin" "$tmp_prefix"
+  command rm -rf "$fakebin" "$tmp_prefix"
 }
 
 trap cleanup EXIT INT TERM
@@ -28,7 +30,7 @@ write_fake() {
     print '#!/bin/sh'
     print "$@"
   } >"$fakebin/$name"
-  /usr/bin/chmod +x "$fakebin/$name"
+  command chmod +x "$fakebin/$name"
 }
 
 assert_contains() {
@@ -128,13 +130,9 @@ case "$*" in
 esac
 '
 
-write_fake mktemp '
-exec /usr/bin/mktemp "$@"
-'
+write_fake mktemp "exec $(command -v mktemp) \"\$@\""
 
-write_fake rm '
-exec /usr/bin/rm "$@"
-'
+write_fake rm "exec $(command -v rm) \"\$@\""
 
 write_fake ss '
 cat <<'"'"'EOF'"'"'
@@ -180,7 +178,7 @@ esac
     print -- '_ui_truncate 10 "My File.txt"'
     print -- '_ui_pad left 20 "My File.txt"'
   } > "$fallback_file"
-  output=$(TERM=xterm zsh "$fallback_file")
+  output=$(ZDOTDIR=$tmp_prefix TERM=xterm zsh -f "$fallback_file")
   cmd_status=$?
   assert_status "$cmd_status" 0 '60-functions fallback helpers load without ui module' || return 1
   assert_contains "$output" 'My File.txt' 'fallback helpers preserve spaced text' || return 1
@@ -189,7 +187,7 @@ esac
     print -- "source '$repo_dir/55-ui-helpers.zsh'"
     print -- 'if _ui_is_rich_terminal; then print -- rich; else print -- plain; fi'
   } > "$rich_check_file"
-  output=$(TERM=xterm LANG=en_US.UTF-8 zsh "$rich_check_file")
+  output=$(ZDOTDIR=$tmp_prefix TERM=xterm LANG=en_US.UTF-8 zsh -f "$rich_check_file")
   cmd_status=$?
   assert_status "$cmd_status" 0 'ui helper TERM check script runs' || return 1
   assert_contains "$output" 'plain' 'non-TTY output keeps rich mode disabled' || return 1
@@ -288,36 +286,36 @@ esac
     print -u2 -- 'not ok: mktemp returned empty inspect tmpdir'
     return 1
   fi
-  /usr/bin/mkdir -p "$inspect_tmp/readable-dir" "$inspect_tmp/blocked-dir/inner" "$inspect_tmp/readable-tree" "$inspect_tmp/blocked-tree/inner"
+  command mkdir -p "$inspect_tmp/readable-dir" "$inspect_tmp/blocked-dir/inner" "$inspect_tmp/readable-tree" "$inspect_tmp/blocked-tree/inner"
   print -r -- 'ok' >"$inspect_tmp/readable-dir/file.txt"
   print -r -- 'ok' >"$inspect_tmp/blocked-dir/inner/file.txt"
   print -r -- 'ok' >"$inspect_tmp/readable-tree/visible.txt"
   print -r -- 'ok' >"$inspect_tmp/blocked-tree/inner/hidden.txt"
-  /usr/bin/chmod 000 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+  command chmod 000 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
 
   output=$(dusage "$inspect_tmp" 5 2>/dev/null)
   cmd_status=$?
   assert_status "$cmd_status" 0 'dusage tolerates unreadable entries when readable data exists' || {
-    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
-    /usr/bin/rm -rf "$inspect_tmp"
+    command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    command rm -rf "$inspect_tmp"
     return 1
   }
   assert_contains "$output" 'readable-dir' 'dusage still reports readable entries' || {
-    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
-    /usr/bin/rm -rf "$inspect_tmp"
+    command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    command rm -rf "$inspect_tmp"
     return 1
   }
 
   output=$(bigfiles "$inspect_tmp" 5 2>/dev/null)
   cmd_status=$?
   assert_status "$cmd_status" 0 'bigfiles tolerates unreadable subtrees when readable data exists' || {
-    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
-    /usr/bin/rm -rf "$inspect_tmp"
+    command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    command rm -rf "$inspect_tmp"
     return 1
   }
   assert_contains "$output" 'visible.txt' 'bigfiles still reports readable files' || {
-    /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
-    /usr/bin/rm -rf "$inspect_tmp"
+    command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    command rm -rf "$inspect_tmp"
     return 1
   }
 
@@ -350,8 +348,8 @@ esac
     assert_contains "$output" 'Package                   Installed            Available            Status' 'npkg plain output restores wide columns' || return 1
   fi
 
-  /usr/bin/chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
-  /usr/bin/rm -rf "$inspect_tmp"
+  command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+  command rm -rf "$inspect_tmp"
 
   write_fake curl '
 case "$*" in
