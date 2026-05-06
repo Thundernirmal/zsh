@@ -115,8 +115,8 @@ esac
 
 write_fake flatpak '
 case "$*" in
-  "remote-ls --user --updates") printf "%s\n" "org.example.App stable" ;;
-  "update --user") printf "%s\n" "flatpak upgrade" ;;
+  "remote-ls --updates") printf "%s\n" "org.example.App stable" ;;
+  "update") printf "%s\n" "flatpak upgrade" ;;
   *) exit 2 ;;
 esac
 '
