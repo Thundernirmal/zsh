@@ -1467,7 +1467,7 @@ _upkg_run_outdated_flatpak() {
 
   _upkg_print_section flatpak
 
-  output=$(command flatpak remote-ls --user --updates 2>&1)
+  output=$(command flatpak remote-ls --updates 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
@@ -1682,7 +1682,7 @@ _upkg_run_upgrade_flatpak() {
 
   _upkg_print_section flatpak
 
-  command flatpak update --user
+  command flatpak update
   rc=$?
 
   _upkg_finish_upgrade_result "$rc" 'flatpak update --user failed'

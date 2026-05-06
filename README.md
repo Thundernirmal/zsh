@@ -154,7 +154,7 @@ Filters and privilege policy:
 - `--only` runs managers in the order you name them; default runs use detection order
 - `--dry-run` previews upgrades instead of running them
 - `--sudo` is an explicit opt-in for privileged upgrade paths; `upkg` never adds it automatically
-- `flatpak` runs in the user installation by default via `--user`
+- `flatpak` checks both user and system installations
 - Empty `pacman -Qu` / `paru -Qu` / `paru -Qua` runs with exit `1` are treated as the normal no-update case
 - `paru` previews both repo updates and AUR updates when `pacman` is available; if the repo check fails, `upkg` still shows any AUR preview it can gather before returning nonzero
 - `paru` still runs unprefixed even when `--sudo` is passed so it can handle its own escalation flow

@@ -542,7 +542,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` | `dnf check-update` exit `100` means updates are available |
 | `pacman` | `pacman -Qu` | `pacman -Syu` | Default only when `paru` is absent |
 | `paru` | `pacman -Qu` plus `paru -Qua` | `paru -Syu` | Preferred on Arch-family systems; preview includes repo and AUR updates, and still shows AUR results if the repo check fails; upgrade requires explicit `--sudo` opt-in but still runs unprefixed |
-| `flatpak` | `flatpak remote-ls --user --updates` | `flatpak update --user` | User installation only by default |
+| `flatpak` | `flatpak remote-ls --updates` | `flatpak update` | Checks both user and system installations |
 | `nix` | `npkg outdated` | `npkg upgrade` | Reuses the existing `npkg` wrapper instead of duplicating Nix logic |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` | Upgrade path is user-space only; `upkg` will not suggest `sudo npm` |
 
