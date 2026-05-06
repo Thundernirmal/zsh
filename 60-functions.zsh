@@ -819,7 +819,7 @@ croot() {
 }
 
 # Show contributor counts for the current repo history
-gcount() {
+function gcount {
   git rev-parse --git-dir >/dev/null 2>&1 || {
     echo "Not in a git repo"
     return 1
