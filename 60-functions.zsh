@@ -818,6 +818,21 @@ croot() {
   cd "$root" || return
 }
 
+# Show contributor counts for the current repo history
+gcount() {
+  git rev-parse --git-dir >/dev/null 2>&1 || {
+    echo "Not in a git repo"
+    return 1
+  }
+
+  git rev-parse --verify HEAD >/dev/null 2>&1 || {
+    echo "No commits yet"
+    return 0
+  }
+
+  git shortlog -sn --no-merges HEAD
+}
+
 # Print PATH one entry per line
 path() {
   print -l -- ${(s/:/)PATH}
@@ -2433,7 +2448,7 @@ if command -v nix >/dev/null 2>&1; then
     done
 
     # Print table
-    local name inst avail marker role shown more width name_width version_width visible_count
+    local name avail marker role shown more width name_width version_width visible_count
 
     if _ui_plain_mode; then
       printf '\n'

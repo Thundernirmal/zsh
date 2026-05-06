@@ -128,6 +128,7 @@ If something is missing, the script prints install hints for common package mana
 - When `--sudo` is requested from an unprivileged shell, `upkg` expects `sudo` to exist; otherwise it blocks the backend and tells you to rerun as root.
 - On Arch-family backends, empty `pacman -Qu` or `paru -Qua` results with exit `1` are treated as "no updates available" rather than as failures.
 - `upkg` keeps npm upgrades user-space only and blocks `npm` upgrades when the global prefix is not user-writable instead of suggesting `sudo npm`.
+- `gcount` is a shell function that shows contributor counts for the current repo and reports `No commits yet` in fresh repos.
 - The `tips` function only includes dependency-specific tips when their supporting commands are available.
 - This shared config targets GNU/Linux environments; commands such as `ss`, GNU `ls`/`grep` color flags, and some `find`/`du` pipelines are intentionally Linux-oriented.
 
