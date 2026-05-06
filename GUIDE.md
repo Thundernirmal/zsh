@@ -566,8 +566,8 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 
 Flatpak note:
 
-- `upkg` uses the user Flatpak installation via `--user`, so it stays in the unprivileged workflow by default.
-- System Flatpak installations are intentionally out of scope for the default `upkg` path in v1.
+- `upkg` checks both user and system Flatpak installations by default.
+- `flatpak update` without `--user` may prompt for authentication via polkit when upgrading system packages.
 
 Nix bridge details:
 

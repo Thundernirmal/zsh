@@ -1472,7 +1472,7 @@ _upkg_run_outdated_flatpak() {
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
-    _upkg_set_last_result 'failed' 'flatpak remote-ls --user --updates failed'
+    _upkg_set_last_result 'failed' 'flatpak remote-ls --updates failed'
     return 1
   fi
 
@@ -1685,7 +1685,7 @@ _upkg_run_upgrade_flatpak() {
   command flatpak update
   rc=$?
 
-  _upkg_finish_upgrade_result "$rc" 'flatpak update --user failed'
+  _upkg_finish_upgrade_result "$rc" 'flatpak update failed'
 }
 
 _upkg_run_upgrade_nix() {
