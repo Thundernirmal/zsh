@@ -24,7 +24,8 @@ Run these in order after edits:
 
 1. `zsh -n *.zsh`
 2. `sh -n scripts/check-deps.sh`
-3. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
+3. `zsh scripts/test-init.zsh`
+4. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
 - `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `nix`) still exit `0` and only print hints.

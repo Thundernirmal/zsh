@@ -27,11 +27,11 @@ jobs:
       - name: Check dependency script syntax
         run: sh -n scripts/check-deps.sh
 
-      - name: Source shared config
-        run: |
-          mkdir -p "$RUNNER_TEMP/home/.config"
-          ln -s "$PWD" "$RUNNER_TEMP/home/.config/zsh"
-          HOME="$RUNNER_TEMP/home" zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
+      - name: Check init smoke test syntax
+        run: zsh -n scripts/test-init.zsh
+
+      - name: Run init smoke test
+        run: zsh scripts/test-init.zsh
 
       - name: Check upkg smoke test syntax
         run: zsh -n scripts/test-upkg.zsh
