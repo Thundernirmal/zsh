@@ -7,7 +7,7 @@ _zsh_tip_pool=(
   "Run glog for a visual git graph of the last 20 commits"
   "Run gpr to pull with rebase for a cleaner history"
   "Run gun to undo your last commit while keeping changes staged"
-  "Run gcount to see contributor counts for the current repo; it tells you when there are no commits yet"
+  "Run gitcount to see contributor counts for the current repo; gcount still works as a shortcut"
   "Use ff <name> to find files by name recursively"
   "Use ft <text> to search for text inside files (uses ripgrep if available)"
   "Run extract <archive> to unpack a supported archive"

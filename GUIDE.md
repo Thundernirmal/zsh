@@ -209,13 +209,15 @@ The OMZ `git` plugin already provides `gs`, `gc`, `gp`, `gd`, `gco`, `gb`, etc. 
 | `glog` | `git log --oneline --graph --decorate -20` | Visual log, last 20 commits |
 | `gpr` | `git pull --rebase` | Pull with rebase (cleaner history) |
 | `gun` | `git reset HEAD~1 --soft` | Undo last commit, keep changes staged |
-| `gcount` | shell function | Contributor commit counts for the current repo, with a friendly message before the first commit |
+| `gitcount` | shell function | Contributor commit counts for the current repo, with a friendly message before the first commit |
+| `gcount` | alias to `gitcount` | Compatibility shortcut that overrides the conflicting OMZ `gcount` alias |
 
 ```zsh
 glog      # pretty commit graph
 gpr       # pull without merge commits
 gun       # oops, undo that last commit
-gcount    # who contributed what
+gitcount  # who contributed what
+gcount    # same helper, compatibility shortcut
 ```
 
 ---
@@ -752,7 +754,8 @@ gp / gpr            → push, pull --rebase
 gco / gb            → checkout, branch
 glog                → visual log (last 20)
 gun                 → undo last commit
-gcount              → contributor stats
+gitcount            → contributor stats
+gcount              → contributor stats (compatibility shortcut)
 ```
 
 ### Global Aliases (use anywhere in command)
