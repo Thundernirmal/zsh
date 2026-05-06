@@ -155,6 +155,7 @@ Filters and privilege policy:
 - `--dry-run` previews upgrades instead of running them
 - `--sudo` is an explicit opt-in for privileged upgrade paths; `upkg` never adds it automatically
 - `flatpak` checks both user and system installations
+- System `flatpak` upgrades may still prompt for authentication via polkit or otherwise require elevated privileges, depending on host policy
 - Empty `pacman -Qu` / `paru -Qu` / `paru -Qua` runs with exit `1` are treated as the normal no-update case
 - `paru` previews both repo updates and AUR updates when `pacman` is available; if the repo check fails, `upkg` still shows any AUR preview it can gather before returning nonzero
 - `paru` still runs unprefixed even when `--sudo` is passed so it can handle its own escalation flow
