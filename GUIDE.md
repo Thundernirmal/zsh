@@ -209,7 +209,7 @@ The OMZ `git` plugin already provides `gs`, `gc`, `gp`, `gd`, `gco`, `gb`, etc. 
 | `glog` | `git log --oneline --graph --decorate -20` | Visual log, last 20 commits |
 | `gpr` | `git pull --rebase` | Pull with rebase (cleaner history) |
 | `gun` | `git reset HEAD~1 --soft` | Undo last commit, keep changes staged |
-| `gcount` | `git shortlog -sn --no-merges` | Contributor commit counts |
+| `gcount` | shell function | Contributor commit counts for the current repo, with a friendly message before the first commit |
 
 ```zsh
 glog      # pretty commit graph
