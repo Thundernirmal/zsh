@@ -203,6 +203,7 @@ _ui_manager_icon() {
     dnf) _ui_icon '󰏖' '*' ;;
     pacman) _ui_icon '󰮯' '*' ;;
     paru) _ui_icon '󰣇' '*' ;;
+    brew) _ui_icon '󰂚' '*' ;;
     flatpak) _ui_icon '󰏖' '*' ;;
     nix) _ui_icon '󱄅' '*' ;;
     npm) _ui_icon '' '*' ;;
