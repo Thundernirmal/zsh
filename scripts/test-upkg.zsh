@@ -115,7 +115,7 @@ esac
 
   write_fake brew '
 case "$*" in
-  "outdated") printf "%s\n" "wget 1.24.5 < 1.25.0" ; printf "%s\n" "ghostty 1.2.3 < 1.2.4" ;;
+  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
   "upgrade") printf "%s\n" "brew upgrade" ;;
   *) exit 2 ;;
 esac
@@ -214,7 +214,8 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'brew outdated succeeds' || return 1
   assert_contains "$output" '==> Homebrew' 'brew section title is rendered' || return 1
-  assert_contains "$output" 'wget 1.24.5 < 1.25.0' 'brew outdated prints package rows' || return 1
+  assert_contains "$output" 'wget (1.24.5) < 1.25.0' 'brew outdated preserves Homebrew formula format' || return 1
+  assert_contains "$output" 'ghostty (1.2.3) < 1.2.4' 'brew outdated preserves multiple Homebrew rows' || return 1
 
   output=$(upkg --only=npm,flatpak)
   assert_contains "$output" '==> npm' 'equals --only keeps first selected manager first' || return 1
