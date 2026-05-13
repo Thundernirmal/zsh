@@ -208,6 +208,10 @@ esac
   assert_contains "$output" 'brew' 'detects brew' || return 1
   assert_not_contains "$output" 'paru (active)' 'active managers keep plain output stable' || return 1
   assert_not_contains "$output" 'title=' 'manager listing stays free of debug leaks' || return 1
+  assert_order "$output" '  - paru' '  - brew' 'manager listing keeps brew after distro backend' || return 1
+  assert_order "$output" '  - brew' '  - flatpak' 'manager listing keeps brew ahead of flatpak' || return 1
+  assert_order "$output" '  - flatpak' '  - nix' 'manager listing keeps flatpak ahead of nix' || return 1
+  assert_order "$output" '  - nix' '  - npm' 'manager listing keeps nix ahead of npm' || return 1
   assert_contains "$output" 'pacman (available via --only pacman)' 'labels pacman alternate' || return 1
 
   output=$(upkg --only=brew)
@@ -241,6 +245,34 @@ esac
   assert_status "$cmd_status" 0 'brew upgrade runs without sudo gating' || return 1
   assert_contains "$output" 'brew upgrade' 'brew upgrade invokes brew directly' || return 1
   assert_contains "$output" 'brew: upgraded' 'brew upgrade summary marks backend upgraded' || return 1
+
+  write_fake brew '
+case "$*" in
+  "outdated") printf "%s\n" "Error: simulated brew outdated failure" >&2; exit 1 ;;
+  "upgrade") printf "%s\n" "brew upgrade" ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg --only=brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'brew outdated failure returns nonzero' || return 1
+  assert_contains "$output" 'Error: simulated brew outdated failure' 'brew outdated forwards backend failure output' || return 1
+  assert_contains "$output" 'brew: failed - brew outdated failed' 'brew outdated summary marks backend failed' || return 1
+
+  write_fake brew '
+case "$*" in
+  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ;;
+  "upgrade") printf "%s\n" "Error: simulated brew upgrade failure" >&2; exit 1 ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg upgrade --only=brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'brew upgrade failure returns nonzero' || return 1
+  assert_contains "$output" 'Error: simulated brew upgrade failure' 'brew upgrade forwards backend failure output' || return 1
+  assert_contains "$output" 'brew: failed - brew upgrade failed' 'brew upgrade summary marks backend failed' || return 1
 
   write_fake npm '
 case "$*" in
