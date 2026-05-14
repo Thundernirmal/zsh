@@ -434,6 +434,105 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'myip rich mode exits 0 with stubbed curl' || return 1
   assert_contains "$output" '203.0.113.42' 'myip rich mode includes the IP address' || return 1
-}
+
+  # ── upkg search tests ─────────────────────────────────────────────────────────
+  # Reset to plain mode (myip tests above override _ui_plain_mode to rich)
+  functions[_ui_is_rich_terminal]='return 1'
+  functions[_ui_plain_mode]='return 0'
+
+  write_fake pacman '
+case "$*" in
+  "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
+  "-Syu") printf "%s\n" "pacman upgrade" ;;
+  "-Ss "*) printf "extra/ripgrep 14.1.0-1\n    A search tool that combines ag usability with raw grep speed\n" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake npm '
+case "$*" in
+  "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
+  "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; exit 1 ;;
+  "update -g") printf "%s\n" "npm upgrade" ;;
+  "search --no-color "*) printf "NAME      DESCRIPTION         AUTHOR     DATE        VERSION  KEYWORDS\nripgrep   Grep in Rust         =example   2024-01-01  14.1.0   search\n" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake flatpak '
+case "$*" in
+  "remote-ls --updates") printf "%s\n" "org.example.App stable" ;;
+  "update") printf "%s\n" "flatpak upgrade" ;;
+  "search "*) printf "Name\tDescription\tApplication ID\tVersion\tBranch\tRemotes\nRipgrep\tGrep tool\torg.ripgrep.App\t14.1.0\tstable\tflathub\n" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake brew '
+case "$*" in
+  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ;;
+  "upgrade") printf "%s\n" "brew upgrade" ;;
+  "search ripgrep") printf "ripgrep\nripgrep@14\n" ;;
+  "info ripgrep ripgrep@14") printf "==> ripgrep: stable 14.1.0 (bottled)\nFast search tool.\n==> ripgrep@14: stable 14.0.3 (bottled)\nOlder version.\n" ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg search ripgrep --only=pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search --only pacman exits 0' || return 1
+  assert_contains "$output" '==> Pacman' 'search shows pacman section header' || return 1
+  assert_contains "$output" 'extra/ripgrep 14.1.0-1' 'pacman search shows name and version' || return 1
+  assert_contains "$output" 'pacman: results' 'search summary shows results state for pacman' || return 1
+
+  output=$(upkg search ripgrep --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search --only npm exits 0' || return 1
+  assert_contains "$output" '==> npm' 'search shows npm section header' || return 1
+  assert_contains "$output" 'ripgrep' 'npm search shows package name' || return 1
+  assert_contains "$output" '14.1.0' 'npm search shows version' || return 1
+
+  output=$(upkg search ripgrep --only=flatpak)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search --only flatpak exits 0' || return 1
+  assert_contains "$output" '==> Flatpak' 'search shows flatpak section header' || return 1
+  assert_contains "$output" 'Ripgrep' 'flatpak search shows package name' || return 1
+  assert_contains "$output" '14.1.0' 'flatpak search shows version' || return 1
+
+  output=$(upkg search ripgrep --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search --only brew exits 0' || return 1
+  assert_contains "$output" '==> Homebrew' 'search shows brew section header' || return 1
+  assert_contains "$output" 'ripgrep' 'brew search shows formula name' || return 1
+  assert_contains "$output" '14.1.0' 'brew search shows version' || return 1
+
+  output=$(upkg search ripgrep --only=pacman,npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search with multiple --only managers exits 0' || return 1
+  assert_contains "$output" '==> Pacman' 'multi-manager search includes pacman section' || return 1
+  assert_contains "$output" '==> npm' 'multi-manager search includes npm section' || return 1
+  assert_order "$output" '==> Pacman' '==> npm' 'search follows --only order' || return 1
+
+  # No results case (pacman exits 1 with empty output)
+  write_fake pacman '
+case "$*" in
+  "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
+  "-Syu") printf "%s\n" "pacman upgrade" ;;
+  "-Ss "*) exit 1 ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg search zzznoresults --only=pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search no-results exits 0' || return 1
+  assert_contains "$output" 'No packages found' 'search shows no results message' || return 1
+  assert_contains "$output" 'pacman: no results' 'search summary shows no results state' || return 1
+
+  # Missing query produces an error
+  output=$(upkg search 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'search without query exits nonzero' || return 1
+  assert_contains "$output" 'search requires a query' 'search without query shows helpful error' || return 1}
 
 main "$@"

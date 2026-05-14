@@ -146,6 +146,7 @@ Default behavior is read-only:
 - `upkg`, `upkg outdated`, `upkg check`, and `upkg list` show outdated packages using each manager's native output
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview the selected upgrade set without changing packages
 - `upkg upgrade`, `upkg up`, and `upkg update` run upgrades only when you ask for them
+- `upkg search <query>` searches for a package across all detected managers, showing the full package name and available version from each manager's native output
 - `upkg managers` shows detected backends, keeps filtered selections first in execution order, and labels alternates that are available only via `--only`
 - In rich terminals, the read-only `upkg` views use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available, while backend package-manager output stays mostly raw.
 

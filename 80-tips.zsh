@@ -104,6 +104,8 @@ if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || comma
     "On Arch-family systems, upkg treats empty repo and AUR outdated checks as up to date instead of surfacing a false failure"
     "Run upkg plan or upkg --dry-run to preview upgrades without changing packages"
     "Use upkg --only flatpak,npm to limit checks to selected managers"
+    "Run upkg search <query> to find packages across all detected package managers, showing full name and available version from each"
+    "Use upkg search <query> --only brew,npm to narrow a package search to specific managers"
   )
 fi
 

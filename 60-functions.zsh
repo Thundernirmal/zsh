@@ -905,6 +905,7 @@ _upkg_usage() {
   print '  up                  Alias for upgrade'
   print '  update              Alias for upgrade'
   print '  plan                Preview available upgrades without changing packages'
+  print '  search <query>      Search for a package across detected managers'
   print '  managers            Show detected managers and alternates'
   print '  help                Show this help text'
   print ''
@@ -912,7 +913,7 @@ _upkg_usage() {
   print '  --only <list>       Comma-separated manager IDs to include'
   print '  --skip <list>       Comma-separated manager IDs to exclude'
   print '  --sudo              Allow privileged upgrade backends to run'
-  print '  --dry-run           Preview upgrades instead of running them'
+  print '  --dry-run           Preview upgrades instead of running them (upgrade/plan only)'
   print ''
   print 'Supported manager IDs:'
   print '  apt, dnf, pacman, paru, brew, flatpak, nix, npm'
@@ -924,6 +925,8 @@ _upkg_usage() {
   print '  upkg upgrade --sudo'
   print '  upkg upgrade --dry-run --only npm,flatpak'
   print '  upkg upgrade --sudo --only apt'
+  print '  upkg search ripgrep'
+  print '  upkg search ripgrep --only brew,npm'
   print ''
   print 'Notes:'
   print '  - upkg with no command defaults to outdated'
@@ -1786,12 +1789,414 @@ _upkg_run_upgrade_npm() {
   _upkg_finish_upgrade_result "$rc" 'npm update -g failed'
 }
 
+_upkg_print_search_summary() {
+  emulate -L zsh
+
+  local manager detail state role title
+  local results_count=0 noresults_count=0 failed_count=0 skipped_count=0
+
+  for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+    state=${_UPKG_SUMMARY_STATE[$manager]}
+    case $state in
+      results)      (( results_count++ ))   ;;
+      'no results') (( noresults_count++ )) ;;
+      failed)       (( failed_count++ ))    ;;
+      skipped)      (( skipped_count++ ))   ;;
+    esac
+  done
+
+  if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
+    _ui_section_break
+    _ui_color muted
+    _ui_icon '󰍹' '>'
+    _ui_reset
+    print -nr -- ' '
+    _ui_color text
+    print -nr -- 'Summary'
+    _ui_reset
+    print -nr -- ' '
+    _ui_badge "$results_count results" success
+    if (( noresults_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$noresults_count no results" muted
+    fi
+    if (( failed_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$failed_count failed" danger
+    fi
+    if (( skipped_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$skipped_count skipped" muted
+    fi
+    print ''
+
+    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+      detail=${_UPKG_SUMMARY_DETAIL[$manager]}
+      state=${_UPKG_SUMMARY_STATE[$manager]}
+      title=$(_upkg_manager_title "$manager")
+      case $state in
+        results)      role='success' ;;
+        'no results') role='muted'   ;;
+        failed)       role='danger'  ;;
+        skipped)      role='muted'   ;;
+        *)            role='accent'  ;;
+      esac
+
+      print -nr -- '  '
+      _ui_color "$role"
+      _ui_status_icon "$state"
+      _ui_reset
+      print -nr -- ' '
+      _ui_manager_icon "$manager"
+      print -nr -- ' '
+      _ui_color text
+      print -nr -- "$title"
+      _ui_reset
+      print -nr -- ' '
+      _ui_badge "$state" "$role"
+      if [ -n "$detail" ]; then
+        print -nr -- ' '
+        _ui_color muted
+        print -nr -- "($detail)"
+        _ui_reset
+      fi
+      print ''
+    done
+  else
+    print ''
+    print 'Summary:'
+    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+      detail=${_UPKG_SUMMARY_DETAIL[$manager]}
+      if [ -n "$detail" ]; then
+        print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]} - $detail"
+      else
+        print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}"
+      fi
+    done
+  fi
+}
+
+_upkg_run_search_apt() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section apt
+
+  local names_raw rc
+  names_raw=$(command apt-cache search --names-only "$query" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    print -r -- "$names_raw"
+    _upkg_set_last_result 'failed' 'apt-cache search failed'
+    return 1
+  fi
+
+  if [ -z "$names_raw" ]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  local -a name_list
+  name_list=( ${(f)"$(print -r -- "$names_raw" | command cut -d' ' -f1 | command head -25)"} )
+
+  local output
+  output=$(command apt-cache show "${name_list[@]}" 2>/dev/null | command awk '
+    /^Package:/ {
+      if (pkg && ver && !seen[pkg]) {
+        seen[pkg]=1; printf "%-30s %-22s %s\n", pkg, ver, desc
+      }
+      pkg=$2; ver=""; desc=""
+    }
+    /^Version:/ { if (!ver) ver=$2 }
+    /^Description[^:]*:/ { if (!desc) desc=substr($0, index($0,":")+2) }
+    END {
+      if (pkg && ver && !seen[pkg]) {
+        seen[pkg]=1; printf "%-30s %-22s %s\n", pkg, ver, desc
+      }
+    }
+  ')
+
+  printf '%-30s %-22s %s\n' 'Package' 'Version' 'Description'
+  printf '%-30s %-22s %s\n' '-------' '-------' '-----------'
+  if [ -n "$output" ]; then
+    print -r -- "$output"
+  else
+    print -l -- "${name_list[@]}"
+  fi
+  (( ${#name_list[@]} >= 25 )) && print '(showing first 25 results)'
+  _upkg_set_last_result 'results' ''
+}
+
+_upkg_run_search_dnf() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section dnf
+
+  local output rc
+  output=$(command dnf repoquery --qf '%{name}\t%{version}-%{release}\t%{summary}' "*${query}*" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    output=$(command dnf search "$query" 2>&1)
+    rc=$?
+    if (( rc != 0 )); then
+      print -r -- "$output"
+      _upkg_set_last_result 'failed' 'dnf search failed'
+      return 1
+    fi
+    if [ -z "$output" ]; then
+      print 'No packages found'
+      _upkg_set_last_result 'no results' ''
+      return 0
+    fi
+    print -r -- "$output"
+    _upkg_set_last_result 'results' ''
+    return 0
+  fi
+
+  output=$(print -r -- "$output" | command grep -v '^[[:space:]]*$')
+  if [ -z "$output" ]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  print -r -- "$output" | command awk -F'\t' '
+    BEGIN { printf "%-35s %-25s %s\n", "Package", "Version", "Summary"
+            printf "%-35s %-25s %s\n", "-------", "-------", "-------" }
+    NF >= 2 { printf "%-35s %-25s %s\n", $1, $2, $3 }
+  '
+  _upkg_set_last_result 'results' ''
+}
+
+_upkg_run_search_pacman() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section pacman
+
+  local output rc
+  output=$(command pacman -Ss "$query" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [ -z "$output" ]; then
+      print 'No packages found'
+      _upkg_set_last_result 'no results' ''
+      return 0
+    fi
+    print -r -- "$output"
+    _upkg_set_last_result 'failed' 'pacman -Ss failed'
+    return 1
+  fi
+
+  if [ -z "$output" ]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  print -r -- "$output"
+  _upkg_set_last_result 'results' ''
+}
+
+_upkg_run_search_paru() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section paru
+
+  local output rc
+  output=$(command paru -Ss "$query" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [ -z "$output" ]; then
+      print 'No packages found'
+      _upkg_set_last_result 'no results' ''
+      return 0
+    fi
+    print -r -- "$output"
+    _upkg_set_last_result 'failed' 'paru -Ss failed'
+    return 1
+  fi
+
+  if [ -z "$output" ]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  print -r -- "$output"
+  _upkg_set_last_result 'results' ''
+}
+
+_upkg_run_search_brew() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section brew
+
+  local names_output rc
+  names_output=$(command brew search "$query" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    print -r -- "$names_output"
+    _upkg_set_last_result 'failed' 'brew search failed'
+    return 1
+  fi
+
+  if [ -z "$names_output" ]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  local -a names
+  names=( ${(f)"$(print -r -- "$names_output" | command grep -v '^==>' | command grep -v '^[[:space:]]*$' | command head -20)"} )
+
+  if (( ${#names[@]} == 0 )); then
+    print -r -- "$names_output"
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  local info_output
+  info_output=$(command brew info "${names[@]}" 2>/dev/null | command awk '
+    /^==>/ {
+      name = $2; sub(/:$/, "", name)
+      ver = ""
+      line = $0
+      if (match(line, /stable [0-9][^ ,)]+/)) {
+        ver = substr(line, RSTART + 7, RLENGTH - 7)
+      }
+      if (name && ver) printf "%-30s %s\n", name, ver
+    }
+  ')
+
+  printf '%-30s %s\n' 'Formula/Cask' 'Version'
+  printf '%-30s %s\n' '------------' '-------'
+  if [ -n "$info_output" ]; then
+    print -r -- "$info_output"
+  else
+    print -l -- "${names[@]}"
+  fi
+  (( ${#names[@]} >= 20 )) && print '(showing first 20 results)'
+  _upkg_set_last_result 'results' ''
+}
+
+_upkg_run_search_flatpak() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section flatpak
+
+  local output rc
+  output=$(command flatpak search "$query" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [ -z "$output" ]; then
+      print 'No packages found'
+      _upkg_set_last_result 'no results' ''
+      return 0
+    fi
+    print -r -- "$output"
+    _upkg_set_last_result 'failed' 'flatpak search failed'
+    return 1
+  fi
+
+  if [[ "$output" == *'Nothing found'* ]] || [ -z "$output" ]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  print -r -- "$output"
+  _upkg_set_last_result 'results' ''
+}
+
+_upkg_run_search_nix() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section nix
+
+  local output rc
+  output=$(npkg search "$query" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [ -z "$output" ]; then
+      print 'No packages found'
+      _upkg_set_last_result 'no results' ''
+      return 0
+    fi
+    print -r -- "$output"
+    _upkg_set_last_result 'failed' 'nix search failed'
+    return 1
+  fi
+
+  if [ -z "$output" ]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  print -r -- "$output"
+  _upkg_set_last_result 'results' ''
+}
+
+_upkg_run_search_npm() {
+  emulate -L zsh
+
+  local query=$1
+
+  _upkg_print_section npm
+
+  local output rc
+  output=$(command npm search --no-color "$query" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [[ "$output" == *'No matches found'* ]] || [ -z "$output" ]; then
+      print 'No packages found'
+      _upkg_set_last_result 'no results' ''
+      return 0
+    fi
+    print -r -- "$output"
+    _upkg_set_last_result 'failed' 'npm search failed'
+    return 1
+  fi
+
+  if [[ "$output" == *'No matches found'* ]]; then
+    print 'No packages found'
+    _upkg_set_last_result 'no results' ''
+    return 0
+  fi
+
+  print -r -- "$output"
+  _upkg_set_last_result 'results' ''
+}
+
 upkg() {
   emulate -L zsh
 
   local raw_cmd='' cmd='outdated' manager
   local only_raw='' skip_raw=''
   local allow_sudo=0 dry_run=0 filtered=0 exit_code=0
+  local search_query=''
   local -a candidate_pool run_order display_order
   local -A selected_map skipped_map alternate_map display_seen
 
@@ -1842,7 +2247,7 @@ upkg() {
       help|-h|--help)
         raw_cmd='help'
         ;;
-      outdated|check|list|upgrade|up|update|plan|managers)
+      outdated|check|list|upgrade|up|update|plan|managers|search)
         if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
           print -u2 -- "Unexpected extra command: $1"
           _upkg_usage
@@ -1851,9 +2256,13 @@ upkg() {
         raw_cmd=$1
         ;;
       *)
-        print -u2 -- "Unknown argument: $1"
-        _upkg_usage
-        return 1
+        if [ "$raw_cmd" = 'search' ] && [ -z "$search_query" ]; then
+          search_query=$1
+        else
+          print -u2 -- "Unknown argument: $1"
+          _upkg_usage
+          return 1
+        fi
         ;;
     esac
     shift
@@ -1864,8 +2273,15 @@ upkg() {
     upgrade|up|update) cmd='upgrade' ;;
     plan) cmd='plan' ;;
     managers) cmd='managers' ;;
+    search) cmd='search' ;;
     help) cmd='help' ;;
   esac
+
+  if [ "$cmd" = 'search' ] && [ -z "$search_query" ]; then
+    print -u2 -- 'search requires a query: upkg search <query>'
+    _upkg_usage
+    return 1
+  fi
 
   if (( dry_run )); then
     if [ "$cmd" = 'upgrade' ]; then
@@ -2001,6 +2417,13 @@ upkg() {
       [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
       [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
     fi
+  elif [ "$cmd" = 'search' ]; then
+    if ! _ui_plain_mode; then
+      _UPKG_THEME_MODE=1
+      _ui_title_line 'Package Search' "\"$search_query\"" accent '󰍉' '*'
+      [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
+      [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
+    fi
   fi
 
   if (( ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
@@ -2009,6 +2432,7 @@ upkg() {
   fi
 
   typeset -g _UPKG_ALLOW_SUDO=$allow_sudo
+  typeset -g _UPKG_SEARCH_QUERY=$search_query
   typeset -g -a _UPKG_SUMMARY_ORDER
   typeset -g -A _UPKG_SUMMARY_STATE _UPKG_SUMMARY_DETAIL
   _UPKG_SUMMARY_ORDER=()
@@ -2055,6 +2479,14 @@ upkg() {
       upgrade:flatpak) _upkg_run_upgrade_flatpak ;;
       upgrade:nix) _upkg_run_upgrade_nix ;;
       upgrade:npm) _upkg_run_upgrade_npm ;;
+      search:apt)     _upkg_run_search_apt     "$_UPKG_SEARCH_QUERY" ;;
+      search:dnf)     _upkg_run_search_dnf     "$_UPKG_SEARCH_QUERY" ;;
+      search:pacman)  _upkg_run_search_pacman  "$_UPKG_SEARCH_QUERY" ;;
+      search:paru)    _upkg_run_search_paru    "$_UPKG_SEARCH_QUERY" ;;
+      search:brew)    _upkg_run_search_brew    "$_UPKG_SEARCH_QUERY" ;;
+      search:flatpak) _upkg_run_search_flatpak "$_UPKG_SEARCH_QUERY" ;;
+      search:nix)     _upkg_run_search_nix     "$_UPKG_SEARCH_QUERY" ;;
+      search:npm)     _upkg_run_search_npm     "$_UPKG_SEARCH_QUERY" ;;
       *)
         _upkg_print_section "$manager"
         print "No handler defined for $manager"
@@ -2075,7 +2507,11 @@ upkg() {
     _upkg_record_summary "$manager" 'skipped' ''
   done
 
-  _upkg_print_summary
+  if [ "$cmd" = 'search' ]; then
+    _upkg_print_search_summary
+  else
+    _upkg_print_summary
+  fi
   return $exit_code
 }
 

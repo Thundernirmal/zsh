@@ -523,6 +523,7 @@ If both `paru` and `pacman` are installed, `paru` is the default Arch-family bac
 | `upkg up` | Alias for `upgrade` |
 | `upkg update` | Alias for `upgrade` |
 | `upkg plan` | Preview available upgrades without changing packages |
+| `upkg search <query>` | Search for a package across detected managers, showing name and version |
 | `upkg managers` | Show detected managers; filtered selections appear in execution order first |
 | `upkg help` | Show usage help |
 
@@ -549,6 +550,19 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 | `flatpak` | `flatpak remote-ls --updates` | `flatpak update` | Checks both user and system installations |
 | `nix` | `npkg outdated` | `npkg upgrade` | Reuses the existing `npkg` wrapper instead of duplicating Nix logic |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` | Upgrade path is user-space only; `upkg` will not suggest `sudo npm` |
+
+### Search backends
+
+| Manager | Search command | Version source | Notes |
+|---|---|---|---|
+| `apt` | `apt-cache search --names-only` + `apt-cache show` | `apt-cache show Package:/Version:` stanzas | Shows first 25 matches; batch version lookup |
+| `dnf` | `dnf repoquery --qf` | `%{version}-%{release}` from repoquery | Falls back to `dnf search` if repoquery is unavailable |
+| `pacman` | `pacman -Ss` | Natively in `repo/name version` output | No extra lookup needed |
+| `paru` | `paru -Ss` | Natively in output | Includes both repo and AUR results |
+| `brew` | `brew search` + `brew info` | `stable VERSION` from `brew info` first line | Shows first 20 matches |
+| `flatpak` | `flatpak search` | Version column in native tabular output | No extra lookup needed |
+| `nix` | `npkg search` (`nix search nixpkgs`) | `(version)` in native output | Reuses existing `npkg` wrapper |
+| `npm` | `npm search --no-color` | VERSION column in native output | Queries the npm registry; may be slow |
 
 ### Behavior notes
 
@@ -601,6 +615,9 @@ upkg upgrade --sudo
 upkg upgrade --sudo --only apt
 upkg upgrade --only npm
 upkg --only pacman
+upkg search ripgrep
+upkg search ripgrep --only brew,npm
+upkg search firefox --only flatpak
 ```
 
 `upkg managers` shows active backends in execution order and labels alternates that are only available via `--only`, which is especially useful on Arch or CachyOS systems that have both `paru` and `pacman`.
