@@ -1367,6 +1367,18 @@ _upkg_brew_version_from_header() {
   print -r -- '?'
 }
 
+_upkg_brew_name_from_header() {
+  emulate -L zsh
+
+  local header=$1
+
+  header=${header#'==> '}
+  header=${header%%:*}
+  header=${header%% \(*}
+
+  print -r -- "$header"
+}
+
 _upkg_print_search_results() {
   emulate -L zsh
 
@@ -1665,25 +1677,49 @@ _upkg_run_search_brew() {
     wanted[$candidate]='cask'
   done
 
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --formula --cask "${formulae[@]}" "${casks[@]}" 2>&1)
-  rc=$?
-  if (( rc != 0 )); then
-    [ -n "$output" ] && print -r -- "$output"
-    _upkg_set_last_result 'failed' 'brew info failed'
-    return 1
-  fi
-
-  for line in ${(f)output}; do
-    [ -n "$line" ] || continue
-    candidate=${line%%:*}
-    if [ -z "${wanted[$candidate]}" ]; then
-      continue
+  if (( ${#formulae[@]} > 0 )); then
+    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --formula "${formulae[@]}" 2>&1)
+    rc=$?
+    if (( rc != 0 )); then
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'failed' 'brew info failed'
+      return 1
     fi
 
-    meta=${line#*: }
-    version=$(_upkg_brew_version_from_header "$meta")
-    rows+=("${candidate}"$'\t'"${version}"$'\t'"${wanted[$candidate]}")
-  done
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
+      candidate=$(_upkg_brew_name_from_header "$line")
+      if [ "${wanted[$candidate]}" != 'formula' ]; then
+        continue
+      fi
+
+      meta=${line#*: }
+      version=$(_upkg_brew_version_from_header "$meta")
+      rows+=("${candidate}"$'\t'"${version}"$'\t'"${wanted[$candidate]}")
+    done
+  fi
+
+  if (( ${#casks[@]} > 0 )); then
+    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --cask "${casks[@]}" 2>&1)
+    rc=$?
+    if (( rc != 0 )); then
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'failed' 'brew info failed'
+      return 1
+    fi
+
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
+      candidate=$(_upkg_brew_name_from_header "$line")
+      if [ "${wanted[$candidate]}" != 'cask' ]; then
+        continue
+      fi
+
+      meta=${line#*: }
+      version=$(_upkg_brew_version_from_header "$meta")
+      rows+=("${candidate}"$'\t'"${version}"$'\t'"${wanted[$candidate]}")
+    done
+  fi
 
   _upkg_print_search_results "${rows[@]}"
 }

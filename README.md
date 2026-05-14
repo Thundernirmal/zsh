@@ -121,7 +121,7 @@ If something is missing, the script prints install hints for common package mana
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed, including Homebrew when present.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
-- `upkg search <query>` is read-only and searches detected managers for matching package names plus available versions.
+- `upkg search <query>` is read-only and searches detected managers for matching package names plus available versions, including separate Homebrew formula and cask lookups.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
 - `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
 - `upkg managers` keeps active managers as bare IDs in plain output so piping and simple scripts do not need to strip an `(active)` suffix.
@@ -160,7 +160,7 @@ Filters and privilege policy:
 - `--dry-run` previews upgrades instead of running them
 - `--sudo` is an explicit opt-in for privileged upgrade paths; `upkg` never adds it automatically
 - `flatpak` checks both user and system installations
-- Search backends prefer name-oriented native lookups when that is the only portable way to recover available versions, so description matching varies by manager
+- Search backends prefer name-oriented native lookups when that is the only portable way to recover available versions, so description matching varies by manager; Homebrew formulae and casks are queried separately to match current `brew` flag handling
 - System `flatpak` upgrades may still prompt for authentication via polkit or otherwise require elevated privileges, depending on host policy
 - Empty `pacman -Qu` / `paru -Qu` / `paru -Qua` runs with exit `1` are treated as the normal no-update case
 - `paru` previews both repo updates and AUR updates when `pacman` is available; if the repo check fails, `upkg` still shows any AUR preview it can gather before returning nonzero

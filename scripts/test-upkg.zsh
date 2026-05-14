@@ -122,9 +122,11 @@ case "$*" in
   "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
   "search --formula nomatch") printf "%s\n" "No formulae found for \"nomatch\"" >&2 ; exit 1 ;;
   "search --cask nomatch") printf "%s\n" "No casks found for \"nomatch\"" >&2 ; exit 1 ;;
-  "info --formula --cask ripgrep ripgrep-app")
-    printf "%s\n" "ripgrep: stable 14.1.1 (bottled), HEAD"
-    printf "%s\n" "ripgrep-app: 1.2.3"
+  "info --formula ripgrep")
+    printf "%s\n" "==> ripgrep: stable 14.1.1 (bottled), HEAD"
+    ;;
+  "info --cask ripgrep-app")
+    printf "%s\n" "==> ripgrep-app (Ripgrep App): 1.2.3"
     ;;
   "upgrade") printf "%s\n" "brew upgrade" ;;
   *) exit 2 ;;

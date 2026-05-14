@@ -554,7 +554,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 ### Behavior notes
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
-- `upkg search <query>` is also read-only and searches all detected managers unless you narrow it with `--only` or `--skip`.
+- `upkg search <query>` is also read-only and searches all detected managers unless you narrow it with `--only` or `--skip`; Homebrew formulae and casks are queried separately so the search path matches current `brew` flag handling.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
 - In rich terminals, `upkg`, `upkg search`, `upkg plan`, and `upkg managers` use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available.
 - Distro outdated results depend on the package metadata already present on the machine.
@@ -571,7 +571,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 - `paru` preview still returns nonzero if the repo-side check fails, even when it can show AUR results.
 - `brew` runs with Homebrew's own user-space model; `upkg` does not wrap it in `sudo`.
 - Search results are normalized to package name plus available version, with descriptions shown when the native backend returns them cheaply.
-- Search matching is backend-specific: `apt`, `pacman`, `paru`, `flatpak`, `nix`, and `npm` can use native search flows, while `dnf` and `brew` lean on name-oriented lookups to keep version data portable.
+- Search matching is backend-specific: `apt`, `pacman`, `paru`, `flatpak`, `nix`, and `npm` can use native search flows, while `dnf` and `brew` lean on name-oriented lookups to keep version data portable. On Homebrew, `upkg search` queries formulae and casks separately before collecting version info.
 
 Flatpak note:
 
