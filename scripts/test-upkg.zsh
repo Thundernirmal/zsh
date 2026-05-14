@@ -144,6 +144,8 @@ write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
   "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+  "search --parseable help") printf "helpful-lib\t2.0.0\tLibrary named after help\t2024-01-01\n" ;;
+  "search --parseable managers") printf "managers-kit\t4.5.6\tLibrary named after managers\t2024-01-01\n" ;;
   "search --parseable ripgrep") printf "ripgrep-js\t3.4.5\tJavaScript wrapper around ripgrep\t2024-01-01\n" ;;
   "search --parseable upgrade") printf "upgrade-helper\t1.2.3\tSearches packages named after commands\t2024-01-01\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
@@ -297,6 +299,16 @@ EOF
   cmd_status=$?
   assert_status "$cmd_status" 0 'search accepts query terms that match command keywords' || return 1
   assert_contains "$output" 'upgrade-helper' 'command-keyword searches still reach npm backend' || return 1
+
+  output=$(upkg search help --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search accepts help as a literal query' || return 1
+  assert_contains "$output" 'helpful-lib' 'help keyword searches still reach npm backend' || return 1
+
+  output=$(upkg search managers --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search accepts managers as a literal query' || return 1
+  assert_contains "$output" 'managers-kit' 'manager keyword searches still reach npm backend' || return 1
 
   output=$(upkg --only=npm search -- upgrade)
   cmd_status=$?

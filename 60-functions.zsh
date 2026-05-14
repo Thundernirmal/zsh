@@ -2353,7 +2353,11 @@ upkg() {
         return 1
         ;;
       help|-h|--help)
-        raw_cmd='help'
+        if [ "$raw_cmd" = 'search' ]; then
+          query_parts+=("$1")
+        else
+          raw_cmd='help'
+        fi
         ;;
       outdated|check|list|search|upgrade|up|update|plan|managers)
         if [ "$raw_cmd" = 'search' ]; then
