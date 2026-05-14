@@ -100,6 +100,7 @@ main() {
   write_fake pacman '
 case "$*" in
   "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
+  "-Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories for a regex pattern" ;;
   "-Syu") printf "%s\n" "pacman upgrade" ;;
   *) exit 2 ;;
 esac
@@ -108,6 +109,7 @@ esac
   write_fake paru '
 case "$*" in
   "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
+  "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends together" ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
   *) exit 2 ;;
 esac
@@ -116,6 +118,14 @@ esac
   write_fake brew '
 case "$*" in
   "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
+  "search --formula ripgrep") printf "%s\n" "ripgrep" ;;
+  "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
+  "search --formula nomatch") printf "%s\n" "No formulae found for \"nomatch\"" >&2 ; exit 1 ;;
+  "search --cask nomatch") printf "%s\n" "No casks found for \"nomatch\"" >&2 ; exit 1 ;;
+  "info --formula --cask ripgrep ripgrep-app")
+    printf "%s\n" "ripgrep: stable 14.1.1 (bottled), HEAD"
+    printf "%s\n" "ripgrep-app: 1.2.3"
+    ;;
   "upgrade") printf "%s\n" "brew upgrade" ;;
   *) exit 2 ;;
 esac
@@ -124,6 +134,7 @@ esac
   write_fake flatpak '
 case "$*" in
   "remote-ls --updates") printf "%s\n" "org.example.App stable" ;;
+  "search --columns=application,version,name,description ripgrep") printf "org.example.Ripgrep\t14.1.1\tRipgrep Viewer\tRemote ripgrep browser\n" ;;
   "update") printf "%s\n" "flatpak upgrade" ;;
   *) exit 2 ;;
 esac
@@ -133,6 +144,7 @@ write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
   "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+  "search --parseable ripgrep") printf "ripgrep-js\t3.4.5\tJavaScript wrapper around ripgrep\t2024-01-01\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -154,8 +166,8 @@ while [ "$1" = "--extra-experimental-features" ]; do
   shift 2
 done
 
-case "$*" in
-  "profile list --json")
+  case "$*" in
+    "profile list --json")
     cat <<'"'"'EOF'"'"'
 {"elements":[
   {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.one","storePaths":["/nix/store/hash-pkg-one-1.0"]},
@@ -165,13 +177,17 @@ case "$*" in
 ]}
 EOF
     ;;
-  "eval --raw nixpkgs#pkg.one.version") printf "%s\n" "1.0" ;;
-  "eval --raw nixpkgs#pkg.two.version") printf "%s\n" "2.0" ;;
-  "eval --raw nixpkgs#pkg.three.version") printf "%s\n" "1.0" ;;
-  "eval --raw nixpkgs#pkg.four.version") printf "%s\n" "3.0" ;;
-  *) exit 2 ;;
-esac
-'
+    "eval --raw nixpkgs#pkg.one.version") printf "%s\n" "1.0" ;;
+    "eval --raw nixpkgs#pkg.two.version") printf "%s\n" "2.0" ;;
+    "eval --raw nixpkgs#pkg.three.version") printf "%s\n" "1.0" ;;
+    "eval --raw nixpkgs#pkg.four.version") printf "%s\n" "3.0" ;;
+    "search nixpkgs ripgrep")
+      printf "%s\n" "* legacyPackages.x86_64-linux.ripgrep (14.1.1)"
+      printf "%s\n" "  recursively search directories"
+      ;;
+    *) exit 2 ;;
+  esac
+ '
 
   export PATH=$fakebin:$original_path
   export UPKG_TEST_NPM_PREFIX=$tmp_prefix
@@ -230,6 +246,45 @@ esac
   assert_contains "$output" '  - npm (selected)' 'manager listing marks npm selected' || return 1
   assert_contains "$output" '  - flatpak (selected)' 'manager listing marks flatpak selected' || return 1
   assert_order "$output" '  - npm (selected)' '  - flatpak (selected)' 'manager listing follows selected order' || return 1
+
+  output=$(upkg search ripgrep)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'default search succeeds across detected managers' || return 1
+  assert_contains "$output" '==> Paru' 'search includes paru section' || return 1
+  assert_contains "$output" 'ripgrep-all' 'search shows paru package name' || return 1
+  assert_contains "$output" '0.9.1-2' 'search shows paru available version' || return 1
+  assert_contains "$output" '==> Homebrew' 'search includes brew section' || return 1
+  assert_contains "$output" 'ripgrep-app' 'search shows brew cask name' || return 1
+  assert_contains "$output" '1.2.3' 'search shows brew version' || return 1
+  assert_contains "$output" 'legacyPackages.x86_64-linux.ripgrep' 'search shows nix attribute path' || return 1
+  assert_contains "$output" '14.1.1' 'search shows nix available version' || return 1
+  assert_contains "$output" 'ripgrep-js' 'search shows npm package name' || return 1
+  assert_contains "$output" '3.4.5' 'search shows npm version' || return 1
+
+  output=$(upkg search ripgrep --only=npm,flatpak)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search respects only filters after query args' || return 1
+  assert_contains "$output" '==> npm' 'filtered search includes npm' || return 1
+  assert_contains "$output" '==> Flatpak' 'filtered search includes flatpak' || return 1
+  assert_order "$output" '==> npm' '==> Flatpak' 'filtered search keeps selected order' || return 1
+  assert_not_contains "$output" '==> Homebrew' 'filtered search omits unselected managers' || return 1
+
+  output=$(upkg search ripgrep --only=pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search supports pacman alternate via only' || return 1
+  assert_contains "$output" '==> Pacman' 'alternate search includes pacman section' || return 1
+  assert_contains "$output" 'ripgrep' 'search shows pacman package name' || return 1
+  assert_contains "$output" '14.1.1-1' 'search shows pacman version' || return 1
+
+  output=$(upkg search nomatch --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search treats brew no matches as success' || return 1
+  assert_contains "$output" 'No matches found.' 'search reports no matches cleanly' || return 1
+
+  output=$(upkg search 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'search requires a query' || return 1
+  assert_contains "$output" 'Usage: upkg search <query>' 'search missing query shows usage' || return 1
 
   output=$(upkg plan --only=paru)
   cmd_status=$?
@@ -434,6 +489,44 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'myip rich mode exits 0 with stubbed curl' || return 1
   assert_contains "$output" '203.0.113.42' 'myip rich mode includes the IP address' || return 1
+
+  command rm -f "$fakebin/paru" "$fakebin/pacman"
+  write_fake apt '
+case "$*" in
+  "search --names-only ripgrep")
+    printf "%s\n" "Sorting..."
+    printf "%s\n" "Full Text Search..."
+    printf "%s\n" "ripgrep/stable 14.1.1-1 amd64"
+    printf "%s\n" "  recursively search directories"
+    ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(_upkg_run_search_apt ripgrep)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'apt search backend succeeds with fake apt data' || return 1
+  assert_contains "$output" '==> APT' 'apt search includes apt section' || return 1
+  assert_contains "$output" 'ripgrep' 'apt search shows package name' || return 1
+  assert_contains "$output" '14.1.1-1' 'apt search shows available version' || return 1
+
+  command rm -f "$fakebin/apt"
+  write_fake dnf '
+case "$*" in
+  "list --available *ripgrep*")
+    printf "%s\n" "Available Packages"
+    printf "%s\n" "ripgrep.x86_64 14.1.1-1.fc40 updates"
+    ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(_upkg_run_search_dnf ripgrep)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'dnf search backend succeeds with fake dnf data' || return 1
+  assert_contains "$output" '==> DNF' 'dnf search includes dnf section' || return 1
+  assert_contains "$output" 'ripgrep.x86_64' 'dnf search shows package name with arch' || return 1
+  assert_contains "$output" '14.1.1-1.fc40' 'dnf search shows available version' || return 1
 }
 
 main "$@"
