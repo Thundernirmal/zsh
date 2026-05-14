@@ -1370,9 +1370,6 @@ _upkg_brew_version_from_header() {
 _upkg_print_search_results() {
   emulate -L zsh
 
-  local manager=$1
-  shift
-
   local row name version description
   local width name_width version_width desc_width
   local -a rows=( "$@" )
@@ -1484,7 +1481,7 @@ _upkg_run_search_apt() {
     rows+=("${current_name}"$'\t'"${current_version}"$'\t'"${current_desc}")
   fi
 
-  _upkg_print_search_results apt "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_search_dnf() {
@@ -1501,7 +1498,7 @@ _upkg_run_search_dnf() {
 
   if (( rc != 0 )); then
     if [[ $output == *'No matching Packages to list'* ]]; then
-      _upkg_print_search_results dnf
+      _upkg_print_search_results
       return 0
     fi
     [ -n "$output" ] && print -r -- "$output"
@@ -1521,7 +1518,7 @@ _upkg_run_search_dnf() {
     rows+=("${name}"$'\t'"${version}"$'\t')
   done
 
-  _upkg_print_search_results dnf "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_search_pacman() {
@@ -1538,7 +1535,7 @@ _upkg_run_search_pacman() {
 
   if (( rc != 0 )); then
     if (( rc == 1 )) && [ -z "$output" ]; then
-      _upkg_print_search_results pacman
+      _upkg_print_search_results
       return 0
     fi
     [ -n "$output" ] && print -r -- "$output"
@@ -1565,7 +1562,7 @@ _upkg_run_search_pacman() {
     rows+=("${name}"$'\t'"${version}"$'\t')
   done
 
-  _upkg_print_search_results pacman "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_search_paru() {
@@ -1582,7 +1579,7 @@ _upkg_run_search_paru() {
 
   if (( rc != 0 )); then
     if (( rc == 1 )) && [ -z "$output" ]; then
-      _upkg_print_search_results paru
+      _upkg_print_search_results
       return 0
     fi
     [ -n "$output" ] && print -r -- "$output"
@@ -1609,7 +1606,7 @@ _upkg_run_search_paru() {
     rows+=("${name}"$'\t'"${version}"$'\t')
   done
 
-  _upkg_print_search_results paru "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_search_brew() {
@@ -1657,7 +1654,7 @@ _upkg_run_search_brew() {
   fi
 
   if (( ${#formulae[@]} == 0 && ${#casks[@]} == 0 )); then
-    _upkg_print_search_results brew
+    _upkg_print_search_results
     return 0
   fi
 
@@ -1688,7 +1685,7 @@ _upkg_run_search_brew() {
     rows+=("${candidate}"$'\t'"${version}"$'\t'"${wanted[$candidate]}")
   done
 
-  _upkg_print_search_results brew "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_search_flatpak() {
@@ -1705,7 +1702,7 @@ _upkg_run_search_flatpak() {
 
   if (( rc != 0 )); then
     if [[ $output == *'No matches found'* ]]; then
-      _upkg_print_search_results flatpak
+      _upkg_print_search_results
       return 0
     fi
     [ -n "$output" ] && print -r -- "$output"
@@ -1728,7 +1725,7 @@ _upkg_run_search_flatpak() {
     rows+=("${app}"$'\t'"${version}"$'\t'"${description}")
   done <<< "$output"
 
-  _upkg_print_search_results flatpak "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_search_nix() {
@@ -1745,7 +1742,7 @@ _upkg_run_search_nix() {
 
   if (( rc != 0 )); then
     if [[ $output == *'No packages matched'* || $output == *'No results for'* ]]; then
-      _upkg_print_search_results nix
+      _upkg_print_search_results
       return 0
     fi
     [ -n "$output" ] && print -r -- "$output"
@@ -1775,7 +1772,7 @@ _upkg_run_search_nix() {
     rows+=("${name}"$'\t'"${version}"$'\t')
   done
 
-  _upkg_print_search_results nix "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_search_npm() {
@@ -1801,7 +1798,7 @@ _upkg_run_search_npm() {
     rows+=("${name}"$'\t'"${version}"$'\t'"$(_upkg_search_trim "$description")")
   done <<< "$output"
 
-  _upkg_print_search_results npm "${rows[@]}"
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_outdated_apt() {
@@ -2342,16 +2339,33 @@ upkg() {
       --dry-run)
         dry_run=1
         ;;
+      --)
+        shift
+        if [ "$raw_cmd" = 'search' ]; then
+          while (( $# > 0 )); do
+            query_parts+=("$1")
+            shift
+          done
+          break
+        fi
+        print -u2 -- "Unknown argument: --"
+        _upkg_usage
+        return 1
+        ;;
       help|-h|--help)
         raw_cmd='help'
         ;;
       outdated|check|list|search|upgrade|up|update|plan|managers)
-        if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
-          print -u2 -- "Unexpected extra command: $1"
-          _upkg_usage
-          return 1
+        if [ "$raw_cmd" = 'search' ]; then
+          query_parts+=("$1")
+        else
+          if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
+            print -u2 -- "Unexpected extra command: $1"
+            _upkg_usage
+            return 1
+          fi
+          raw_cmd=$1
         fi
-        raw_cmd=$1
         ;;
       *)
         if [ "$raw_cmd" = 'search' ]; then

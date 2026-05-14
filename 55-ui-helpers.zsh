@@ -180,6 +180,12 @@ _ui_status_icon() {
     'updates available')
       _ui_icon '󰚰' '!'
       ;;
+    'matches found')
+      _ui_icon '󰍉' '?'
+      ;;
+    'no matches')
+      _ui_icon '󰍉' '0'
+      ;;
     blocked)
       _ui_icon '󰍛' '-'
       ;;

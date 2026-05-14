@@ -145,6 +145,7 @@ case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
   "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
   "search --parseable ripgrep") printf "ripgrep-js\t3.4.5\tJavaScript wrapper around ripgrep\t2024-01-01\n" ;;
+  "search --parseable upgrade") printf "upgrade-helper\t1.2.3\tSearches packages named after commands\t2024-01-01\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -219,6 +220,12 @@ EOF
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
 
+  functions[_ui_has_icons]='return 1'
+  output=$(_ui_status_icon 'matches found')
+  assert_contains "$output" '?' 'matches found status uses a dedicated fallback icon' || return 1
+  output=$(_ui_status_icon 'no matches')
+  assert_contains "$output" '0' 'no matches status uses a dedicated fallback icon' || return 1
+
   output=$(upkg managers)
   assert_contains "$output" 'paru' 'detects paru' || return 1
   assert_contains "$output" 'brew' 'detects brew' || return 1
@@ -285,6 +292,16 @@ EOF
   cmd_status=$?
   assert_status "$cmd_status" 1 'search requires a query' || return 1
   assert_contains "$output" 'Usage: upkg search <query>' 'search missing query shows usage' || return 1
+
+  output=$(upkg search upgrade --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search accepts query terms that match command keywords' || return 1
+  assert_contains "$output" 'upgrade-helper' 'command-keyword searches still reach npm backend' || return 1
+
+  output=$(upkg --only=npm search -- upgrade)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search supports double-dash to stop option parsing' || return 1
+  assert_contains "$output" 'upgrade-helper' 'double-dash search passes literal query terms through' || return 1
 
   output=$(upkg plan --only=paru)
   cmd_status=$?
