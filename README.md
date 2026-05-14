@@ -118,7 +118,7 @@ If something is missing, the script prints install hints for common package mana
 - `dusage`, `bigfiles`, `ports`, `myip`, `fanprofile`, `upkg` read-only views, `upkg managers`, `npkg outdated`, and `tips` now share the same Catppuccin Mocha dashboard treatment in rich terminals: bold title lines, consistent section separators, and plain-text fallbacks for pipes, redirects, `TERM=dumb`, or narrow terminals.
 - `dusage` and `bigfiles` skip unreadable paths when they can still produce readable results, instead of failing the whole listing because one subtree is inaccessible.
 - `ports` and `myip` are now shell functions instead of aliases so they can render rich panels while keeping their original command names.
-- `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed.
+- `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed, including Homebrew when present.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
@@ -139,7 +139,7 @@ For complete command examples, quick-reference workflows, and function-level not
 `upkg` is a portable package-update entrypoint defined in `60-functions.zsh`. It opportunistically uses the managers already present on the host:
 
 - distro backend: `apt`, `dnf`, or `paru`/`pacman`
-- extras: `flatpak`, `nix` via `npkg`, and global `npm`
+- extras: `brew`, `flatpak`, `nix` via `npkg`, and global `npm`
 
 Default behavior is read-only:
 
@@ -152,6 +152,7 @@ Default behavior is read-only:
 Filters and privilege policy:
 
 - `--only <list>` / `--only=<list>` and `--skip <list>` / `--skip=<list>` accept comma-separated manager IDs such as `flatpak,npm`
+- `brew` uses `brew outdated` and `brew upgrade` without sudo wrapping
 - `--only` runs managers in the order you name them; default runs use detection order
 - `--dry-run` previews upgrades instead of running them
 - `--sudo` is an explicit opt-in for privileged upgrade paths; `upkg` never adds it automatically
@@ -160,7 +161,7 @@ Filters and privilege policy:
 - Empty `pacman -Qu` / `paru -Qu` / `paru -Qua` runs with exit `1` are treated as the normal no-update case
 - `paru` previews both repo updates and AUR updates when `pacman` is available; if the repo check fails, `upkg` still shows any AUR preview it can gather before returning nonzero
 - `paru` still runs unprefixed even when `--sudo` is passed so it can handle its own escalation flow
-- `npm` upgrades are supported only as a user-space workflow
+- `brew` and `npm` upgrades are supported only as user-space workflows
 
 `upkg` does not add any new required shared dependency. It only uses managers already installed on the current machine.
 

@@ -915,12 +915,12 @@ _upkg_usage() {
   print '  --dry-run           Preview upgrades instead of running them'
   print ''
   print 'Supported manager IDs:'
-  print '  apt, dnf, pacman, paru, flatpak, nix, npm'
+  print '  apt, dnf, pacman, paru, brew, flatpak, nix, npm'
   print ''
   print 'Examples:'
   print '  upkg'
   print '  upkg managers'
-  print '  upkg --only flatpak,npm'
+  print '  upkg --only brew,npm'
   print '  upkg upgrade --sudo'
   print '  upkg upgrade --dry-run --only npm,flatpak'
   print '  upkg upgrade --sudo --only apt'
@@ -930,6 +930,7 @@ _upkg_usage() {
   print '  - plan and --dry-run use the read-only outdated checks'
   print '  - upgrades never inject sudo automatically'
   print '  - paru upgrades require explicit --sudo opt-in but still run unprefixed'
+  print '  - brew upgrades run unprefixed and stay in Homebrew user space'
   print '  - npm upgrades stay user-space only; upkg will not recommend sudo npm'
 }
 
@@ -951,7 +952,7 @@ _upkg_parse_manager_list() {
     fi
 
     case $item in
-      apt|dnf|pacman|paru|flatpak|nix|npm)
+      apt|dnf|pacman|paru|brew|flatpak|nix|npm)
         parsed+=("$item")
         ;;
       *)
@@ -982,6 +983,10 @@ _upkg_detect_managers() {
     _UPKG_ACTIVE_MANAGERS+=(apt)
   elif command -v dnf >/dev/null 2>&1; then
     _UPKG_ACTIVE_MANAGERS+=(dnf)
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    _UPKG_ACTIVE_MANAGERS+=(brew)
   fi
 
   if command -v flatpak >/dev/null 2>&1; then
@@ -1068,6 +1073,7 @@ _upkg_manager_title() {
     dnf) print 'DNF' ;;
     pacman) print 'Pacman' ;;
     paru) print 'Paru' ;;
+    brew) print 'Homebrew' ;;
     flatpak) print 'Flatpak' ;;
     nix) print 'Nix (npkg)' ;;
     npm) print 'npm' ;;
@@ -1475,6 +1481,31 @@ _upkg_run_outdated_paru() {
   fi
 }
 
+_upkg_run_outdated_brew() {
+  emulate -L zsh
+
+  local output rc
+
+  _upkg_print_section brew
+
+  output=$(command brew outdated 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'brew outdated failed'
+    return 1
+  fi
+
+  if [ -n "$output" ]; then
+    print -r -- "$output"
+    _upkg_set_last_result 'updates available' ''
+  else
+    print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+  fi
+}
+
 _upkg_run_outdated_flatpak() {
   emulate -L zsh
 
@@ -1688,6 +1719,19 @@ _upkg_run_upgrade_paru() {
   rc=$?
 
   _upkg_finish_upgrade_result "$rc" 'paru -Syu failed'
+}
+
+_upkg_run_upgrade_brew() {
+  emulate -L zsh
+
+  local rc
+
+  _upkg_print_section brew
+
+  command brew upgrade
+  rc=$?
+
+  _upkg_finish_upgrade_result "$rc" 'brew upgrade failed'
 }
 
 _upkg_run_upgrade_flatpak() {
@@ -1991,6 +2035,7 @@ upkg() {
       outdated:dnf) _upkg_run_outdated_dnf ;;
       outdated:pacman) _upkg_run_outdated_pacman ;;
       outdated:paru) _upkg_run_outdated_paru ;;
+      outdated:brew) _upkg_run_outdated_brew ;;
       outdated:flatpak) _upkg_run_outdated_flatpak ;;
       outdated:nix) _upkg_run_outdated_nix ;;
       outdated:npm) _upkg_run_outdated_npm ;;
@@ -1998,6 +2043,7 @@ upkg() {
       plan:dnf) _upkg_run_outdated_dnf ;;
       plan:pacman) _upkg_run_outdated_pacman ;;
       plan:paru) _upkg_run_outdated_paru ;;
+      plan:brew) _upkg_run_outdated_brew ;;
       plan:flatpak) _upkg_run_outdated_flatpak ;;
       plan:nix) _upkg_run_outdated_nix ;;
       plan:npm) _upkg_run_outdated_npm ;;
@@ -2005,6 +2051,7 @@ upkg() {
       upgrade:dnf) _upkg_run_upgrade_dnf ;;
       upgrade:pacman) _upkg_run_upgrade_pacman ;;
       upgrade:paru) _upkg_run_upgrade_paru ;;
+      upgrade:brew) _upkg_run_upgrade_brew ;;
       upgrade:flatpak) _upkg_run_upgrade_flatpak ;;
       upgrade:nix) _upkg_run_upgrade_nix ;;
       upgrade:npm) _upkg_run_upgrade_npm ;;

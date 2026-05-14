@@ -94,10 +94,11 @@ if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -
   )
 fi
 
-if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v flatpak >/dev/null 2>&1 || (command -v nix >/dev/null 2>&1 && (( $+functions[npkg] ))) || command -v npm >/dev/null 2>&1; then
+if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v brew >/dev/null 2>&1 || command -v flatpak >/dev/null 2>&1 || (command -v nix >/dev/null 2>&1 && (( $+functions[npkg] ))) || command -v npm >/dev/null 2>&1; then
   _zsh_tip_pool+=(
     "Run upkg to list outdated packages across detected package managers with the same shared dashboard styling used across the repo, plus Nerd Font icons when available"
     "Run upkg managers to see active backends and alternates like pacman via --only"
+    "Use upkg --only brew to inspect Homebrew formulas and casks without touching other package managers"
     "Pipe upkg managers when you want plain active-manager IDs without extra status tags"
     "Run upkg managers --only=npm,flatpak to confirm selected execution order before upgrading"
     "On Arch-family systems, upkg treats empty repo and AUR outdated checks as up to date instead of surfacing a false failure"

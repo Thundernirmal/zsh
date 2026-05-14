@@ -504,9 +504,10 @@ Defined in `60-functions.zsh`. `upkg` is a single entrypoint for checking outdat
 Detection order is:
 
 1. distro backend: `paru` when present, otherwise `pacman`, otherwise `apt`, otherwise `dnf`
-2. `flatpak`
-3. `nix` via the existing `npkg` wrapper
-4. global `npm`
+2. `brew`
+3. `flatpak`
+4. `nix` via the existing `npkg` wrapper
+5. global `npm`
 
 If both `paru` and `pacman` are installed, `paru` is the default Arch-family backend and `pacman` remains available only through `--only pacman`.
 
@@ -534,7 +535,7 @@ If both `paru` and `pacman` are installed, `paru` is the default Arch-family bac
 | `--sudo` | Explicitly allow privileged upgrade paths to run |
 | `--dry-run` | Preview upgrades instead of running them |
 
-Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
+Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, `npm`.
 
 ### Backends
 
@@ -544,6 +545,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` | `dnf check-update` exit `100` means updates are available |
 | `pacman` | `pacman -Qu` | `pacman -Syu` | Default only when `paru` is absent |
 | `paru` | `pacman -Qu` plus `paru -Qua` | `paru -Syu` | Preferred on Arch-family systems; preview includes repo and AUR updates, and still shows AUR results if the repo check fails; upgrade requires explicit `--sudo` opt-in but still runs unprefixed |
+| `brew` | `brew outdated` | `brew upgrade` | Homebrew backend stays unprefixed; formulae and casks follow whatever Homebrew manages on that host |
 | `flatpak` | `flatpak remote-ls --updates` | `flatpak update` | Checks both user and system installations |
 | `nix` | `npkg outdated` | `npkg upgrade` | Reuses the existing `npkg` wrapper instead of duplicating Nix logic |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` | Upgrade path is user-space only; `upkg` will not suggest `sudo npm` |
@@ -565,6 +567,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `flatpak`, `nix`, `npm`.
 - Empty Arch-family outdated checks that exit `1` without output are treated as the normal "up to date" case.
 - `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
 - `paru` preview still returns nonzero if the repo-side check fails, even when it can show AUR results.
+- `brew` runs with Homebrew's own user-space model; `upkg` does not wrap it in `sudo`.
 
 Flatpak note:
 
@@ -588,6 +591,7 @@ npm note:
 ```zsh
 upkg
 upkg managers
+upkg --only brew
 upkg --only flatpak,npm
 upkg --only=npm,flatpak
 upkg plan
@@ -786,6 +790,7 @@ tips                → print a random usage tip
 upkg                → show outdated packages across detected managers
 upkg plan           → preview upgrades without changing packages
 upkg managers       → show active managers and alternates
+upkg --only brew    → limit checks to the Homebrew backend
 upkg --only a,b     → limit checks to selected managers
 upkg upgrade --sudo → explicitly allow privileged upgrades
 ```

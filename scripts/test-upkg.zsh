@@ -105,7 +105,7 @@ case "$*" in
 esac
 '
 
-write_fake paru '
+  write_fake paru '
 case "$*" in
   "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
@@ -113,7 +113,15 @@ case "$*" in
 esac
 '
 
-write_fake flatpak '
+  write_fake brew '
+case "$*" in
+  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
+  "upgrade") printf "%s\n" "brew upgrade" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake flatpak '
 case "$*" in
   "remote-ls --updates") printf "%s\n" "org.example.App stable" ;;
   "update") printf "%s\n" "flatpak upgrade" ;;
@@ -197,9 +205,21 @@ esac
 
   output=$(upkg managers)
   assert_contains "$output" 'paru' 'detects paru' || return 1
+  assert_contains "$output" 'brew' 'detects brew' || return 1
   assert_not_contains "$output" 'paru (active)' 'active managers keep plain output stable' || return 1
   assert_not_contains "$output" 'title=' 'manager listing stays free of debug leaks' || return 1
+  assert_order "$output" '  - paru' '  - brew' 'manager listing keeps brew after distro backend' || return 1
+  assert_order "$output" '  - brew' '  - flatpak' 'manager listing keeps brew ahead of flatpak' || return 1
+  assert_order "$output" '  - flatpak' '  - nix' 'manager listing keeps flatpak ahead of nix' || return 1
+  assert_order "$output" '  - nix' '  - npm' 'manager listing keeps nix ahead of npm' || return 1
   assert_contains "$output" 'pacman (available via --only pacman)' 'labels pacman alternate' || return 1
+
+  output=$(upkg --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'brew outdated succeeds' || return 1
+  assert_contains "$output" '==> Homebrew' 'brew section title is rendered' || return 1
+  assert_contains "$output" 'wget (1.24.5) < 1.25.0' 'brew outdated preserves Homebrew formula format' || return 1
+  assert_contains "$output" 'ghostty (1.2.3) < 1.2.4' 'brew outdated preserves multiple Homebrew rows' || return 1
 
   output=$(upkg --only=npm,flatpak)
   assert_contains "$output" '==> npm' 'equals --only keeps first selected manager first' || return 1
@@ -219,6 +239,40 @@ esac
 
   output=$(upkg upgrade --dry-run --only=npm)
   assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'dry-run previews npm instead of upgrading' || return 1
+
+  output=$(upkg upgrade --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'brew upgrade runs without sudo gating' || return 1
+  assert_contains "$output" 'brew upgrade' 'brew upgrade invokes brew directly' || return 1
+  assert_contains "$output" 'brew: upgraded' 'brew upgrade summary marks backend upgraded' || return 1
+
+  write_fake brew '
+case "$*" in
+  "outdated") printf "%s\n" "Error: simulated brew outdated failure" >&2; exit 1 ;;
+  "upgrade") printf "%s\n" "brew upgrade" ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg --only=brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'brew outdated failure returns nonzero' || return 1
+  assert_contains "$output" 'Error: simulated brew outdated failure' 'brew outdated forwards backend failure output' || return 1
+  assert_contains "$output" 'brew: failed - brew outdated failed' 'brew outdated summary marks backend failed' || return 1
+
+  write_fake brew '
+case "$*" in
+  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ;;
+  "upgrade") printf "%s\n" "Error: simulated brew upgrade failure" >&2; exit 1 ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg upgrade --only=brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'brew upgrade failure returns nonzero' || return 1
+  assert_contains "$output" 'Error: simulated brew upgrade failure' 'brew upgrade forwards backend failure output' || return 1
+  assert_contains "$output" 'brew: failed - brew upgrade failed' 'brew upgrade summary marks backend failed' || return 1
 
   write_fake npm '
 case "$*" in
