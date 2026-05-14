@@ -533,6 +533,7 @@ esac
   output=$(upkg search 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'search without query exits nonzero' || return 1
-  assert_contains "$output" 'search requires a query' 'search without query shows helpful error' || return 1}
+  assert_contains "$output" 'search requires a query' 'search without query shows helpful error' || return 1
+}
 
 main "$@"
