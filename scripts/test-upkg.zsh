@@ -299,6 +299,27 @@ EOF
   assert_contains "$output" 'Searching * npm...' 'search progress names the active manager with manager icon' || return 1
   assert_contains "$output" 'Searching * Homebrew (formulae)...' 'search progress includes backend phase detail' || return 1
 
+  output=$(
+    (
+      functions[_ui_plain_mode]='return 1'
+      functions[_ui_color]=':'
+      functions[_ui_reset]=':'
+      functions[_ui_icon]='print -nr -- "*"'
+      functions[_ui_badge]='print -nr -- "[$1]"'
+      functions[_ui_section_break]=':'
+      _UPKG_THEME_MODE=1
+      typeset -ga _UPKG_SEARCH_ROWS
+      typeset -ga _UPKG_SUMMARY_ORDER
+      typeset -gA _UPKG_SUMMARY_STATE _UPKG_SUMMARY_DETAIL
+      _UPKG_SEARCH_ROWS=($'npm\tripgrep-js\t3.4.5\tJavaScript wrapper around ripgrep')
+      _UPKG_SUMMARY_ORDER=(npm brew)
+      _UPKG_SUMMARY_STATE=( npm 'matches found' brew failed )
+      _UPKG_SUMMARY_DETAIL=( npm '1 result(s)' brew 'brew search failed' )
+      _upkg_print_search_summary
+    )
+  )
+  assert_contains "$output" 'Failed managers: brew' 'rich search summary names failed managers' || return 1
+
   output=$(upkg managers)
   assert_contains "$output" 'paru' 'detects paru' || return 1
   assert_contains "$output" 'brew' 'detects brew' || return 1
@@ -334,11 +355,11 @@ EOF
   assert_contains "$output" 'Detected managers: paru, brew, flatpak, nix, npm, pacman' 'unavailable manager error lists detected managers' || return 1
   assert_contains "$output" 'Run: upkg managers' 'unavailable manager error suggests managers view' || return 1
 
-  output=$(upkg --skip=paru,brew,flatpak,nix,npm 2>&1)
+  output=$(upkg --skip='paru, brew, flatpak, nix, npm' 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'empty filtered selection returns nonzero' || return 1
   assert_contains "$output" 'No package managers selected after applying filters.' 'empty selection explains filter result' || return 1
-  assert_contains "$output" 'Skip filter: paru,brew,flatpak,nix,npm' 'empty selection includes skip filter' || return 1
+  assert_contains "$output" 'Skip filter: paru, brew, flatpak, nix, npm' 'empty selection includes skip filter' || return 1
   assert_contains "$output" 'Run: upkg managers --skip paru,brew,flatpak,nix,npm' 'empty selection suggests filtered managers view' || return 1
 
   output=$(upkg search ripgrep)
@@ -416,13 +437,14 @@ esac
   assert_status "$cmd_status" 1 'search returns nonzero when one backend fails' || return 1
   assert_contains "$output" 'Error: simulated brew search failure' 'partial search keeps backend error text' || return 1
   assert_contains "$output" 'npm      ripgrep-js' 'partial search still prints successful rows' || return 1
-  assert_contains "$output" 'Search summary: 1 result(s) across 1 manager(s), 1 failed.' 'partial search summary counts failures' || return 1
+  assert_contains "$output" 'Search summary: 1 result(s) across 1 manager(s), 1 failed (brew).' 'partial search summary names failed managers' || return 1
 
   output=$(upkg search ripgrep --only=brew 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'all-failed search returns nonzero' || return 1
-  assert_contains "$output" 'Search results unavailable; one or more selected managers failed.' 'all-failed search avoids no-match wording' || return 1
+  assert_contains "$output" 'Search results unavailable; failed manager(s): brew.' 'all-failed search names failed managers' || return 1
   assert_not_contains "$output" 'No matches found across selected managers.' 'all-failed search does not report no matches' || return 1
+  assert_contains "$output" 'Search summary: 0 result(s) across 0 manager(s), 1 failed (brew).' 'all-failed search summary names failed managers' || return 1
 
   write_fake brew '
 case "$*" in

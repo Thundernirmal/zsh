@@ -103,6 +103,7 @@ if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || comma
     "Run upkg search ripgrep viewer to pass multi-word searches through to package manager backends"
     "Run upkg managers to see active backends and alternates like pacman via --only"
     "Use upkg search ripgrep --only=brew to search Homebrew formulae and casks without touching other package managers"
+    "When upkg search has backend failures, the summary names the failing manager IDs so you can rerun with --only quickly"
     "Pipe upkg managers when you want plain active-manager IDs without extra status tags"
     "Run upkg managers --only=npm,flatpak to confirm selected execution order before upgrading"
     "On Arch-family systems, upkg treats empty repo and AUR outdated checks as up to date instead of surfacing a false failure"

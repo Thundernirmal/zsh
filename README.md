@@ -122,7 +122,7 @@ If something is missing, the script prints install hints for common package mana
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed, including Homebrew when present.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
-- `upkg search <query>` is read-only and searches detected managers for matching package names plus available versions, including separate Homebrew formula and cask lookups. Results are aggregated into one compact table with a `Manager` column, no-match output is summarized once, and multi-word searches are passed through as separate backend arguments while `upkg search --help` shows usage.
+- `upkg search <query>` is read-only and searches detected managers for matching package names plus available versions, including separate Homebrew formula and cask lookups. Results are aggregated into one compact table with a `Manager` column, no-match output is summarized once, backend failures are summarized with the failing manager IDs, and multi-word searches are passed through as separate backend arguments while `upkg search --help` shows usage.
 - In rich terminals, `upkg search` shows a transient per-manager progress line while backend searches are running, then clears it before printing the final table.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
 - `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
@@ -156,7 +156,7 @@ Default behavior is read-only:
 Filters and privilege policy:
 
 - `--only <list>` / `--only=<list>` and `--skip <list>` / `--skip=<list>` accept comma-separated manager IDs such as `flatpak,npm`
-- `upkg search <query>` defaults to all detected managers, and the same `--only` / `--skip` filters narrow search scope. Additional query words are preserved as separate backend arguments instead of being collapsed into one space-containing string, and no-match searches print one summary across the selected managers
+- `upkg search <query>` defaults to all detected managers, and the same `--only` / `--skip` filters narrow search scope. Additional query words are preserved as separate backend arguments instead of being collapsed into one space-containing string, no-match searches print one summary across the selected managers, and empty-selection hints normalize comma-separated filters back into a copy-pasteable `upkg managers` command
 - Broad Homebrew searches cap follow-up `brew info` lookups to the first 50 formulae and first 50 casks, with a hint to refine the query when the native search returns more
 - `brew` uses `brew outdated` and `brew upgrade` without sudo wrapping
 - `--only` runs managers in the order you name them; default runs use detection order

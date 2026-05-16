@@ -1020,8 +1020,11 @@ _upkg_apply_filters() {
   local -A available seen skipped_map
 
   typeset -g -a _UPKG_SELECTED_MANAGERS _UPKG_SKIPPED_MANAGERS
+  typeset -g _UPKG_ONLY_FILTER_HINT _UPKG_SKIP_FILTER_HINT
   _UPKG_SELECTED_MANAGERS=()
   _UPKG_SKIPPED_MANAGERS=()
+  _UPKG_ONLY_FILTER_HINT=''
+  _UPKG_SKIP_FILTER_HINT=''
 
   candidate_pool=( "${_UPKG_ACTIVE_MANAGERS[@]}" "${_UPKG_ALTERNATE_MANAGERS[@]}" )
   for manager in "${candidate_pool[@]}"; do
@@ -1052,6 +1055,8 @@ _upkg_apply_filters() {
       print -u2 -- 'Run: upkg managers'
       return 1
     fi
+
+    _UPKG_ONLY_FILTER_HINT="${(j:,:)selected}"
   else
     selected=( "${_UPKG_ACTIVE_MANAGERS[@]}" )
   fi
@@ -1059,6 +1064,7 @@ _upkg_apply_filters() {
   if [ -n "$skip_raw" ]; then
     parsed=$(_upkg_parse_manager_list "$skip_raw") || return 1
     skip_list=( ${(f)parsed} )
+    _UPKG_SKIP_FILTER_HINT="${(j:,:)skip_list}"
 
     for manager in "${skip_list[@]}"; do
       skipped_map[$manager]=1
@@ -1143,6 +1149,20 @@ _upkg_record_summary() {
   _UPKG_SUMMARY_ORDER+=("$manager")
   _UPKG_SUMMARY_STATE[$manager]=$state
   _UPKG_SUMMARY_DETAIL[$manager]=$detail
+}
+
+_upkg_summary_managers_by_state() {
+  emulate -L zsh
+
+  local wanted_state=$1
+  local manager
+  local -a matching=()
+
+  for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+    [ "${_UPKG_SUMMARY_STATE[$manager]}" = "$wanted_state" ] && matching+=("$manager")
+  done
+
+  print -r -- "${(j:, :)matching}"
 }
 
 _upkg_print_summary() {
@@ -1428,6 +1448,7 @@ _upkg_format_search_rows() {
   local row manager name version description
   local width manager_width name_width version_width desc_width
   local failed_count=0
+  local failed_managers=''
   local -a rows=( "$@" )
 
   if (( ${#rows[@]} == 0 )); then
@@ -1436,7 +1457,12 @@ _upkg_format_search_rows() {
     done
 
     if (( failed_count > 0 )); then
-      print 'Search results unavailable; one or more selected managers failed.'
+      failed_managers=$(_upkg_summary_managers_by_state failed)
+      if [ -n "$failed_managers" ]; then
+        print "Search results unavailable; failed manager(s): $failed_managers."
+      else
+        print 'Search results unavailable; one or more selected managers failed.'
+      fi
     else
       print 'No matches found across selected managers.'
     fi
@@ -1508,7 +1534,7 @@ _upkg_format_search_rows() {
 _upkg_print_search_summary() {
   emulate -L zsh
 
-  local manager state suffix
+  local manager state suffix failed_managers
   local result_count=${#_UPKG_SEARCH_ROWS[@]}
   local manager_count=0
   local failed_count=0
@@ -1521,8 +1547,14 @@ _upkg_print_search_summary() {
     esac
   done
 
+  failed_managers=$(_upkg_summary_managers_by_state failed)
+
   if (( failed_count > 0 )); then
-    suffix=", $failed_count failed."
+    if [ -n "$failed_managers" ]; then
+      suffix=", $failed_count failed ($failed_managers)."
+    else
+      suffix=", $failed_count failed."
+    fi
   else
     suffix='.'
   fi
@@ -1545,6 +1577,17 @@ _upkg_print_search_summary() {
       _ui_badge "$failed_count failed" danger
     fi
     print ''
+    if (( failed_count > 0 )) && [ -n "$failed_managers" ]; then
+      print -nr -- '  '
+      _ui_color danger
+      print -nr -- 'Failed managers:'
+      _ui_reset
+      print -nr -- ' '
+      _ui_color muted
+      print -nr -- "$failed_managers"
+      _ui_reset
+      print ''
+    fi
   else
     print ''
     print "Search summary: $result_count result(s) across $manager_count manager(s)$suffix"
@@ -2778,7 +2821,7 @@ upkg() {
     print -u2 -- 'No package managers selected after applying filters.'
     [ -n "$only_raw" ] && print -u2 -- "Only filter: $only_raw"
     [ -n "$skip_raw" ] && print -u2 -- "Skip filter: $skip_raw"
-    print -u2 -- "Run: upkg managers${only_raw:+ --only $only_raw}${skip_raw:+ --skip $skip_raw}"
+    print -u2 -- "Run: upkg managers${_UPKG_ONLY_FILTER_HINT:+ --only ${_UPKG_ONLY_FILTER_HINT}}${_UPKG_SKIP_FILTER_HINT:+ --skip ${_UPKG_SKIP_FILTER_HINT}}"
     return 1
   fi
 

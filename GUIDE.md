@@ -554,7 +554,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 ### Behavior notes
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
-- `upkg search <query>` is also read-only and searches all detected managers unless you narrow it with `--only` or `--skip`; Homebrew formulae and casks are queried separately so the search path matches current `brew` flag handling. Results are aggregated into one compact table with a `Manager` column, no-match output is summarized once across the selected managers, multi-word searches are passed to backends as separate query arguments, and `upkg search --help` shows usage.
+- `upkg search <query>` is also read-only and searches all detected managers unless you narrow it with `--only` or `--skip`; Homebrew formulae and casks are queried separately so the search path matches current `brew` flag handling. Results are aggregated into one compact table with a `Manager` column, no-match output is summarized once across the selected managers, backend failures are summarized with the failing manager IDs, multi-word searches are passed to backends as separate query arguments, and `upkg search --help` shows usage.
 - In rich terminals, `upkg search` prints a transient progress line with a distinct progress icon and manager icon, such as `Searching npm...` or `Searching Homebrew (formulae)...`, while each backend is running, then clears it before the compact table is rendered.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
 - In rich terminals, `upkg`, `upkg search`, `upkg plan`, and `upkg managers` use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available.
@@ -566,6 +566,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 - `skipped` means the backend was intentionally omitted by `--skip`.
 - `--only` runs managers in the order you name them; default runs use detection order.
 - `upkg managers --only ...` keeps the selected managers at the top in that same order.
+- Empty filtered selections print a normalized `upkg managers --only/--skip ...` hint so manager lists with spaces stay copy-pasteable.
 - Plain `upkg managers` output keeps active managers as bare IDs for pipe- and script-friendly output; annotations are reserved for alternates, filtered selections, and skipped managers.
 - Empty Arch-family outdated checks that exit `1` without output are treated as the normal "up to date" case.
 - `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
