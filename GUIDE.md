@@ -566,7 +566,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 - `skipped` means the backend was intentionally omitted by `--skip`.
 - `--only` runs managers in the order you name them; default runs use detection order.
 - `upkg managers --only ...` keeps the selected managers at the top in that same order.
-- Empty filtered selections print a normalized `upkg managers --only/--skip ...` hint so manager lists with spaces stay copy-pasteable.
+- For normal `upkg` actions, empty filtered selections print a normalized `upkg managers --only/--skip ...` hint so manager lists with spaces stay copy-pasteable.
 - Plain `upkg managers` output keeps active managers as bare IDs for pipe- and script-friendly output; annotations are reserved for alternates, filtered selections, and skipped managers.
 - Empty Arch-family outdated checks that exit `1` without output are treated as the normal "up to date" case.
 - `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
