@@ -58,6 +58,8 @@ curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh -s -- --no-zshrc
 
 The script is POSIX `sh` so it can run before this Zsh config is installed. It requires `curl`, `tar`, `mktemp`, and `sed` on the bootstrap machine.
 
+If you install manually instead of using the script, source the chosen `init.zsh` from `~/.zshrc`. The entrypoint loads its sibling modules from the same directory, so custom install directories work as long as the whole release archive stays together.
+
 ---
 
 ## Zsh Options

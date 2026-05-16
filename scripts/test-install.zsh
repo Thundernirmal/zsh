@@ -42,6 +42,36 @@ assert_file_contains() {
   print -- "ok: $label"
 }
 
+assert_contains() {
+  local haystack=$1
+  local needle=$2
+  local label=$3
+
+  if [[ $haystack != *"$needle"* ]]; then
+    print -u2 -- "not ok: $label"
+    print -u2 -- "missing: $needle"
+    print -u2 -- "$haystack"
+    return 1
+  fi
+
+  print -- "ok: $label"
+}
+
+assert_not_contains() {
+  local haystack=$1
+  local needle=$2
+  local label=$3
+
+  if [[ $haystack == *"$needle"* ]]; then
+    print -u2 -- "not ok: $label"
+    print -u2 -- "unexpected: $needle"
+    print -u2 -- "$haystack"
+    return 1
+  fi
+
+  print -- "ok: $label"
+}
+
 assert_file_not_contains() {
   local file=$1
   local needle=$2
@@ -71,15 +101,17 @@ assert_path_exists() {
 }
 
 main() {
-  local fake_home archive source_root output cmd_status backup_count
+  local fake_home archive source_root output cmd_status backup_count loaded_dir
+  local comment_home broken_home slash_home no_zshrc_home
 
   fake_home="$tmp_dir/home"
   source_root="$tmp_dir/zsh-vtest"
   archive="$tmp_dir/zsh-vtest.tar.gz"
 
   command mkdir -p "$fake_home" "$source_root/scripts" || return 1
-  print -- '# test init' > "$source_root/init.zsh"
+  command cp "$repo_dir/init.zsh" "$source_root/init.zsh" || return 1
   print -- '# test deps' > "$source_root/scripts/check-deps.sh"
+  print -- 'typeset -g TEST_INSTALL_LOADED_FROM=${${(%):-%x}:A:h}' > "$source_root/80-tips.zsh"
   command tar -czf "$archive" -C "$tmp_dir" zsh-vtest || return 1
 
   output=$(
@@ -148,6 +180,92 @@ main() {
     return 1
   fi
   print -- 'ok: installer keeps one managed zshrc block after custom dir update'
+
+  loaded_dir=$(HOME="$fake_home" zsh -fc 'source "$HOME/.zshrc"; print -r -- "${TEST_INSTALL_LOADED_FROM:-missing}"')
+  assert_status "$loaded_dir" "$fake_home/.config/zsh-alt" 'custom-dir zshrc loads modules from custom install dir' || return 1
+
+  comment_home="$tmp_dir/comment-home"
+  command mkdir -p "$comment_home" || return 1
+  print -- "# previous note: source $comment_home/.config/zsh/init.zsh later" > "$comment_home/.zshrc"
+  output=$(
+    HOME="$comment_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$comment_home/.config/zsh" \
+      --zshrc "$comment_home/.zshrc"
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'installer ignores commented source path' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_file_contains "$comment_home/.zshrc" '# >>> shared zsh config >>>' 'installer appends block when path was only in a comment' || return 1
+
+  broken_home="$tmp_dir/broken-home"
+  command mkdir -p "$broken_home" || return 1
+  {
+    print -- '# >>> shared zsh config >>>'
+    print -- 'export KEEP_ME=1'
+  } > "$broken_home/.zshrc"
+  output=$(
+    HOME="$broken_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$broken_home/.config/zsh" \
+      --zshrc "$broken_home/.zshrc" 2>&1
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'installer rejects incomplete managed block' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_contains "$output" 'found an incomplete managed block' 'incomplete marker error is explicit' || return 1
+  assert_file_contains "$broken_home/.zshrc" 'export KEEP_ME=1' 'incomplete marker path preserves user zshrc content' || return 1
+
+  slash_home="$tmp_dir/slash-home"
+  command mkdir -p "$slash_home" || return 1
+  output=$(
+    HOME="$slash_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$slash_home/.config/zsh/" \
+      --zshrc "$slash_home/.zshrc"
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'installer accepts trailing slash install dir' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_path_exists "$slash_home/.config/zsh/init.zsh" 'trailing slash install writes normalized target' || return 1
+  assert_file_contains "$slash_home/.zshrc" "$slash_home/.config/zsh/init.zsh" 'trailing slash install writes normalized zshrc path' || return 1
+
+  no_zshrc_home="$tmp_dir/no-zshrc-home"
+  command mkdir -p "$no_zshrc_home" || return 1
+  output=$(
+    HOME="$no_zshrc_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$no_zshrc_home/.config/zsh" \
+      --zshrc "$no_zshrc_home/.zshrc" \
+      --no-zshrc
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'installer supports no-zshrc mode' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_not_contains "$output" 'Next shell startup will source' 'no-zshrc output does not claim automatic startup loading' || return 1
+  assert_contains "$output" 'To load it manually' 'no-zshrc output gives manual source instruction' || return 1
+  if [ -e "$no_zshrc_home/.zshrc" ]; then
+    print -u2 -- 'not ok: no-zshrc mode leaves zshrc untouched'
+    command cat "$no_zshrc_home/.zshrc" >&2
+    return 1
+  fi
+  print -- 'ok: no-zshrc mode leaves zshrc untouched'
 }
 
 main "$@"

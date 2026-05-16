@@ -28,7 +28,7 @@ curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh
 
 It installs the latest GitHub release into `$HOME/.config/zsh`, backs up any existing target directory, and appends a guarded source block to `~/.zshrc`.
 
-Source the shared entrypoint from `~/.zshrc`:
+If you are not using the installer, source the shared entrypoint from `~/.zshrc` manually:
 
 ```zsh
 if [ -r "$HOME/.config/zsh/init.zsh" ]; then

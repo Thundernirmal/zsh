@@ -43,6 +43,33 @@ quote_sh() {
   printf "%s" "$1" | sed "s/'/'\\\\''/g; 1s/^/'/; \$s/\$/'/"
 }
 
+strip_trailing_slashes() {
+  path=$1
+
+  while [ "$path" != "/" ] && [ "${path%/}" != "$path" ]; do
+    path=${path%/}
+  done
+
+  printf '%s\n' "$path"
+}
+
+zshrc_sources_file() {
+  source_file=$1
+  quoted_source=$(quote_sh "$source_file")
+
+  [ -f "$zshrc" ] || return 1
+
+  while IFS= read -r line; do
+    case $line in
+      "source $quoted_source"|"  source $quoted_source"|". $quoted_source"|"  . $quoted_source")
+        return 0
+        ;;
+    esac
+  done < "$zshrc"
+
+  return 1
+}
+
 resolve_latest_tag() {
   latest_url="https://github.com/$repo/releases/latest"
   final_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$latest_url") || {
@@ -67,7 +94,7 @@ append_zshrc_block() {
 
   [ "$update_zshrc" -eq 1 ] || return 0
 
-  if [ -f "$zshrc" ] && grep -F -- "$source_file" "$zshrc" >/dev/null 2>&1; then
+  if zshrc_sources_file "$source_file"; then
     printf 'zshrc already sources this config: %s\n' "$zshrc"
     return 0
   fi
@@ -78,6 +105,13 @@ append_zshrc_block() {
   quoted_source=$(quote_sh "$source_file")
 
   if [ -f "$zshrc" ] && grep -F -- "$start_marker" "$zshrc" >/dev/null 2>&1; then
+    start_count=$(grep -F -x -c -- "$start_marker" "$zshrc" || true)
+    end_count=$(grep -F -x -c -- "$end_marker" "$zshrc" || true)
+
+    if [ "$start_count" != "$end_count" ]; then
+      die "found an incomplete managed block in $zshrc; fix the shared zsh config markers before rerunning"
+    fi
+
     tmp_zshrc=$(mktemp "${TMPDIR:-/tmp}/zshrc.XXXXXX") || die "mktemp failed for zshrc update"
     sed "/^# >>> shared zsh config >>>$/,/^# <<< shared zsh config <<<$/d" "$zshrc" > "$tmp_zshrc" || {
       rm -f "$tmp_zshrc"
@@ -172,6 +206,7 @@ case $target_dir in
   /*) ;;
   *) target_dir=$(pwd -P)/$target_dir ;;
 esac
+target_dir=$(strip_trailing_slashes "$target_dir")
 
 case $zshrc in
   /*) ;;
@@ -241,5 +276,10 @@ mv "$source_dir" "$target_dir" || {
 append_zshrc_block "$target_dir/init.zsh"
 
 printf '\nInstalled shared Zsh config.\n'
-printf 'Next shell startup will source: %s\n' "$target_dir/init.zsh"
+if [ "$update_zshrc" -eq 1 ]; then
+  printf 'Next shell startup will source: %s\n' "$target_dir/init.zsh"
+else
+  printf 'To load it manually, add this to your .zshrc:\n'
+  printf '  source %s\n' "$(quote_sh "$target_dir/init.zsh")"
+fi
 printf 'Optional dependency check: sh %s/scripts/check-deps.sh\n' "$target_dir"
