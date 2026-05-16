@@ -156,7 +156,7 @@ Default behavior is read-only:
 Filters and privilege policy:
 
 - `--only <list>` / `--only=<list>` and `--skip <list>` / `--skip=<list>` accept comma-separated manager IDs such as `flatpak,npm`
-- `upkg search <query>` defaults to all detected managers, and the same `--only` / `--skip` filters narrow search scope. Additional query words are preserved as separate backend arguments instead of being collapsed into one space-containing string, no-match searches print one summary across the selected managers, and empty-selection hints normalize comma-separated filters back into a copy-pasteable `upkg managers` command
+- `upkg search <query>` defaults to the active detected managers, and the same `--only` / `--skip` filters narrow search scope. Additional query words are preserved as separate backend arguments instead of being collapsed into one space-containing string, no-match searches print one summary across the selected managers, and empty-selection hints normalize comma-separated filters back into a copy-pasteable `upkg managers` command
 - Broad Homebrew searches cap follow-up `brew info` lookups to the first 50 formulae and first 50 casks, with a hint to refine the query when the native search returns more
 - `brew` uses `brew outdated` and `brew upgrade` without sudo wrapping
 - `--only` runs managers in the order you name them; default runs use detection order
