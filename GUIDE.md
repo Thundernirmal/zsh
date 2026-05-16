@@ -43,15 +43,6 @@ This shared layer intentionally targets GNU/Linux environments. A few commands a
 
 These options are set in `init.zsh` and change how zsh behaves day-to-day.
 
-### AUTO_CD
-Type a directory name and press Enter to cd into it — no `cd` needed.
-
-```zsh
-~/projects
-# You just typed the directory name and hit Enter
-~/projects  # now you're inside
-```
-
 ### AUTO_PUSHD + PUSHD_SILENT + PUSHD_IGNORE_DUPS
 Every `cd` pushes the previous directory onto a stack. Navigate back with `popd` or jump to any entry with `cd ~2`.
 
@@ -440,11 +431,13 @@ cd ~/projects/myapp/src/components
 croot            # jumps to ~/projects/myapp
 ```
 
-### path — Print PATH entries
+### path — Inspect PATH entries
 
 ```zsh
-path    # prints each PATH entry on its own line, one per line
+path    # shows each PATH entry
 ```
+
+In rich terminals it renders a compact dashboard with indexed entries. In pipes, redirects, `TERM=dumb`, `NO_COLOR=1`, or narrow terminals, it prints one PATH entry per line.
 
 ### fbr — Fuzzy-pick and checkout a git branch
 
@@ -745,7 +738,6 @@ Starship is configured separately in `~/.config/starship.toml`; it is outside th
 -                   → go to previous directory
 z <pattern>         → smart jump to directory
 zi                  → interactive directory picker
-<directory_name>    → cd into it (AUTO_CD)
 mkcd <name>         → create + cd in one step
 croot               → jump to git repo root
 fbr                 → fuzzy-pick and checkout a git branch
@@ -801,7 +793,7 @@ myip                → public IP
 weather             → weather forecast
 fkill [signal]      → fuzzy kill one or more processes
 headers <url>       → HTTP headers
-path                → print PATH entries one per line
+path                → inspect PATH entries
 fanprofile          → current laptop performance profile
 tips                → print a random usage tip
 ```
@@ -845,13 +837,6 @@ Ctrl+R              → fuzzy search (fzf-enhanced)
 ---
 
 ## Tips & Tricks
-
-### Combine AUTO_CD with zoxide
-```zsh
-z proj    # jump to ~/projects
-ls        # look around
-src       # AUTO_CD takes you into src/
-```
 
 ### Use global aliases with git
 ```zsh

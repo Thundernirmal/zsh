@@ -30,6 +30,15 @@ Run these in order after edits:
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
 - `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `nix`) still exit `0` and only print hints.
 
+## Manual QA Checklist
+
+- When asked to prepare a full manual QA pass before a stable release, create `qa-features.csv` at the repo root.
+- Keep the CSV local-only by listing `qa-features.csv` in `.gitignore`; it is a working checklist and should not be pushed to GitHub.
+- Use these columns exactly: `cmd`, `expected behavior`, `Status`.
+- Include only user-facing behavior that needs manual interactive QA, such as prompt startup, aliases, keybindings, completion, fzf pickers, guarded integrations, package-manager flows that should not be run automatically, rich/plain UI rendering, and other terminal ergonomics.
+- Leave syntax checks, smoke tests, and scripted regression tests to the automated verification commands above instead of putting them in the manual CSV.
+- Default `Status` to `Not Run` so the checklist can be filled during manual QA.
+
 ## Automation Gotcha
 
 - Aliases and functions in this repo are interactive shell features. Automation should call real binaries or explicitly source `init.zsh` inside `zsh -fc '...'`; do not assume aliases like `ll` or functions like `ft` exist in non-interactive shells.

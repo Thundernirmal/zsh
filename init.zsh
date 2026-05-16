@@ -1,7 +1,6 @@
 # Shared, git-friendly Zsh configuration.
 
 # Zsh options that complement OMZ without clashing.
-setopt AUTO_CD              # Type directory name to cd into it
 setopt AUTO_PUSHD           # Push directories onto stack
 setopt PUSHD_IGNORE_DUPS    # No duplicate entries in directory stack
 setopt PUSHD_SILENT         # Don't print directory stack after pushd/popd
