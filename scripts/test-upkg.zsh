@@ -118,25 +118,7 @@ assert_order() {
 main() {
   local output cmd_status
 
-  write_fake pacman '
-case "$*" in
-  "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories" ; printf "%s\n" "    for a regex pattern" ;;
-  "-Syu") printf "%s\n" "pacman upgrade" ;;
-  *) exit 2 ;;
-esac
-'
-
-  write_fake paru '
-case "$*" in
-  "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
-  "-Syu") printf "%s\n" "paru upgrade" ;;
-  *) exit 2 ;;
-esac
-'
-
-  write_fake brew '
+  local default_brew_script='
 case "$*" in
   "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
   "search --formula ripgrep") printf "%s\n" "ripgrep" ;;
@@ -172,6 +154,26 @@ case "$*" in
   *) exit 2 ;;
 esac
 '
+
+  write_fake pacman '
+case "$*" in
+  "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
+  "-Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories" ; printf "%s\n" "    for a regex pattern" ;;
+  "-Syu") printf "%s\n" "pacman upgrade" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake paru '
+case "$*" in
+  "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
+  "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
+  "-Syu") printf "%s\n" "paru upgrade" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake brew "$default_brew_script"
 
   write_fake flatpak '
 case "$*" in
@@ -446,42 +448,7 @@ esac
   assert_not_contains "$output" 'No matches found across selected managers.' 'all-failed search does not report no matches' || return 1
   assert_contains "$output" 'Search summary: 0 result(s) across 0 manager(s), 1 failed (brew).' 'all-failed search summary names failed managers' || return 1
 
-  write_fake brew '
-case "$*" in
-  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
-  "search --formula ripgrep") printf "%s\n" "ripgrep" ;;
-  "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
-  "search --formula broad")
-    i=1
-    while [ "$i" -le 55 ]; do
-      printf "pkg%s\n" "$i"
-      i=$((i + 1))
-    done
-    ;;
-  "search --cask broad") printf "%s\n" "No casks found for \"broad\"" >&2 ; exit 1 ;;
-  "search --formula overlap") printf "%s\n" "overlap" ;;
-  "search --cask overlap") printf "%s\n" "overlap" ;;
-  "search --formula nomatch") printf "%s\n" "No formulae found for \"nomatch\"" >&2 ; exit 1 ;;
-  "search --cask nomatch") printf "%s\n" "No casks found for \"nomatch\"" >&2 ; exit 1 ;;
-  "info --formula ripgrep")
-    printf "%s\n" "==> ripgrep: stable 14.1.1 (bottled), HEAD"
-    ;;
-  "info --formula pkg"*)
-    [ "$#" -eq 52 ] || { printf "expected capped formula info args, got %s\n" "$#" >&2; exit 3; }
-    shift 2
-    for candidate in "$@"; do
-      printf "==> %s: stable 1.0.0\n" "$candidate"
-    done
-    ;;
-  "info --cask ripgrep-app")
-    printf "%s\n" "==> ripgrep-app (Ripgrep App): 1.2.3"
-    ;;
-  "info --formula overlap") printf "%s\n" "==> overlap: stable 1.0.0" ;;
-  "info --cask overlap") printf "%s\n" "==> overlap: 2.0.0" ;;
-  "upgrade") printf "%s\n" "brew upgrade" ;;
-  *) exit 2 ;;
-esac
-'
+  write_fake brew "$default_brew_script"
 
   output=$(upkg search 2>&1)
   cmd_status=$?
