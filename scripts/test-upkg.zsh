@@ -100,7 +100,7 @@ main() {
   write_fake pacman '
 case "$*" in
   "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories for a regex pattern" ;;
+  "-Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories" ; printf "%s\n" "    for a regex pattern" ;;
   "-Syu") printf "%s\n" "pacman upgrade" ;;
   *) exit 2 ;;
 esac
@@ -109,7 +109,7 @@ esac
   write_fake paru '
 case "$*" in
   "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends together" ;;
+  "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
   *) exit 2 ;;
 esac
@@ -193,6 +193,7 @@ EOF
     "search nixpkgs ripgrep")
       printf "%s\n" "* legacyPackages.x86_64-linux.ripgrep (14.1.1)"
       printf "%s\n" "  recursively search directories"
+      printf "%s\n" "  with wrapped descriptions"
       ;;
     *) exit 2 ;;
   esac
@@ -268,11 +269,13 @@ EOF
   assert_contains "$output" '==> Paru' 'search includes paru section' || return 1
   assert_contains "$output" 'ripgrep-all' 'search shows paru package name' || return 1
   assert_contains "$output" '0.9.1-2' 'search shows paru available version' || return 1
+  assert_contains "$output" 'search multiple ripgrep backends together' 'search preserves spaces in wrapped paru descriptions' || return 1
   assert_contains "$output" '==> Homebrew' 'search includes brew section' || return 1
   assert_contains "$output" 'ripgrep-app' 'search shows brew cask name' || return 1
   assert_contains "$output" '1.2.3' 'search shows brew version' || return 1
   assert_contains "$output" 'legacyPackages.x86_64-linux.ripgrep' 'search shows nix attribute path' || return 1
   assert_contains "$output" '14.1.1' 'search shows nix available version' || return 1
+  assert_contains "$output" 'recursively search directories with wrapped descriptions' 'search preserves spaces in wrapped nix descriptions' || return 1
   assert_contains "$output" 'ripgrep-js' 'search shows npm package name' || return 1
   assert_contains "$output" '3.4.5' 'search shows npm version' || return 1
 
@@ -290,6 +293,7 @@ EOF
   assert_contains "$output" '==> Pacman' 'alternate search includes pacman section' || return 1
   assert_contains "$output" 'ripgrep' 'search shows pacman package name' || return 1
   assert_contains "$output" '14.1.1-1' 'search shows pacman version' || return 1
+  assert_contains "$output" 'recursively search directories for a regex pattern' 'search preserves spaces in wrapped pacman descriptions' || return 1
 
   output=$(upkg search nomatch --only=brew)
   cmd_status=$?

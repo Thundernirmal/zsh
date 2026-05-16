@@ -1448,6 +1448,24 @@ _upkg_print_search_results() {
   _upkg_set_last_result 'matches found' "${#rows[@]} result(s)"
 }
 
+_upkg_append_search_description() {
+  emulate -L zsh
+
+  local row=$1
+  local description=$2
+
+  [ -n "$description" ] || {
+    print -r -- "$row"
+    return 0
+  }
+
+  if [[ $row == *$'\t' ]]; then
+    print -r -- "${row}${description}"
+  else
+    print -r -- "${row} ${description}"
+  fi
+}
+
 _upkg_run_search_apt() {
   emulate -L zsh
 
@@ -1562,7 +1580,7 @@ _upkg_run_search_pacman() {
     if [[ $line == [[:space:]]* ]]; then
       if (( ${#rows[@]} > 0 )); then
         desc=$(_upkg_search_trim "$line")
-        rows[-1]="${rows[-1]}${desc}"
+        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$desc")
       fi
       continue
     fi
@@ -1605,7 +1623,7 @@ _upkg_run_search_paru() {
     if [[ $line == [[:space:]]* ]]; then
       if (( ${#rows[@]} > 0 )); then
         desc=$(_upkg_search_trim "$line")
-        rows[-1]="${rows[-1]}${desc}"
+        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$desc")
       fi
       continue
     fi
@@ -1789,7 +1807,7 @@ _upkg_run_search_nix() {
     if [[ $line == [[:space:]]* ]]; then
       if (( ${#rows[@]} > 0 )); then
         description=$(_upkg_search_trim "$line")
-        rows[-1]="${rows[-1]}${description}"
+        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$description")
       fi
       continue
     fi
