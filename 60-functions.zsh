@@ -1451,14 +1451,13 @@ _upkg_print_search_results() {
 _upkg_run_search_apt() {
   emulate -L zsh
 
-  local query=$1
   local output rc line header rest
   local current_name='' current_version='' current_desc=''
   local -a rows
 
   _upkg_print_section apt
 
-  output=$(command apt search --names-only "$query" 2>&1)
+  output=$(command apt search --names-only "$@" 2>&1)
   rc=$?
   output=$(print -r -- "$output" | sed '/^WARNING: apt does not have a stable CLI interface\./d;/^Sorting\.\.\.$/d;/^Full Text Search\.\.\.$/d')
   if (( rc != 0 )); then
@@ -1499,13 +1498,16 @@ _upkg_run_search_apt() {
 _upkg_run_search_dnf() {
   emulate -L zsh
 
-  local query=$1
-  local output rc line name version
-  local -a rows fields
+  local output rc line name version query
+  local -a rows fields query_patterns
 
   _upkg_print_section dnf
 
-  output=$(command dnf list --available "*${query}*" 2>&1)
+  for query in "$@"; do
+    query_patterns+=("*${query}*")
+  done
+
+  output=$(command dnf list --available "${query_patterns[@]}" 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
@@ -1536,13 +1538,12 @@ _upkg_run_search_dnf() {
 _upkg_run_search_pacman() {
   emulate -L zsh
 
-  local query=$1
   local output rc line header rest name version desc=''
   local -a rows
 
   _upkg_print_section pacman
 
-  output=$(command pacman -Ss -- "$query" 2>&1)
+  output=$(command pacman -Ss -- "$@" 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
@@ -1580,13 +1581,12 @@ _upkg_run_search_pacman() {
 _upkg_run_search_paru() {
   emulate -L zsh
 
-  local query=$1
   local output rc line header rest name version desc=''
   local -a rows
 
   _upkg_print_section paru
 
-  output=$(command paru -Ss -- "$query" 2>&1)
+  output=$(command paru -Ss -- "$@" 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
@@ -1624,14 +1624,13 @@ _upkg_run_search_paru() {
 _upkg_run_search_brew() {
   emulate -L zsh
 
-  local query=$1
   local output rc line candidate meta version
   local -a formulae casks rows tokens
   local -A wanted
 
   _upkg_print_section brew
 
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula "$query" 2>&1)
+  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula "$@" 2>&1)
   rc=$?
   if (( rc != 0 )); then
     if [[ $output != *'No formulae found'* && $output != *'No formulae or casks found'* ]]; then
@@ -1648,7 +1647,7 @@ _upkg_run_search_brew() {
     done
   fi
 
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask "$query" 2>&1)
+  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask "$@" 2>&1)
   rc=$?
   if (( rc != 0 )); then
     if [[ $output != *'No casks found'* && $output != *'No formulae or casks found'* ]]; then
@@ -1727,13 +1726,12 @@ _upkg_run_search_brew() {
 _upkg_run_search_flatpak() {
   emulate -L zsh
 
-  local query=$1
   local output rc app version name description display_name
   local -a rows
 
   _upkg_print_section flatpak
 
-  output=$(command flatpak search --columns=application,version,name,description "$query" 2>&1)
+  output=$(command flatpak search --columns=application,version,name,description "$@" 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
@@ -1767,13 +1765,12 @@ _upkg_run_search_flatpak() {
 _upkg_run_search_nix() {
   emulate -L zsh
 
-  local query=$1
   local output rc line trimmed name version description=''
   local -a rows
 
   _upkg_print_section nix
 
-  output=$(_npkg_nix search nixpkgs "$query" 2>&1)
+  output=$(_npkg_nix search nixpkgs "$@" 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
@@ -1814,13 +1811,12 @@ _upkg_run_search_nix() {
 _upkg_run_search_npm() {
   emulate -L zsh
 
-  local query=$1
   local output rc name version description
   local -a rows
 
   _upkg_print_section npm
 
-  output=$(command npm search --parseable "$query" 2>&1)
+  output=$(command npm search --parseable "$@" 2>&1)
   rc=$?
 
   if (( rc != 0 )); then
@@ -2388,12 +2384,15 @@ upkg() {
         _upkg_usage
         return 1
         ;;
-      help|-h|--help)
+      help)
         if [ "$raw_cmd" = 'search' ]; then
           query_parts+=("$1")
         else
           raw_cmd='help'
         fi
+        ;;
+      -h|--help)
+        raw_cmd='help'
         ;;
       outdated|check|list|search|upgrade|up|update|plan|managers)
         if [ "$raw_cmd" = 'search' ]; then
@@ -2613,14 +2612,14 @@ upkg() {
       outdated:flatpak) _upkg_run_outdated_flatpak ;;
       outdated:nix) _upkg_run_outdated_nix ;;
       outdated:npm) _upkg_run_outdated_npm ;;
-      search:apt) _upkg_run_search_apt "$query" ;;
-      search:dnf) _upkg_run_search_dnf "$query" ;;
-      search:pacman) _upkg_run_search_pacman "$query" ;;
-      search:paru) _upkg_run_search_paru "$query" ;;
-      search:brew) _upkg_run_search_brew "$query" ;;
-      search:flatpak) _upkg_run_search_flatpak "$query" ;;
-      search:nix) _upkg_run_search_nix "$query" ;;
-      search:npm) _upkg_run_search_npm "$query" ;;
+      search:apt) _upkg_run_search_apt "${query_parts[@]}" ;;
+      search:dnf) _upkg_run_search_dnf "${query_parts[@]}" ;;
+      search:pacman) _upkg_run_search_pacman "${query_parts[@]}" ;;
+      search:paru) _upkg_run_search_paru "${query_parts[@]}" ;;
+      search:brew) _upkg_run_search_brew "${query_parts[@]}" ;;
+      search:flatpak) _upkg_run_search_flatpak "${query_parts[@]}" ;;
+      search:nix) _upkg_run_search_nix "${query_parts[@]}" ;;
+      search:npm) _upkg_run_search_npm "${query_parts[@]}" ;;
       plan:apt) _upkg_run_outdated_apt ;;
       plan:dnf) _upkg_run_outdated_dnf ;;
       plan:pacman) _upkg_run_outdated_pacman ;;

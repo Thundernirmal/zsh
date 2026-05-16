@@ -98,6 +98,7 @@ if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || comma
   _zsh_tip_pool+=(
     "Run upkg to list outdated packages across detected package managers with the same shared dashboard styling used across the repo, plus Nerd Font icons when available"
     "Run upkg search ripgrep to search detected package managers and compare package names with available versions"
+    "Run upkg search ripgrep viewer to pass multi-word searches through to package manager backends"
     "Run upkg managers to see active backends and alternates like pacman via --only"
     "Use upkg search ripgrep --only=brew to search Homebrew formulae and casks without touching other package managers"
     "Pipe upkg managers when you want plain active-manager IDs without extra status tags"

@@ -121,7 +121,7 @@ If something is missing, the script prints install hints for common package mana
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed, including Homebrew when present.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
-- `upkg search <query>` is read-only and searches detected managers for matching package names plus available versions, including separate Homebrew formula and cask lookups.
+- `upkg search <query>` is read-only and searches detected managers for matching package names plus available versions, including separate Homebrew formula and cask lookups. Multi-word searches are passed through as separate backend arguments, while `upkg search --help` shows usage.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
 - `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
 - `upkg managers` keeps active managers as bare IDs in plain output so piping and simple scripts do not need to strip an `(active)` suffix.
@@ -154,7 +154,7 @@ Default behavior is read-only:
 Filters and privilege policy:
 
 - `--only <list>` / `--only=<list>` and `--skip <list>` / `--skip=<list>` accept comma-separated manager IDs such as `flatpak,npm`
-- `upkg search <query>` defaults to all detected managers, and the same `--only` / `--skip` filters narrow search scope
+- `upkg search <query>` defaults to all detected managers, and the same `--only` / `--skip` filters narrow search scope. Additional query words are preserved as separate backend arguments instead of being collapsed into one space-containing string
 - `brew` uses `brew outdated` and `brew upgrade` without sudo wrapping
 - `--only` runs managers in the order you name them; default runs use detection order
 - `--dry-run` previews upgrades instead of running them

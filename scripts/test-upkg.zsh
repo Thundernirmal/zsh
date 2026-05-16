@@ -149,6 +149,10 @@ case "$*" in
   "search --parseable help") printf "helpful-lib\t2.0.0\tLibrary named after help\t2024-01-01\n" ;;
   "search --parseable managers") printf "managers-kit\t4.5.6\tLibrary named after managers\t2024-01-01\n" ;;
   "search --parseable ripgrep") printf "ripgrep-js\t3.4.5\tJavaScript wrapper around ripgrep\t2024-01-01\n" ;;
+  "search --parseable ripgrep viewer")
+    [ "$#" -eq 4 ] || exit 3
+    printf "ripgrep-viewer\t5.6.7\tMulti-term search result\t2024-01-01\n"
+    ;;
   "search --parseable upgrade") printf "upgrade-helper\t1.2.3\tSearches packages named after commands\t2024-01-01\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
@@ -312,10 +316,20 @@ EOF
   assert_status "$cmd_status" 0 'search accepts managers as a literal query' || return 1
   assert_contains "$output" 'managers-kit' 'manager keyword searches still reach npm backend' || return 1
 
+  output=$(upkg search --help)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search help flag shows usage' || return 1
+  assert_contains "$output" 'Usage: upkg [command]' 'search help flag reaches upkg usage' || return 1
+
   output=$(upkg --only=npm search -- upgrade)
   cmd_status=$?
   assert_status "$cmd_status" 0 'search supports double-dash to stop option parsing' || return 1
   assert_contains "$output" 'upgrade-helper' 'double-dash search passes literal query terms through' || return 1
+
+  output=$(upkg search ripgrep viewer --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search preserves multi-word query args for backends' || return 1
+  assert_contains "$output" 'ripgrep-viewer' 'multi-word search reaches npm as separate argv entries' || return 1
 
   output=$(upkg plan --only=paru)
   cmd_status=$?

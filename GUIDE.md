@@ -554,7 +554,7 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 ### Behavior notes
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
-- `upkg search <query>` is also read-only and searches all detected managers unless you narrow it with `--only` or `--skip`; Homebrew formulae and casks are queried separately so the search path matches current `brew` flag handling.
+- `upkg search <query>` is also read-only and searches all detected managers unless you narrow it with `--only` or `--skip`; Homebrew formulae and casks are queried separately so the search path matches current `brew` flag handling. Multi-word searches are passed to backends as separate query arguments, and `upkg search --help` shows usage.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
 - In rich terminals, `upkg`, `upkg search`, `upkg plan`, and `upkg managers` use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available.
 - Distro outdated results depend on the package metadata already present on the machine.
@@ -595,6 +595,7 @@ npm note:
 ```zsh
 upkg
 upkg search ripgrep
+upkg search ripgrep viewer
 upkg search ripgrep --only=npm,flatpak
 upkg managers
 upkg --only brew
