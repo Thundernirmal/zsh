@@ -63,6 +63,27 @@ assert_not_contains() {
   print -- "ok: $label"
 }
 
+assert_matching_lines() {
+  local haystack=$1
+  local needle=$2
+  local expected=$3
+  local label=$4
+  local actual
+
+  actual=$(printf '%s\n' "$haystack" | command grep -F -c -- "$needle")
+
+  if [[ $actual != "$expected" ]]; then
+    print -u2 -- "not ok: $label"
+    print -u2 -- "expected occurrences: $expected"
+    print -u2 -- "actual occurrences: $actual"
+    print -u2 -- "needle: $needle"
+    print -u2 -- "$haystack"
+    return 1
+  fi
+
+  print -- "ok: $label"
+}
+
 assert_status() {
   local actual=$1
   local expected=$2
@@ -120,14 +141,33 @@ case "$*" in
   "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
   "search --formula ripgrep") printf "%s\n" "ripgrep" ;;
   "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
+  "search --formula broad")
+    i=1
+    while [ "$i" -le 55 ]; do
+      printf "pkg%s\n" "$i"
+      i=$((i + 1))
+    done
+    ;;
+  "search --cask broad") printf "%s\n" "No casks found for \"broad\"" >&2 ; exit 1 ;;
+  "search --formula overlap") printf "%s\n" "overlap" ;;
+  "search --cask overlap") printf "%s\n" "overlap" ;;
   "search --formula nomatch") printf "%s\n" "No formulae found for \"nomatch\"" >&2 ; exit 1 ;;
   "search --cask nomatch") printf "%s\n" "No casks found for \"nomatch\"" >&2 ; exit 1 ;;
   "info --formula ripgrep")
     printf "%s\n" "==> ripgrep: stable 14.1.1 (bottled), HEAD"
     ;;
+  "info --formula pkg"*)
+    [ "$#" -eq 52 ] || { printf "expected capped formula info args, got %s\n" "$#" >&2; exit 3; }
+    shift 2
+    for candidate in "$@"; do
+      printf "==> %s: stable 1.0.0\n" "$candidate"
+    done
+    ;;
   "info --cask ripgrep-app")
     printf "%s\n" "==> ripgrep-app (Ripgrep App): 1.2.3"
     ;;
+  "info --formula overlap") printf "%s\n" "==> overlap: stable 1.0.0" ;;
+  "info --cask overlap") printf "%s\n" "==> overlap: 2.0.0" ;;
   "upgrade") printf "%s\n" "brew upgrade" ;;
   *) exit 2 ;;
 esac
@@ -146,14 +186,14 @@ write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
   "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
-  "search --parseable help") printf "helpful-lib\t2.0.0\tLibrary named after help\t2024-01-01\n" ;;
-  "search --parseable managers") printf "managers-kit\t4.5.6\tLibrary named after managers\t2024-01-01\n" ;;
-  "search --parseable ripgrep") printf "ripgrep-js\t3.4.5\tJavaScript wrapper around ripgrep\t2024-01-01\n" ;;
+  "search --parseable help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
+  "search --parseable managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
+  "search --parseable ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
   "search --parseable ripgrep viewer")
     [ "$#" -eq 4 ] || exit 3
-    printf "ripgrep-viewer\t5.6.7\tMulti-term search result\t2024-01-01\n"
+    printf "ripgrep-viewer\tMulti-term search result\tnpm-user\t2024-01-01\t5.6.7\tripgrep viewer\n"
     ;;
-  "search --parseable upgrade") printf "upgrade-helper\t1.2.3\tSearches packages named after commands\t2024-01-01\n" ;;
+  "search --parseable upgrade") printf "upgrade-helper\tSearches packages named after commands\tnpm-user\t2024-01-01\t1.2.3\tupgrade\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -195,6 +235,7 @@ EOF
       printf "%s\n" "  recursively search directories"
       printf "%s\n" "  with wrapped descriptions"
       ;;
+    "search nixpkgs nomatch") printf "%s\n" "error: no results for the given search term(s)!" >&2; exit 1 ;;
     *) exit 2 ;;
   esac
  '
@@ -243,6 +284,21 @@ EOF
   output=$(_ui_status_icon 'no matches')
   assert_contains "$output" '0' 'no matches status uses a dedicated fallback icon' || return 1
 
+  output=$(
+    (
+      functions[_ui_plain_mode]='return 1'
+      functions[_ui_color]=':'
+      functions[_ui_reset]=':'
+      functions[_ui_icon]='print -nr -- "*"'
+      _UPKG_THEME_MODE=1
+      _upkg_search_progress npm ''
+      print ''
+      _upkg_search_progress brew formulae
+    )
+  )
+  assert_contains "$output" 'Searching * npm...' 'search progress names the active manager with manager icon' || return 1
+  assert_contains "$output" 'Searching * Homebrew (formulae)...' 'search progress includes backend phase detail' || return 1
+
   output=$(upkg managers)
   assert_contains "$output" 'paru' 'detects paru' || return 1
   assert_contains "$output" 'brew' 'detects brew' || return 1
@@ -271,34 +327,52 @@ EOF
   assert_contains "$output" '  - flatpak (selected)' 'manager listing marks flatpak selected' || return 1
   assert_order "$output" '  - npm (selected)' '  - flatpak (selected)' 'manager listing follows selected order' || return 1
 
+  output=$(upkg --only=apt 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'unavailable selected manager returns nonzero' || return 1
+  assert_contains "$output" 'Selected managers are not available: apt' 'unavailable manager is named' || return 1
+  assert_contains "$output" 'Detected managers: paru, brew, flatpak, nix, npm, pacman' 'unavailable manager error lists detected managers' || return 1
+  assert_contains "$output" 'Run: upkg managers' 'unavailable manager error suggests managers view' || return 1
+
+  output=$(upkg --skip=paru,brew,flatpak,nix,npm 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'empty filtered selection returns nonzero' || return 1
+  assert_contains "$output" 'No package managers selected after applying filters.' 'empty selection explains filter result' || return 1
+  assert_contains "$output" 'Skip filter: paru,brew,flatpak,nix,npm' 'empty selection includes skip filter' || return 1
+  assert_contains "$output" 'Run: upkg managers --skip paru,brew,flatpak,nix,npm' 'empty selection suggests filtered managers view' || return 1
+
   output=$(upkg search ripgrep)
   cmd_status=$?
   assert_status "$cmd_status" 0 'default search succeeds across detected managers' || return 1
-  assert_contains "$output" '==> Paru' 'search includes paru section' || return 1
+  assert_contains "$output" 'Manager' 'search shows manager column' || return 1
+  assert_matching_lines "$output" 'Manager' 1 'search prints a single table header' || return 1
+  assert_not_contains "$output" '==> Paru' 'search suppresses paru section title' || return 1
+  assert_not_contains "$output" '==> Homebrew' 'search suppresses brew section title' || return 1
   assert_contains "$output" 'ripgrep-all' 'search shows paru package name' || return 1
   assert_contains "$output" '0.9.1-2' 'search shows paru available version' || return 1
   assert_contains "$output" 'search multiple ripgrep backends together' 'search preserves spaces in wrapped paru descriptions' || return 1
-  assert_contains "$output" '==> Homebrew' 'search includes brew section' || return 1
   assert_contains "$output" 'ripgrep-app' 'search shows brew cask name' || return 1
   assert_contains "$output" '1.2.3' 'search shows brew version' || return 1
+  assert_contains "$output" 'flatpak' 'search shows flatpak manager label' || return 1
   assert_contains "$output" 'legacyPackages.x86_64-linux.ripgrep' 'search shows nix attribute path' || return 1
   assert_contains "$output" '14.1.1' 'search shows nix available version' || return 1
   assert_contains "$output" 'recursively search directories with wrapped descriptions' 'search preserves spaces in wrapped nix descriptions' || return 1
   assert_contains "$output" 'ripgrep-js' 'search shows npm package name' || return 1
   assert_contains "$output" '3.4.5' 'search shows npm version' || return 1
+  assert_contains "$output" 'Search summary: 6 result(s) across 5 manager(s).' 'search prints compact summary' || return 1
 
   output=$(upkg search ripgrep --only=npm,flatpak)
   cmd_status=$?
   assert_status "$cmd_status" 0 'search respects only filters after query args' || return 1
-  assert_contains "$output" '==> npm' 'filtered search includes npm' || return 1
-  assert_contains "$output" '==> Flatpak' 'filtered search includes flatpak' || return 1
-  assert_order "$output" '==> npm' '==> Flatpak' 'filtered search keeps selected order' || return 1
-  assert_not_contains "$output" '==> Homebrew' 'filtered search omits unselected managers' || return 1
+  assert_contains "$output" 'npm' 'filtered search includes npm' || return 1
+  assert_contains "$output" 'flatpak' 'filtered search includes flatpak' || return 1
+  assert_order "$output" 'npm      ripgrep-js' 'flatpak  org.example.Ripgrep' 'filtered search keeps selected order' || return 1
+  assert_not_contains "$output" 'brew' 'filtered search omits unselected managers' || return 1
 
   output=$(upkg search ripgrep --only=pacman)
   cmd_status=$?
   assert_status "$cmd_status" 0 'search supports pacman alternate via only' || return 1
-  assert_contains "$output" '==> Pacman' 'alternate search includes pacman section' || return 1
+  assert_contains "$output" 'pacman' 'alternate search includes pacman manager label' || return 1
   assert_contains "$output" 'ripgrep' 'search shows pacman package name' || return 1
   assert_contains "$output" '14.1.1-1' 'search shows pacman version' || return 1
   assert_contains "$output" 'recursively search directories for a regex pattern' 'search preserves spaces in wrapped pacman descriptions' || return 1
@@ -306,12 +380,97 @@ EOF
   output=$(upkg search nomatch --only=brew)
   cmd_status=$?
   assert_status "$cmd_status" 0 'search treats brew no matches as success' || return 1
-  assert_contains "$output" 'No matches found.' 'search reports no matches cleanly' || return 1
+  assert_contains "$output" 'No matches found across selected managers.' 'search reports no matches cleanly' || return 1
+  assert_contains "$output" 'Search summary: 0 result(s) across 1 manager(s).' 'no-match search prints compact summary' || return 1
+  assert_matching_lines "$output" 'No matches found' 1 'no-match search prints one no-match message' || return 1
+
+  output=$(upkg search nomatch --only=nix)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'nix lowercase no-result search succeeds' || return 1
+  assert_contains "$output" 'No matches found across selected managers.' 'nix lowercase no-result search reports no matches' || return 1
+
+  output=$(upkg search broad --only=brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'broad brew search succeeds with capped info lookup' || return 1
+  assert_contains "$output" 'Homebrew formula search returned 55 matches; showing first 50.' 'broad brew search reports capped formula results' || return 1
+  assert_contains "$output" 'brew     pkg50' 'broad brew search includes the last capped formula' || return 1
+  assert_not_contains "$output" 'brew     pkg51' 'broad brew search omits uncapped formula results' || return 1
+
+  output=$(upkg search overlap --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'brew search keeps formula and cask name collisions' || return 1
+  assert_contains "$output" 'brew     overlap                              1.0.0              formula' 'brew search includes formula collision row' || return 1
+  assert_contains "$output" 'brew     overlap                              2.0.0              cask' 'brew search includes cask collision row' || return 1
+
+  write_fake brew '
+case "$*" in
+  "search --formula ripgrep") printf "%s\n" "Error: simulated brew search failure" >&2; exit 1 ;;
+  "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
+  "info --cask ripgrep-app") printf "%s\n" "==> ripgrep-app (Ripgrep App): 1.2.3" ;;
+  *) exit 2 ;;
+esac
+'
+
+  output=$(upkg search ripgrep --only=brew,npm 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'search returns nonzero when one backend fails' || return 1
+  assert_contains "$output" 'Error: simulated brew search failure' 'partial search keeps backend error text' || return 1
+  assert_contains "$output" 'npm      ripgrep-js' 'partial search still prints successful rows' || return 1
+  assert_contains "$output" 'Search summary: 1 result(s) across 1 manager(s), 1 failed.' 'partial search summary counts failures' || return 1
+
+  output=$(upkg search ripgrep --only=brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'all-failed search returns nonzero' || return 1
+  assert_contains "$output" 'Search results unavailable; one or more selected managers failed.' 'all-failed search avoids no-match wording' || return 1
+  assert_not_contains "$output" 'No matches found across selected managers.' 'all-failed search does not report no matches' || return 1
+
+  write_fake brew '
+case "$*" in
+  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
+  "search --formula ripgrep") printf "%s\n" "ripgrep" ;;
+  "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
+  "search --formula broad")
+    i=1
+    while [ "$i" -le 55 ]; do
+      printf "pkg%s\n" "$i"
+      i=$((i + 1))
+    done
+    ;;
+  "search --cask broad") printf "%s\n" "No casks found for \"broad\"" >&2 ; exit 1 ;;
+  "search --formula overlap") printf "%s\n" "overlap" ;;
+  "search --cask overlap") printf "%s\n" "overlap" ;;
+  "search --formula nomatch") printf "%s\n" "No formulae found for \"nomatch\"" >&2 ; exit 1 ;;
+  "search --cask nomatch") printf "%s\n" "No casks found for \"nomatch\"" >&2 ; exit 1 ;;
+  "info --formula ripgrep")
+    printf "%s\n" "==> ripgrep: stable 14.1.1 (bottled), HEAD"
+    ;;
+  "info --formula pkg"*)
+    [ "$#" -eq 52 ] || { printf "expected capped formula info args, got %s\n" "$#" >&2; exit 3; }
+    shift 2
+    for candidate in "$@"; do
+      printf "==> %s: stable 1.0.0\n" "$candidate"
+    done
+    ;;
+  "info --cask ripgrep-app")
+    printf "%s\n" "==> ripgrep-app (Ripgrep App): 1.2.3"
+    ;;
+  "info --formula overlap") printf "%s\n" "==> overlap: stable 1.0.0" ;;
+  "info --cask overlap") printf "%s\n" "==> overlap: 2.0.0" ;;
+  "upgrade") printf "%s\n" "brew upgrade" ;;
+  *) exit 2 ;;
+esac
+'
 
   output=$(upkg search 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'search requires a query' || return 1
   assert_contains "$output" 'Usage: upkg search <query>' 'search missing query shows usage' || return 1
+  assert_not_contains "$output" 'Commands:' 'search missing query avoids full help dump' || return 1
+
+  output=$(upkg managers --dry-run 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'dry-run rejects managers command' || return 1
+  assert_contains "$output" '--dry-run is only valid with the default outdated check, plan, or upgrade' 'dry-run error explains valid commands' || return 1
 
   output=$(upkg search upgrade --only=npm)
   cmd_status=$?
@@ -560,10 +719,12 @@ case "$*" in
 esac
 '
 
-  output=$(_upkg_run_search_apt ripgrep)
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_apt ripgrep >/dev/null
   cmd_status=$?
   assert_status "$cmd_status" 0 'apt search backend succeeds with fake apt data' || return 1
-  assert_contains "$output" '==> APT' 'apt search includes apt section' || return 1
+  output="${(F)_UPKG_SEARCH_ROWS}"
+  assert_contains "$output" 'apt' 'apt search records apt manager label' || return 1
   assert_contains "$output" 'ripgrep' 'apt search shows package name' || return 1
   assert_contains "$output" '14.1.1-1' 'apt search shows available version' || return 1
 
@@ -578,10 +739,12 @@ case "$*" in
 esac
 '
 
-  output=$(_upkg_run_search_dnf ripgrep)
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_dnf ripgrep >/dev/null
   cmd_status=$?
   assert_status "$cmd_status" 0 'dnf search backend succeeds with fake dnf data' || return 1
-  assert_contains "$output" '==> DNF' 'dnf search includes dnf section' || return 1
+  output="${(F)_UPKG_SEARCH_ROWS}"
+  assert_contains "$output" 'dnf' 'dnf search records dnf manager label' || return 1
   assert_contains "$output" 'ripgrep.x86_64' 'dnf search shows package name with arch' || return 1
   assert_contains "$output" '14.1.1-1.fc40' 'dnf search shows available version' || return 1
 }
