@@ -2820,10 +2820,28 @@ if command -v nix >/dev/null 2>&1; then
     fi
   }
 
+  _npkg_fzf_preview_window() {
+    emulate -L zsh
+
+    local percent=${1:-50}
+    local width
+
+    width=$(_ui_term_width)
+    case $width in
+      ''|*[!0-9]*) width=80 ;;
+    esac
+
+    if (( width >= 100 )); then
+      print -r -- "right,${percent}%,border-left,wrap"
+    else
+      print -r -- "down,45%,border-top,wrap"
+    fi
+  }
+
   _npkg_pick_installables() {
     emulate -L zsh
 
-    local cache_file selection attr query
+    local cache_file selection attr query preview_window
     local -a installables
     local _c_attr='' _c_muted='' _c_success='' _c_info='' _c0=''
 
@@ -2839,6 +2857,7 @@ if command -v nix >/dev/null 2>&1; then
 
     query="${(j: :)@}"
     cache_file=$(_npkg_attr_index) || return 1
+    preview_window=$(_npkg_fzf_preview_window 45)
 
     selection=$(
       _c_attr="$_c_attr" _c_muted="$_c_muted" _c_success="$_c_success" \
@@ -2872,7 +2891,7 @@ if command -v nix >/dev/null 2>&1; then
               printf "${_c_info}Homepage:${_c0} %s\n" "$hp"
             fi
           ' \
-        --preview-window=right,45%,border-left,wrap \
+        --preview-window="$preview_window" \
         < "$cache_file"
     ) || return 0
 
@@ -2888,7 +2907,7 @@ if command -v nix >/dev/null 2>&1; then
     emulate -L zsh
     setopt pipefail
 
-    local candidates selection
+    local candidates selection preview_window
     local -a targets
     local _c_attr='' _c_muted='' _c_info='' _c0=''
 
@@ -2952,6 +2971,8 @@ if command -v nix >/dev/null 2>&1; then
       return 0
     fi
 
+    preview_window=$(_npkg_fzf_preview_window 60)
+
     selection=$(
       print -r -- "$candidates" |
         _c_attr="$_c_attr" _c_muted="$_c_muted" _c_info="$_c_info" _c0="$_c0" \
@@ -2959,7 +2980,7 @@ if command -v nix >/dev/null 2>&1; then
           --prompt='Nix remove> ' \
           --header='Tab marks packages, Enter removes' \
           --preview 'printf "${_c_attr}Name:${_c0} %s\n${_c_muted}Attr:${_c0} %s\n${_c_info}Source:${_c0} %s\n" {2} {3} {4}' \
-          --preview-window=right,60%,border-left,wrap
+          --preview-window="$preview_window"
     ) || return 0
 
     while IFS=$'\t' read -r target _; do

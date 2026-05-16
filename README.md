@@ -111,6 +111,7 @@ If something is missing, the script prints install hints for common package mana
 - `50-completion.zsh` assumes your main `~/.zshrc` or framework already ran `compinit`; it only adds lightweight `zstyle` tuning.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- `npkg` install/remove pickers keep previews on the right in wide terminals and move them below the picker in narrower terminals so package names and metadata stay readable.
 - Rich dashboard output is enabled only for real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`.
 - Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bars.
 - `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.

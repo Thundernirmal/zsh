@@ -90,6 +90,7 @@ if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -
     "Run npkg install with no args to fuzzy-pick nixpkgs attribute names"
     "Run npkg find nvim to seed the nix package picker with an initial query"
     "npkg find shows description, version, and homepage in the preview pane"
+    "npkg pickers move the preview below the list on narrow terminals so names stay readable"
     "Run npkg remove with no args to fuzzy-select installed Nix packages to uninstall"
   )
 fi
