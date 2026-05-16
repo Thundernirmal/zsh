@@ -20,20 +20,43 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 
 ## Table of Contents
 
-1. [Zsh Options](#zsh-options)
-2. [History](#history)
-3. [Aliases](#aliases)
-4. [Zoxide — Smart Navigation](#zoxide--smart-navigation)
-5. [FZF — Fuzzy Finder](#fzf--fuzzy-finder)
-6. [Tab Completion](#tab-completion)
-7. [Shell Functions](#shell-functions)
-8. [Global Aliases](#global-aliases)
-9. [Unified Package Updates (upkg)](#unified-package-updates-upkg)
-10. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
-11. [Tips Function](#tips-function)
-12. [OMZ Plugins](#omz-plugins)
-13. [Starship Prompt](#starship-prompt)
-14. [Quick Reference Card](#quick-reference-card)
+1. [Installation](#installation)
+2. [Zsh Options](#zsh-options)
+3. [History](#history)
+4. [Aliases](#aliases)
+5. [Zoxide — Smart Navigation](#zoxide--smart-navigation)
+6. [FZF — Fuzzy Finder](#fzf--fuzzy-finder)
+7. [Tab Completion](#tab-completion)
+8. [Shell Functions](#shell-functions)
+9. [Global Aliases](#global-aliases)
+10. [Unified Package Updates (upkg)](#unified-package-updates-upkg)
+11. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
+12. [Tips Function](#tips-function)
+13. [OMZ Plugins](#omz-plugins)
+14. [Starship Prompt](#starship-prompt)
+15. [Quick Reference Card](#quick-reference-card)
+
+---
+
+## Installation
+
+For a new machine, install the latest GitHub release through the hosted script:
+
+```sh
+curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh
+```
+
+The installer downloads the latest release archive for `Thundernirmal/zsh`, installs it into `$HOME/.config/zsh`, backs up any existing target directory, and appends a guarded source block to `~/.zshrc`.
+
+Advanced options:
+
+```sh
+curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh -s -- --tag v2026.05.16
+curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh -s -- --repo Thundernirmal/zsh --dir "$HOME/.config/zsh"
+curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh -s -- --no-zshrc
+```
+
+The script is POSIX `sh` so it can run before this Zsh config is installed. It requires `curl`, `tar`, `mktemp`, and `sed` on the bootstrap machine.
 
 ---
 
@@ -731,6 +754,11 @@ Starship is configured separately in `~/.config/starship.toml`; it is outside th
 ---
 
 ## Quick Reference Card
+
+### Installation
+```
+curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh
+```
 
 ### Navigation
 ```

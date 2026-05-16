@@ -20,6 +20,14 @@ For command examples and detailed behavior, use [`GUIDE.md`](./GUIDE.md).
 
 ## Loading
 
+For a new machine, run the hosted installer:
+
+```sh
+curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh
+```
+
+It installs the latest GitHub release into `$HOME/.config/zsh`, backs up any existing target directory, and appends a guarded source block to `~/.zshrc`.
+
 Source the shared entrypoint from `~/.zshrc`:
 
 ```zsh
@@ -87,7 +95,10 @@ After changing aliases, functions, completions, tips, or docs, run:
 ```sh
 zsh -n *.zsh
 sh -n scripts/check-deps.sh
+sh -n scripts/install.sh
 zsh scripts/test-init.zsh
+zsh scripts/test-install.zsh
+zsh scripts/test-upkg.zsh
 zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
 ```
 
