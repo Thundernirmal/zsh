@@ -519,6 +519,7 @@ If both `paru` and `pacman` are installed, `paru` is the default Arch-family bac
 | `upkg outdated` | Same as the default read-only check |
 | `upkg check` | Alias for `outdated` |
 | `upkg list` | Alias for `outdated` |
+| `upkg search <query>` | Search detected managers for package names and available versions |
 | `upkg upgrade` | Run upgrades across selected managers |
 | `upkg up` | Alias for `upgrade` |
 | `upkg update` | Alias for `upgrade` |
@@ -553,8 +554,9 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 ### Behavior notes
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
+- `upkg search <query>` is also read-only and searches all detected managers unless you narrow it with `--only` or `--skip`; Homebrew formulae and casks are queried separately so the search path matches current `brew` flag handling. Multi-word searches are passed to backends as separate query arguments, and `upkg search --help` shows usage.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
-- In rich terminals, `upkg`, `upkg plan`, and `upkg managers` use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available, while preserving mostly raw backend output inside each manager section.
+- In rich terminals, `upkg`, `upkg search`, `upkg plan`, and `upkg managers` use the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available.
 - Distro outdated results depend on the package metadata already present on the machine.
 - The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`.
 - When `--sudo` is requested from a non-root shell, `upkg` expects `sudo` to be installed; otherwise it blocks the backend and tells you to rerun it as root.
@@ -568,6 +570,8 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 - `apt` upgrade summaries distinguish metadata refresh failures from full-upgrade failures.
 - `paru` preview still returns nonzero if the repo-side check fails, even when it can show AUR results.
 - `brew` runs with Homebrew's own user-space model; `upkg` does not wrap it in `sudo`.
+- Search results are normalized to package name plus available version, with descriptions shown when the native backend returns them cheaply.
+- Search matching is backend-specific: `apt`, `pacman`, `paru`, `flatpak`, `nix`, and `npm` can use native search flows, while `dnf` and `brew` lean on name-oriented lookups to keep version data portable. On Homebrew, `upkg search` queries formulae and casks separately before collecting version info.
 
 Flatpak note:
 
@@ -590,6 +594,9 @@ npm note:
 
 ```zsh
 upkg
+upkg search ripgrep
+upkg search ripgrep viewer
+upkg search ripgrep --only=npm,flatpak
 upkg managers
 upkg --only brew
 upkg --only flatpak,npm
@@ -636,7 +643,7 @@ npkg outdated          # see what would be upgraded
 npkg upgrade           # upgrade everything
 ```
 
-The fzf picker preview shows the package description, version, and homepage from nixpkgs using the shared Catppuccin Mocha palette. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
+The fzf picker preview shows the package description, version, and homepage from nixpkgs using the shared Catppuccin Mocha palette. The preview stays on the right in wide terminals and moves below the picker in narrower terminals so package names and metadata remain readable. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
 
 `npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints an ASCII-safe table in plain mode, or a responsive Mocha dashboard in rich terminals — run it before `npkg upgrade` to see what will change.
 
@@ -788,6 +795,7 @@ tips                → print a random usage tip
 ### Package Updates
 ```
 upkg                → show outdated packages across detected managers
+upkg search <query> → search managers for package names and versions
 upkg plan           → preview upgrades without changing packages
 upkg managers       → show active managers and alternates
 upkg --only brew    → limit checks to the Homebrew backend

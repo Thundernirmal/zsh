@@ -895,12 +895,13 @@ fbr() {
 
 # Unified package update/check wrapper across supported managers.
 _upkg_usage() {
-  print 'Usage: upkg [command] [--only <list>] [--skip <list>] [--sudo] [--dry-run]'
+  print 'Usage: upkg [command] [args] [--only <list>] [--skip <list>] [--sudo] [--dry-run]'
   print ''
   print 'Commands:'
   print '  outdated            Show outdated packages across detected managers'
   print '  check               Alias for outdated'
   print '  list                Alias for outdated'
+  print '  search <query>      Search package names across detected managers'
   print '  upgrade             Run upgrades across selected managers'
   print '  up                  Alias for upgrade'
   print '  update              Alias for upgrade'
@@ -920,6 +921,7 @@ _upkg_usage() {
   print 'Examples:'
   print '  upkg'
   print '  upkg managers'
+  print '  upkg search ripgrep'
   print '  upkg --only brew,npm'
   print '  upkg upgrade --sudo'
   print '  upkg upgrade --dry-run --only npm,flatpak'
@@ -927,6 +929,7 @@ _upkg_usage() {
   print ''
   print 'Notes:'
   print '  - upkg with no command defaults to outdated'
+  print '  - search groups results by manager and shows package names plus available versions'
   print '  - plan and --dry-run use the read-only outdated checks'
   print '  - upgrades never inject sudo automatically'
   print '  - paru upgrades require explicit --sudo opt-in but still run unprefixed'
@@ -1137,13 +1140,15 @@ _upkg_print_summary() {
   emulate -L zsh
 
   local manager detail state role title
-  local ok_count=0 updates_count=0 blocked_count=0 failed_count=0 skipped_count=0
+  local ok_count=0 updates_count=0 matches_count=0 empty_count=0 blocked_count=0 failed_count=0 skipped_count=0
 
   for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
     state=${_UPKG_SUMMARY_STATE[$manager]}
     case $state in
       'up to date'|upgraded) (( ok_count++ )) ;;
       'updates available')   (( updates_count++ )) ;;
+      'matches found')       (( matches_count++ )) ;;
+      'no matches')          (( empty_count++ )) ;;
       blocked)               (( blocked_count++ )) ;;
       failed)                (( failed_count++ )) ;;
       skipped)               (( skipped_count++ )) ;;
@@ -1163,6 +1168,14 @@ _upkg_print_summary() {
     _ui_badge "$ok_count ok" success
     print -nr -- ' '
     _ui_badge "$updates_count updates" warning
+    if (( matches_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$matches_count matches" info
+    fi
+    if (( empty_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$empty_count empty" muted
+    fi
     if (( blocked_count > 0 )); then
       print -nr -- ' '
       _ui_badge "$blocked_count blocked" warning
@@ -1184,6 +1197,8 @@ _upkg_print_summary() {
       case $state in
         'up to date'|upgraded)    role='success' ;;
         'updates available')      role='warning' ;;
+        'matches found')          role='info'    ;;
+        'no matches')             role='muted'   ;;
         blocked)                  role='warning' ;;
         failed)                   role='danger'  ;;
         skipped)                  role='muted'   ;;
@@ -1300,6 +1315,540 @@ _upkg_npm_outdated_looks_valid() {
   done
 
   return 1
+}
+
+_upkg_search_trim() {
+  emulate -L zsh
+
+  local value=$1
+
+  value=${value//$'\r'/}
+  value=${value//$'\n'/ }
+  value=${value//$'\t'/ }
+
+  while [ "${value# }" != "$value" ]; do
+    value=${value# }
+  done
+  while [ "${value% }" != "$value" ]; do
+    value=${value% }
+  done
+  while [[ $value == *'  '* ]]; do
+    value=${value//'  '/' '}
+  done
+
+  print -r -- "$value"
+}
+
+_upkg_brew_version_from_header() {
+  emulate -L zsh
+
+  local header=$1 token
+  local -a fields
+
+  fields=( ${(z)header} )
+  for token in "${fields[@]}"; do
+    token=${token#,}
+    token=${token%,}
+    token=${token#\(}
+    token=${token%\)}
+
+    case $token in
+      stable|keg-only|HEAD|formula|cask|from|versioned)
+        continue
+        ;;
+    esac
+
+    if [[ $token == [0-9]* || $token == latest ]]; then
+      print -r -- "$token"
+      return 0
+    fi
+  done
+
+  print -r -- '?'
+}
+
+_upkg_brew_name_from_header() {
+  emulate -L zsh
+
+  local header=$1
+
+  header=${header#'==> '}
+  header=${header%%:*}
+  header=${header%% \(*}
+
+  print -r -- "$header"
+}
+
+_upkg_print_search_results() {
+  emulate -L zsh
+
+  local row name version description
+  local width name_width version_width desc_width
+  local -a rows=( "$@" )
+
+  if (( ${#rows[@]} == 0 )); then
+    print 'No matches found.'
+    _upkg_set_last_result 'no matches' ''
+    return 0
+  fi
+
+  if _ui_plain_mode || [ -z "${_UPKG_THEME_MODE:-}" ]; then
+    printf '%-36s %-18s %s\n' 'Package' 'Available' 'Description'
+    printf '%-36s %-18s %s\n' '-------' '---------' '-----------'
+
+    for row in "${rows[@]}"; do
+      IFS=$'\t' read -r name version description <<< "$row"
+      [ -n "$version" ] || version='?'
+      printf '%-36s %-18s %s\n' "$name" "$version" "$description"
+    done
+  else
+    width=$(_ui_term_width)
+    if (( width >= 130 )); then
+      name_width=36
+      version_width=18
+    elif (( width >= 100 )); then
+      name_width=30
+      version_width=16
+    elif (( width >= 80 )); then
+      name_width=24
+      version_width=14
+    else
+      name_width=18
+      version_width=12
+    fi
+    desc_width=$(( width - name_width - version_width - 10 ))
+    (( desc_width < 18 )) && desc_width=18
+
+    _ui_panel_kv 'Results' "${#rows[@]} match(es)" muted text
+    _ui_section_break
+
+    for row in "${rows[@]}"; do
+      IFS=$'\t' read -r name version description <<< "$row"
+      [ -n "$version" ] || version='?'
+      description=$(_upkg_search_trim "$description")
+
+      _ui_panel_prefix
+      _ui_color text
+      _ui_pad left "$name_width" "$(_ui_truncate "$name_width" "$name")"
+      _ui_reset
+      print -nr -- ' '
+      _ui_color info
+      _ui_pad left "$version_width" "$(_ui_truncate "$version_width" "$version")"
+      _ui_reset
+      if [ -n "$description" ]; then
+        print -nr -- ' '
+        _ui_color muted
+        print -nr -- "$(_ui_truncate "$desc_width" "$description")"
+        _ui_reset
+      fi
+      print ''
+    done
+  fi
+
+  _upkg_set_last_result 'matches found' "${#rows[@]} result(s)"
+}
+
+_upkg_append_search_description() {
+  emulate -L zsh
+
+  local row=$1
+  local description=$2
+
+  [ -n "$description" ] || {
+    print -r -- "$row"
+    return 0
+  }
+
+  if [[ $row == *$'\t' ]]; then
+    print -r -- "${row}${description}"
+  else
+    print -r -- "${row} ${description}"
+  fi
+}
+
+_upkg_run_search_apt() {
+  emulate -L zsh
+
+  local output rc line header rest
+  local current_name='' current_version='' current_desc=''
+  local -a rows
+
+  _upkg_print_section apt
+
+  output=$(command apt search --names-only "$@" 2>&1)
+  rc=$?
+  output=$(print -r -- "$output" | sed '/^WARNING: apt does not have a stable CLI interface\./d;/^Sorting\.\.\.$/d;/^Full Text Search\.\.\.$/d')
+  if (( rc != 0 )); then
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'apt search failed'
+    return 1
+  fi
+
+  for line in ${(f)output}; do
+    [ -n "$line" ] || continue
+
+    if [[ $line == [[:space:]]* ]]; then
+      if [ -n "$current_name" ] && [ -z "$current_desc" ]; then
+        current_desc=$(_upkg_search_trim "$line")
+      fi
+      continue
+    fi
+
+    if [ -n "$current_name" ]; then
+      rows+=("${current_name}"$'\t'"${current_version}"$'\t'"${current_desc}")
+    fi
+
+    header=${line%% *}
+    rest=${line#"$header"}
+    rest=${rest# }
+    current_name=${header%%/*}
+    current_version=${rest%% *}
+    current_desc=''
+  done
+
+  if [ -n "$current_name" ]; then
+    rows+=("${current_name}"$'\t'"${current_version}"$'\t'"${current_desc}")
+  fi
+
+  _upkg_print_search_results "${rows[@]}"
+}
+
+_upkg_run_search_dnf() {
+  emulate -L zsh
+
+  local output rc line name version query
+  local -a rows fields query_patterns
+
+  _upkg_print_section dnf
+
+  for query in "$@"; do
+    query_patterns+=("*${query}*")
+  done
+
+  output=$(command dnf list --available "${query_patterns[@]}" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [[ $output == *'No matching Packages to list'* ]]; then
+      _upkg_print_search_results
+      return 0
+    fi
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'dnf list --available failed'
+    return 1
+  fi
+
+  for line in ${(f)output}; do
+    [ -n "$line" ] || continue
+    [[ $line == 'Available Packages'* ]] && continue
+    [[ $line == 'Last metadata expiration check:'* ]] && continue
+
+    fields=( ${(z)line} )
+    (( ${#fields[@]} >= 2 )) || continue
+    name=${fields[1]}
+    version=${fields[2]}
+    rows+=("${name}"$'\t'"${version}"$'\t')
+  done
+
+  _upkg_print_search_results "${rows[@]}"
+}
+
+_upkg_run_search_pacman() {
+  emulate -L zsh
+
+  local output rc line header rest name version desc=''
+  local -a rows
+
+  _upkg_print_section pacman
+
+  output=$(command pacman -Ss -- "$@" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if (( rc == 1 )) && [ -z "$output" ]; then
+      _upkg_print_search_results
+      return 0
+    fi
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'pacman -Ss failed'
+    return 1
+  fi
+
+  for line in ${(f)output}; do
+    [ -n "$line" ] || continue
+
+    if [[ $line == [[:space:]]* ]]; then
+      if (( ${#rows[@]} > 0 )); then
+        desc=$(_upkg_search_trim "$line")
+        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$desc")
+      fi
+      continue
+    fi
+
+    header=${line%% *}
+    rest=${line#"$header"}
+    rest=${rest# }
+    name=${header#*/}
+    version=${rest%% *}
+    rows+=("${name}"$'\t'"${version}"$'\t')
+  done
+
+  _upkg_print_search_results "${rows[@]}"
+}
+
+_upkg_run_search_paru() {
+  emulate -L zsh
+
+  local output rc line header rest name version desc=''
+  local -a rows
+
+  _upkg_print_section paru
+
+  output=$(command paru -Ss -- "$@" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if (( rc == 1 )) && [ -z "$output" ]; then
+      _upkg_print_search_results
+      return 0
+    fi
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'paru -Ss failed'
+    return 1
+  fi
+
+  for line in ${(f)output}; do
+    [ -n "$line" ] || continue
+
+    if [[ $line == [[:space:]]* ]]; then
+      if (( ${#rows[@]} > 0 )); then
+        desc=$(_upkg_search_trim "$line")
+        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$desc")
+      fi
+      continue
+    fi
+
+    header=${line%% *}
+    rest=${line#"$header"}
+    rest=${rest# }
+    name=${header#*/}
+    version=${rest%% *}
+    rows+=("${name}"$'\t'"${version}"$'\t')
+  done
+
+  _upkg_print_search_results "${rows[@]}"
+}
+
+_upkg_run_search_brew() {
+  emulate -L zsh
+
+  local output rc line candidate meta version
+  local -a formulae casks rows tokens
+  local -A wanted
+
+  _upkg_print_section brew
+
+  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula "$@" 2>&1)
+  rc=$?
+  if (( rc != 0 )); then
+    if [[ $output != *'No formulae found'* && $output != *'No formulae or casks found'* ]]; then
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'failed' 'brew search --formula failed'
+      return 1
+    fi
+  else
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
+      [[ $line == '==>'* ]] && continue
+      tokens=( ${(z)line} )
+      formulae+=( "${tokens[@]}" )
+    done
+  fi
+
+  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask "$@" 2>&1)
+  rc=$?
+  if (( rc != 0 )); then
+    if [[ $output != *'No casks found'* && $output != *'No formulae or casks found'* ]]; then
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'failed' 'brew search --cask failed'
+      return 1
+    fi
+  else
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
+      [[ $line == '==>'* ]] && continue
+      tokens=( ${(z)line} )
+      casks+=( "${tokens[@]}" )
+    done
+  fi
+
+  if (( ${#formulae[@]} == 0 && ${#casks[@]} == 0 )); then
+    _upkg_print_search_results
+    return 0
+  fi
+
+  for candidate in "${formulae[@]}"; do
+    wanted[$candidate]='formula'
+  done
+  for candidate in "${casks[@]}"; do
+    wanted[$candidate]='cask'
+  done
+
+  if (( ${#formulae[@]} > 0 )); then
+    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --formula "${formulae[@]}" 2>&1)
+    rc=$?
+    if (( rc != 0 )); then
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'failed' 'brew info failed'
+      return 1
+    fi
+
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
+      candidate=$(_upkg_brew_name_from_header "$line")
+      if [ "${wanted[$candidate]}" != 'formula' ]; then
+        continue
+      fi
+
+      meta=${line#*: }
+      version=$(_upkg_brew_version_from_header "$meta")
+      rows+=("${candidate}"$'\t'"${version}"$'\t'"${wanted[$candidate]}")
+    done
+  fi
+
+  if (( ${#casks[@]} > 0 )); then
+    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --cask "${casks[@]}" 2>&1)
+    rc=$?
+    if (( rc != 0 )); then
+      [ -n "$output" ] && print -r -- "$output"
+      _upkg_set_last_result 'failed' 'brew info failed'
+      return 1
+    fi
+
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
+      candidate=$(_upkg_brew_name_from_header "$line")
+      if [ "${wanted[$candidate]}" != 'cask' ]; then
+        continue
+      fi
+
+      meta=${line#*: }
+      version=$(_upkg_brew_version_from_header "$meta")
+      rows+=("${candidate}"$'\t'"${version}"$'\t'"${wanted[$candidate]}")
+    done
+  fi
+
+  _upkg_print_search_results "${rows[@]}"
+}
+
+_upkg_run_search_flatpak() {
+  emulate -L zsh
+
+  local output rc app version name description display_name
+  local -a rows
+
+  _upkg_print_section flatpak
+
+  output=$(command flatpak search --columns=application,version,name,description "$@" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [[ $output == *'No matches found'* ]]; then
+      _upkg_print_search_results
+      return 0
+    fi
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'flatpak search failed'
+    return 1
+  fi
+
+  while IFS=$'\t' read -r app version name description _; do
+    [ -n "$app" ] || continue
+    [ "$app" = 'Application' ] && continue
+    display_name=$(_upkg_search_trim "$name")
+    description=$(_upkg_search_trim "$description")
+    if [ -n "$display_name" ] && [ "$display_name" != "$app" ]; then
+      if [ -n "$description" ]; then
+        description="${display_name} - ${description}"
+      else
+        description=$display_name
+      fi
+    fi
+    rows+=("${app}"$'\t'"${version}"$'\t'"${description}")
+  done <<< "$output"
+
+  _upkg_print_search_results "${rows[@]}"
+}
+
+_upkg_run_search_nix() {
+  emulate -L zsh
+
+  local output rc line trimmed name version description=''
+  local -a rows
+
+  _upkg_print_section nix
+
+  output=$(_npkg_nix search nixpkgs "$@" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    if [[ $output == *'No packages matched'* || $output == *'No results for'* ]]; then
+      _upkg_print_search_results
+      return 0
+    fi
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'nix search failed'
+    return 1
+  fi
+
+  for line in ${(f)output}; do
+    [ -n "$line" ] || continue
+
+    if [[ $line == [[:space:]]* ]]; then
+      if (( ${#rows[@]} > 0 )); then
+        description=$(_upkg_search_trim "$line")
+        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$description")
+      fi
+      continue
+    fi
+
+    trimmed=$line
+    trimmed=${trimmed#\* }
+    name=${trimmed%% \(*}
+    version=${trimmed##*\(}
+    version=${version%\)}
+    if [ "$name" = "$trimmed" ] || [ "$version" = "$trimmed" ]; then
+      continue
+    fi
+    rows+=("${name}"$'\t'"${version}"$'\t')
+  done
+
+  _upkg_print_search_results "${rows[@]}"
+}
+
+_upkg_run_search_npm() {
+  emulate -L zsh
+
+  local output rc name version description
+  local -a rows
+
+  _upkg_print_section npm
+
+  output=$(command npm search --parseable "$@" 2>&1)
+  rc=$?
+
+  if (( rc != 0 )); then
+    [ -n "$output" ] && print -r -- "$output"
+    _upkg_set_last_result 'failed' 'npm search failed'
+    return 1
+  fi
+
+  while IFS=$'\t' read -r name version description _; do
+    [ -n "$name" ] || continue
+    rows+=("${name}"$'\t'"${version}"$'\t'"$(_upkg_search_trim "$description")")
+  done <<< "$output"
+
+  _upkg_print_search_results "${rows[@]}"
 }
 
 _upkg_run_outdated_apt() {
@@ -1791,8 +2340,9 @@ upkg() {
 
   local raw_cmd='' cmd='outdated' manager
   local only_raw='' skip_raw=''
+  local query=''
   local allow_sudo=0 dry_run=0 filtered=0 exit_code=0
-  local -a candidate_pool run_order display_order
+  local -a candidate_pool run_order display_order query_parts
   local -A selected_map skipped_map alternate_map display_seen
 
   local _UPKG_THEME_MODE=''
@@ -1839,21 +2389,49 @@ upkg() {
       --dry-run)
         dry_run=1
         ;;
-      help|-h|--help)
+      --)
+        shift
+        if [ "$raw_cmd" = 'search' ]; then
+          while (( $# > 0 )); do
+            query_parts+=("$1")
+            shift
+          done
+          break
+        fi
+        print -u2 -- "Unknown argument: --"
+        _upkg_usage
+        return 1
+        ;;
+      help)
+        if [ "$raw_cmd" = 'search' ]; then
+          query_parts+=("$1")
+        else
+          raw_cmd='help'
+        fi
+        ;;
+      -h|--help)
         raw_cmd='help'
         ;;
-      outdated|check|list|upgrade|up|update|plan|managers)
-        if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
-          print -u2 -- "Unexpected extra command: $1"
+      outdated|check|list|search|upgrade|up|update|plan|managers)
+        if [ "$raw_cmd" = 'search' ]; then
+          query_parts+=("$1")
+        else
+          if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
+            print -u2 -- "Unexpected extra command: $1"
+            _upkg_usage
+            return 1
+          fi
+          raw_cmd=$1
+        fi
+        ;;
+      *)
+        if [ "$raw_cmd" = 'search' ]; then
+          query_parts+=("$1")
+        else
+          print -u2 -- "Unknown argument: $1"
           _upkg_usage
           return 1
         fi
-        raw_cmd=$1
-        ;;
-      *)
-        print -u2 -- "Unknown argument: $1"
-        _upkg_usage
-        return 1
         ;;
     esac
     shift
@@ -1861,11 +2439,20 @@ upkg() {
 
   case ${raw_cmd:-outdated} in
     outdated|check|list) cmd='outdated' ;;
+    search) cmd='search' ;;
     upgrade|up|update) cmd='upgrade' ;;
     plan) cmd='plan' ;;
     managers) cmd='managers' ;;
     help) cmd='help' ;;
   esac
+
+  if [ "$cmd" = 'search' ]; then
+    if (( ${#query_parts[@]} == 0 )); then
+      print -u2 -- 'Usage: upkg search <query>'
+      return 1
+    fi
+    query="${(j: :)query_parts}"
+  fi
 
   if (( dry_run )); then
     if [ "$cmd" = 'upgrade' ]; then
@@ -1994,10 +2581,14 @@ upkg() {
 
   _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
 
-  if [ "$cmd" = 'outdated' ] || [ "$cmd" = 'plan' ]; then
+  if [ "$cmd" = 'outdated' ] || [ "$cmd" = 'plan' ] || [ "$cmd" = 'search' ]; then
     if ! _ui_plain_mode; then
       _UPKG_THEME_MODE=1
-      _ui_title_line 'Package Dashboard' "$cmd" accent '󰏖' '*'
+      if [ "$cmd" = 'search' ]; then
+        _ui_title_line 'Package Search' "$query" accent '󰍉' '*'
+      else
+        _ui_title_line 'Package Dashboard' "$cmd" accent '󰏖' '*'
+      fi
       [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
       [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
     fi
@@ -2039,6 +2630,14 @@ upkg() {
       outdated:flatpak) _upkg_run_outdated_flatpak ;;
       outdated:nix) _upkg_run_outdated_nix ;;
       outdated:npm) _upkg_run_outdated_npm ;;
+      search:apt) _upkg_run_search_apt "${query_parts[@]}" ;;
+      search:dnf) _upkg_run_search_dnf "${query_parts[@]}" ;;
+      search:pacman) _upkg_run_search_pacman "${query_parts[@]}" ;;
+      search:paru) _upkg_run_search_paru "${query_parts[@]}" ;;
+      search:brew) _upkg_run_search_brew "${query_parts[@]}" ;;
+      search:flatpak) _upkg_run_search_flatpak "${query_parts[@]}" ;;
+      search:nix) _upkg_run_search_nix "${query_parts[@]}" ;;
+      search:npm) _upkg_run_search_npm "${query_parts[@]}" ;;
       plan:apt) _upkg_run_outdated_apt ;;
       plan:dnf) _upkg_run_outdated_dnf ;;
       plan:pacman) _upkg_run_outdated_pacman ;;
@@ -2221,10 +2820,28 @@ if command -v nix >/dev/null 2>&1; then
     fi
   }
 
+  _npkg_fzf_preview_window() {
+    emulate -L zsh
+
+    local percent=${1:-50}
+    local width
+
+    width=$(_ui_term_width)
+    case $width in
+      ''|*[!0-9]*) width=80 ;;
+    esac
+
+    if (( width >= 100 )); then
+      print -r -- "right,${percent}%,border-left,wrap"
+    else
+      print -r -- "down,45%,border-top,wrap"
+    fi
+  }
+
   _npkg_pick_installables() {
     emulate -L zsh
 
-    local cache_file selection attr query
+    local cache_file selection attr query preview_window
     local -a installables
     local _c_attr='' _c_muted='' _c_success='' _c_info='' _c0=''
 
@@ -2240,6 +2857,7 @@ if command -v nix >/dev/null 2>&1; then
 
     query="${(j: :)@}"
     cache_file=$(_npkg_attr_index) || return 1
+    preview_window=$(_npkg_fzf_preview_window 45)
 
     selection=$(
       _c_attr="$_c_attr" _c_muted="$_c_muted" _c_success="$_c_success" \
@@ -2273,7 +2891,7 @@ if command -v nix >/dev/null 2>&1; then
               printf "${_c_info}Homepage:${_c0} %s\n" "$hp"
             fi
           ' \
-        --preview-window=right,45%,border-left,wrap \
+        --preview-window="$preview_window" \
         < "$cache_file"
     ) || return 0
 
@@ -2289,7 +2907,7 @@ if command -v nix >/dev/null 2>&1; then
     emulate -L zsh
     setopt pipefail
 
-    local candidates selection
+    local candidates selection preview_window
     local -a targets
     local _c_attr='' _c_muted='' _c_info='' _c0=''
 
@@ -2353,6 +2971,8 @@ if command -v nix >/dev/null 2>&1; then
       return 0
     fi
 
+    preview_window=$(_npkg_fzf_preview_window 60)
+
     selection=$(
       print -r -- "$candidates" |
         _c_attr="$_c_attr" _c_muted="$_c_muted" _c_info="$_c_info" _c0="$_c0" \
@@ -2360,7 +2980,7 @@ if command -v nix >/dev/null 2>&1; then
           --prompt='Nix remove> ' \
           --header='Tab marks packages, Enter removes' \
           --preview 'printf "${_c_attr}Name:${_c0} %s\n${_c_muted}Attr:${_c0} %s\n${_c_info}Source:${_c0} %s\n" {2} {3} {4}' \
-          --preview-window=right,60%,border-left,wrap
+          --preview-window="$preview_window"
     ) || return 0
 
     while IFS=$'\t' read -r target _; do

@@ -111,6 +111,7 @@ If something is missing, the script prints install hints for common package mana
 - `50-completion.zsh` assumes your main `~/.zshrc` or framework already ran `compinit`; it only adds lightweight `zstyle` tuning.
 - If `nix` is missing, the `npkg` wrapper is not defined.
 - If `jq` is missing, `npkg refresh`, `npkg outdated`, and interactive `npkg add`/`find`/`remove` pickers are not available.
+- `npkg` install/remove pickers keep previews on the right in wide terminals and move them below the picker in narrower terminals so package names and metadata stay readable.
 - Rich dashboard output is enabled only for real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`.
 - Set `NO_NERD_FONT=1` to keep the dashboards colorized while forcing ASCII-safe icons and bars.
 - `fanprofile` uses `/sys/firmware/acpi/platform_profile` when available, and falls back to ASUS `fan_boost_mode` on older ASUS/TUF hardware.
@@ -121,6 +122,7 @@ If something is missing, the script prints install hints for common package mana
 - `upkg` uses runtime `command -v` detection, so it reflects whichever supported package managers are currently installed, including Homebrew when present.
 - `upkg` prefers `paru` over `pacman` on Arch-family systems; `pacman` stays available via `upkg --only pacman`.
 - `upkg` with no arguments is read-only and shows outdated packages; upgrades require `upkg upgrade`.
+- `upkg search <query>` is read-only and searches detected managers for matching package names plus available versions, including separate Homebrew formula and cask lookups. Multi-word searches are passed through as separate backend arguments, while `upkg search --help` shows usage.
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview upgrades using the same read-only outdated checks.
 - `upkg managers --only ...` lists selected managers in the same order `upkg` would execute them.
 - `upkg managers` keeps active managers as bare IDs in plain output so piping and simple scripts do not need to strip an `(active)` suffix.
@@ -144,6 +146,7 @@ For complete command examples, quick-reference workflows, and function-level not
 Default behavior is read-only:
 
 - `upkg`, `upkg outdated`, `upkg check`, and `upkg list` show outdated packages using each manager's native output
+- `upkg search <query>` searches detected managers and normalizes results to package name plus available version
 - `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` preview the selected upgrade set without changing packages
 - `upkg upgrade`, `upkg up`, and `upkg update` run upgrades only when you ask for them
 - `upkg managers` shows detected backends, keeps filtered selections first in execution order, and labels alternates that are available only via `--only`
@@ -152,11 +155,13 @@ Default behavior is read-only:
 Filters and privilege policy:
 
 - `--only <list>` / `--only=<list>` and `--skip <list>` / `--skip=<list>` accept comma-separated manager IDs such as `flatpak,npm`
+- `upkg search <query>` defaults to all detected managers, and the same `--only` / `--skip` filters narrow search scope. Additional query words are preserved as separate backend arguments instead of being collapsed into one space-containing string
 - `brew` uses `brew outdated` and `brew upgrade` without sudo wrapping
 - `--only` runs managers in the order you name them; default runs use detection order
 - `--dry-run` previews upgrades instead of running them
 - `--sudo` is an explicit opt-in for privileged upgrade paths; `upkg` never adds it automatically
 - `flatpak` checks both user and system installations
+- Search backends prefer name-oriented native lookups when that is the only portable way to recover available versions, so description matching varies by manager; Homebrew formulae and casks are queried separately to match current `brew` flag handling
 - System `flatpak` upgrades may still prompt for authentication via polkit or otherwise require elevated privileges, depending on host policy
 - Empty `pacman -Qu` / `paru -Qu` / `paru -Qua` runs with exit `1` are treated as the normal no-update case
 - `paru` previews both repo updates and AUR updates when `pacman` is available; if the repo check fails, `upkg` still shows any AUR preview it can gather before returning nonzero
