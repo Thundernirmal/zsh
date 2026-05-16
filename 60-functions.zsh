@@ -833,9 +833,45 @@ function gitcount {
   git shortlog -sn --no-merges HEAD
 }
 
-# Print PATH one entry per line
+# Print PATH entries with rich interactive output and plain pipe-friendly output
 path() {
-  print -l -- ${(s/:/)PATH}
+  emulate -L zsh
+
+  local -a entries
+  local entry shown width index_width path_width
+
+  entries=( ${(s/:/)PATH} )
+
+  if _ui_plain_mode; then
+    print -l -- "${entries[@]}"
+    return 0
+  fi
+
+  shown=${#entries[@]}
+  width=$(_ui_term_width)
+  index_width=4
+  path_width=$(( width - index_width - 8 ))
+  (( path_width < 20 )) && path_width=20
+
+  _ui_title_line 'PATH Entries' "${#entries[@]} entries" accent '󰉋' '*'
+  _ui_section_break
+
+  integer idx
+  for (( idx = 1; idx <= shown; idx++ )); do
+    entry=${entries[$idx]}
+    [ -n "$entry" ] || entry='.'
+
+    _ui_panel_prefix
+    _ui_color muted
+    _ui_pad right "$index_width" "$idx"
+    _ui_reset
+    print -nr -- ' '
+    _ui_color text
+    print -nr -- "$(_ui_truncate "$path_width" "$entry")"
+    _ui_reset
+    print ''
+  done
+
 }
 
 # Fuzzy-pick and checkout a git branch

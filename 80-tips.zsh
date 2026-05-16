@@ -1,25 +1,21 @@
 # On-demand tips from across the shared shell config.
 
 _zsh_tip_pool=(
-  "Type a directory name and press Enter to cd into it (AUTO_CD)"
   "Use .. / ... / .... to go up 1/2/3 levels quickly"
   "Use - to go back to your previous directory"
   "Run glog for a visual git graph of the last 20 commits"
   "Run gpr to pull with rebase for a cleaner history"
   "Run gun to undo your last commit while keeping changes staged"
   "Run gitcount to see contributor counts for the current repo; gcount still works as a shortcut"
-  "Use ff <name> to find files by name recursively"
-  "Use ft <text> to search for text inside files (uses ripgrep if available)"
+  "Use ff <pattern> [path] to find files by name; it falls back from fd/fdfind to find"
+  "Use ft <pattern> [path] to search text; it falls back from ripgrep to grep"
   "Run extract <archive> to unpack a supported archive"
   "Run mkcd <dir> to create a directory and cd into it in one step"
   "Run croot to jump to the root of the current git repo"
-  "Run path to print each PATH entry on its own line"
+  "Run path to inspect each PATH entry with rich output in capable terminals"
   "Run fbr to fuzzy-pick and checkout a git branch from local or remote refs"
-  "Run dusage to see the largest items in the current directory"
-  "Run bigfiles to find the largest files recursively in the tree"
   "Run dusage [path] [count] to summarize any directory with a custom limit"
   "Run bigfiles [path] [count] to inspect any tree with a custom limit"
-  "dusage and bigfiles still show readable results even when one subtree is inaccessible"
   "Run fkill to fuzzy select and kill a process"
   "Run fkill 15 to send SIGTERM and select multiple processes"
   "Run ports to see all listening ports and their processes"
@@ -42,11 +38,9 @@ _zsh_tip_pool=(
   "file2 sorts before file10 because NUMERIC_GLOB_SORT is enabled"
   "Command spell-correction prompts are intentionally disabled"
   "Tab completion is case-insensitive for names and paths"
-  "ff <pattern> [path] uses fd or fdfind when available for faster searches"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
   "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"
-  "Use ft TODO to quickly find TODO comments in your code"
   "Combine globals: git log G fix W counts commits mentioning fix"
 )
 
@@ -97,7 +91,7 @@ fi
 
 if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v brew >/dev/null 2>&1 || command -v flatpak >/dev/null 2>&1 || (command -v nix >/dev/null 2>&1 && (( $+functions[npkg] ))) || command -v npm >/dev/null 2>&1; then
   _zsh_tip_pool+=(
-    "Run upkg to list outdated packages across detected package managers with the same shared dashboard styling used across the repo, plus Nerd Font icons when available"
+    "Run upkg to list outdated packages across detected package managers"
     "Run upkg search ripgrep to compare matches from detected managers in one compact table"
     "In rich terminals, upkg search shows which manager it is querying before the final table appears"
     "Run upkg search ripgrep viewer to pass multi-word searches through to package manager backends"
@@ -108,7 +102,7 @@ if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || comma
     "Run upkg managers --only=npm,flatpak to confirm selected execution order before upgrading"
     "On Arch-family systems, upkg treats empty repo and AUR outdated checks as up to date instead of surfacing a false failure"
     "Run upkg plan or upkg --dry-run to preview upgrades without changing packages"
-    "Use upkg --only flatpak,npm to limit checks to selected managers"
+    "Use upkg --only=flatpak,npm to limit checks to selected managers"
   )
 fi
 
