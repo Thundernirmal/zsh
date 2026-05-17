@@ -149,7 +149,7 @@ append_zshrc_block() {
           if ($0 == start) {
             if (inside) {
               invalid = 1
-              exit
+              exit 2
             }
             inside = 1
             next
@@ -157,7 +157,7 @@ append_zshrc_block() {
           if ($0 == end) {
             if (!inside) {
               invalid = 1
-              exit
+              exit 2
             }
             inside = 0
             next
@@ -360,13 +360,21 @@ mv "$source_dir" "$target_dir" || {
 }
 
 append_zshrc_block "$target_dir/init.zsh" || {
-  if [ -e "$target_dir" ]; then
-    rm -rf "$target_dir" || die "failed to roll back installed files at $target_dir"
-  fi
   if [ -n "$backup_dir" ] && [ -e "$backup_dir" ]; then
+    failed_dir="${target_dir}.failed.$(date +%Y%m%d%H%M%S)"
+    failed_index=1
+    while [ -e "$failed_dir" ]; do
+      failed_dir="${target_dir}.failed.$(date +%Y%m%d%H%M%S).${failed_index}"
+      failed_index=$((failed_index + 1))
+    done
+    if [ -e "$target_dir" ]; then
+      mv "$target_dir" "$failed_dir" || die "failed to preserve failed install at $target_dir"
+      printf 'Preserved failed install at: %s\n' "$failed_dir" >&2
+    fi
     mv "$backup_dir" "$target_dir" || die "failed to restore backup from $backup_dir"
+    die "failed to update $zshrc; installation rolled back"
   fi
-  die "failed to update $zshrc; installation rolled back"
+  die "failed to update $zshrc; installed files remain at $target_dir"
 }
 
 printf '\nInstalled shared Zsh config.\n'

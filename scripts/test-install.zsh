@@ -102,7 +102,7 @@ assert_path_exists() {
 
 main() {
   local fake_home archive source_root output cmd_status backup_count loaded_dir
-  local comment_home manual_home broken_home misordered_home rollback_home slash_home no_zshrc_home
+  local comment_home manual_home manual_dot_home manual_unquoted_home broken_home misordered_home rollback_home slash_home no_zshrc_home
 
   fake_home="$tmp_dir/home"
   source_root="$tmp_dir/zsh-vtest"
@@ -224,6 +224,42 @@ main() {
   }
   assert_not_contains "$output" 'Updated zshrc' 'manual source line skips managed block rewrite' || return 1
   assert_file_not_contains "$manual_home/.zshrc" '# >>> shared zsh config >>>' 'manual source line does not get duplicate managed block' || return 1
+
+  manual_dot_home="$tmp_dir/manual-dot-home"
+  command mkdir -p "$manual_dot_home/.config/zsh" || return 1
+  print -- '. "$HOME/.config/zsh/init.zsh"' > "$manual_dot_home/.zshrc"
+  output=$(
+    HOME="$manual_dot_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$manual_dot_home/.config/zsh" \
+      --zshrc "$manual_dot_home/.zshrc"
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'installer accepts existing manual dot source line' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_file_not_contains "$manual_dot_home/.zshrc" '# >>> shared zsh config >>>' 'manual dot source line does not get duplicate managed block' || return 1
+
+  manual_unquoted_home="$tmp_dir/manual-unquoted-home"
+  command mkdir -p "$manual_unquoted_home/.config/zsh" || return 1
+  print -- 'source $HOME/.config/zsh/init.zsh' > "$manual_unquoted_home/.zshrc"
+  output=$(
+    HOME="$manual_unquoted_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$manual_unquoted_home/.config/zsh" \
+      --zshrc "$manual_unquoted_home/.zshrc"
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'installer accepts existing unquoted manual source line' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_file_not_contains "$manual_unquoted_home/.zshrc" '# >>> shared zsh config >>>' 'manual unquoted source line does not get duplicate managed block' || return 1
 
   broken_home="$tmp_dir/broken-home"
   command mkdir -p "$broken_home" || return 1
