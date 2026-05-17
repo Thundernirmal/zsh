@@ -12,6 +12,7 @@ _zsh_tip_pool=(
   "Run extract <archive> to unpack a supported archive"
   "Run mkcd <dir> to create a directory and cd into it in one step"
   "Run croot to jump to the root of the current git repo"
+  "Run curl -fsSL https://zsh.nirmalkatariya.com/install.sh | sh on a new machine to install the latest release"
   "Run path to inspect each PATH entry with rich output in capable terminals"
   "Run fbr to fuzzy-pick and checkout a git branch from local or remote refs"
   "Run dusage [path] [count] to summarize any directory with a custom limit"

@@ -11,19 +11,21 @@ unsetopt CORRECT            # Disable spell-correction prompts, even if enabled 
 setopt NO_BEEP              # No beeping
 setopt INTERACTIVE_COMMENTS # Allow # comments in interactive shell
 
+zsh_config_dir=${${(%):-%x}:A:h}
+
 for zsh_config_file in \
-  "$HOME/.config/zsh/10-history.zsh" \
-  "$HOME/.config/zsh/20-aliases.zsh" \
-  "$HOME/.config/zsh/30-zoxide.zsh" \
-  "$HOME/.config/zsh/40-fzf.zsh" \
-  "$HOME/.config/zsh/50-completion.zsh" \
-  "$HOME/.config/zsh/55-ui-helpers.zsh" \
-  "$HOME/.config/zsh/60-functions.zsh" \
-  "$HOME/.config/zsh/70-globals.zsh" \
-  "$HOME/.config/zsh/80-tips.zsh"; do
+  "$zsh_config_dir/10-history.zsh" \
+  "$zsh_config_dir/20-aliases.zsh" \
+  "$zsh_config_dir/30-zoxide.zsh" \
+  "$zsh_config_dir/40-fzf.zsh" \
+  "$zsh_config_dir/50-completion.zsh" \
+  "$zsh_config_dir/55-ui-helpers.zsh" \
+  "$zsh_config_dir/60-functions.zsh" \
+  "$zsh_config_dir/70-globals.zsh" \
+  "$zsh_config_dir/80-tips.zsh"; do
   if [ -r "$zsh_config_file" ]; then
     source "$zsh_config_file"
   fi
 done
 
-unset zsh_config_file
+unset zsh_config_file zsh_config_dir

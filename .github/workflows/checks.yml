@@ -27,11 +27,20 @@ jobs:
       - name: Check dependency script syntax
         run: sh -n scripts/check-deps.sh
 
+      - name: Check installer script syntax
+        run: sh -n scripts/install.sh
+
       - name: Check init smoke test syntax
         run: zsh -n scripts/test-init.zsh
 
       - name: Run init smoke test
         run: zsh scripts/test-init.zsh
+
+      - name: Check installer smoke test syntax
+        run: zsh -n scripts/test-install.zsh
+
+      - name: Run installer smoke test
+        run: zsh scripts/test-install.zsh
 
       - name: Check upkg smoke test syntax
         run: zsh -n scripts/test-upkg.zsh
