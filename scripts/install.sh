@@ -56,15 +56,45 @@ strip_trailing_slashes() {
 zshrc_sources_file() {
   source_file=$1
   quoted_source=$(quote_sh "$source_file")
+  home_source_file=''
 
   [ -f "$zshrc" ] || return 1
 
+  case $source_file in
+    "$HOME"/*)
+      home_source_file="\$HOME/${source_file#"$HOME"/}"
+      ;;
+  esac
+
   while IFS= read -r line; do
-    case $line in
-      "source $quoted_source"|"  source $quoted_source"|". $quoted_source"|"  . $quoted_source")
+    trimmed_line=$line
+    while :; do
+      case $trimmed_line in
+        ' '*)
+          trimmed_line=${trimmed_line# }
+          ;;
+        '	'*)
+          trimmed_line=${trimmed_line#	}
+          ;;
+        *)
+          break
+          ;;
+      esac
+    done
+
+    case $trimmed_line in
+      "source $quoted_source"|". $quoted_source"|"source \"$source_file\""|". \"$source_file\""|"source $source_file"|". $source_file")
         return 0
         ;;
     esac
+
+    if [ -n "$home_source_file" ]; then
+      case $trimmed_line in
+        "source \"$home_source_file\""|". \"$home_source_file\""|"source $home_source_file"|". $home_source_file")
+          return 0
+          ;;
+      esac
+    fi
   done < "$zshrc"
 
   return 1
@@ -100,28 +130,73 @@ append_zshrc_block() {
   fi
 
   zshrc_dir=$(dirname "$zshrc")
-  mkdir -p "$zshrc_dir" || die "failed to create $zshrc_dir"
+  mkdir -p "$zshrc_dir" || {
+    printf 'install.sh: failed to create %s\n' "$zshrc_dir" >&2
+    return 1
+  }
 
   quoted_source=$(quote_sh "$source_file")
+  tmp_zshrc=$(mktemp "${TMPDIR:-/tmp}/zshrc.XXXXXX") || {
+    printf 'install.sh: mktemp failed for zshrc update\n' >&2
+    return 1
+  }
 
-  if [ -f "$zshrc" ] && grep -F -- "$start_marker" "$zshrc" >/dev/null 2>&1; then
-    start_count=$(grep -F -x -c -- "$start_marker" "$zshrc" || true)
-    end_count=$(grep -F -x -c -- "$end_marker" "$zshrc" || true)
-
-    if [ "$start_count" != "$end_count" ]; then
-      die "found an incomplete managed block in $zshrc; fix the shared zsh config markers before rerunning"
+  if [ -f "$zshrc" ]; then
+    if grep -F -- "$start_marker" "$zshrc" >/dev/null 2>&1 || grep -F -- "$end_marker" "$zshrc" >/dev/null 2>&1; then
+      awk -v start="$start_marker" -v end="$end_marker" '
+        BEGIN { inside = 0 }
+        {
+          if ($0 == start) {
+            if (inside) {
+              invalid = 1
+              exit
+            }
+            inside = 1
+            next
+          }
+          if ($0 == end) {
+            if (!inside) {
+              invalid = 1
+              exit
+            }
+            inside = 0
+            next
+          }
+          if (!inside) {
+            print
+          }
+        }
+        END {
+          if (inside) {
+            invalid = 1
+          }
+          if (invalid) {
+            exit 2
+          }
+        }
+      ' "$zshrc" > "$tmp_zshrc" || {
+        awk_status=$?
+        rm -f "$tmp_zshrc"
+        if [ "$awk_status" -eq 2 ]; then
+          printf 'install.sh: found an incomplete managed block in %s; fix the shared zsh config markers before rerunning\n' "$zshrc" >&2
+          return 1
+        fi
+        printf 'install.sh: failed to prepare updated %s\n' "$zshrc" >&2
+        return 1
+      }
+    else
+      cat "$zshrc" > "$tmp_zshrc" || {
+        rm -f "$tmp_zshrc"
+        printf 'install.sh: failed to prepare updated %s\n' "$zshrc" >&2
+        return 1
+      }
     fi
-
-    tmp_zshrc=$(mktemp "${TMPDIR:-/tmp}/zshrc.XXXXXX") || die "mktemp failed for zshrc update"
-    sed "/^# >>> shared zsh config >>>$/,/^# <<< shared zsh config <<<$/d" "$zshrc" > "$tmp_zshrc" || {
+  else
+    : > "$tmp_zshrc" || {
       rm -f "$tmp_zshrc"
-      die "failed to prepare updated $zshrc"
+      printf 'install.sh: failed to prepare updated %s\n' "$zshrc" >&2
+      return 1
     }
-    cat "$tmp_zshrc" > "$zshrc" || {
-      rm -f "$tmp_zshrc"
-      die "failed to update $zshrc"
-    }
-    rm -f "$tmp_zshrc"
   fi
 
   {
@@ -131,7 +206,17 @@ append_zshrc_block() {
     printf '  source %s\n' "$quoted_source"
     printf 'fi\n'
     printf '%s\n' "$end_marker"
-  } >> "$zshrc" || die "failed to update $zshrc"
+  } >> "$tmp_zshrc" || {
+    rm -f "$tmp_zshrc"
+    printf 'install.sh: failed to update %s\n' "$zshrc" >&2
+    return 1
+  }
+
+  mv "$tmp_zshrc" "$zshrc" || {
+    rm -f "$tmp_zshrc"
+    printf 'install.sh: failed to update %s\n' "$zshrc" >&2
+    return 1
+  }
 
   printf 'Updated zshrc: %s\n' "$zshrc"
 }
@@ -217,6 +302,7 @@ need_cmd curl
 need_cmd tar
 need_cmd mktemp
 need_cmd sed
+need_cmd awk
 
 if [ "$tag" = "latest" ] && [ -z "$archive_url" ]; then
   tag=$(resolve_latest_tag)
@@ -273,7 +359,15 @@ mv "$source_dir" "$target_dir" || {
   die "failed to install into $target_dir"
 }
 
-append_zshrc_block "$target_dir/init.zsh"
+append_zshrc_block "$target_dir/init.zsh" || {
+  if [ -e "$target_dir" ]; then
+    rm -rf "$target_dir" || die "failed to roll back installed files at $target_dir"
+  fi
+  if [ -n "$backup_dir" ] && [ -e "$backup_dir" ]; then
+    mv "$backup_dir" "$target_dir" || die "failed to restore backup from $backup_dir"
+  fi
+  die "failed to update $zshrc; installation rolled back"
+}
 
 printf '\nInstalled shared Zsh config.\n'
 if [ "$update_zshrc" -eq 1 ]; then

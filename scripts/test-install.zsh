@@ -102,7 +102,7 @@ assert_path_exists() {
 
 main() {
   local fake_home archive source_root output cmd_status backup_count loaded_dir
-  local comment_home broken_home slash_home no_zshrc_home
+  local comment_home manual_home broken_home misordered_home rollback_home slash_home no_zshrc_home
 
   fake_home="$tmp_dir/home"
   source_root="$tmp_dir/zsh-vtest"
@@ -202,6 +202,29 @@ main() {
   }
   assert_file_contains "$comment_home/.zshrc" '# >>> shared zsh config >>>' 'installer appends block when path was only in a comment' || return 1
 
+  manual_home="$tmp_dir/manual-home"
+  command mkdir -p "$manual_home" "$manual_home/.config/zsh" || return 1
+  {
+    print -- 'if [ -r "$HOME/.config/zsh/init.zsh" ]; then'
+    print -- '  source "$HOME/.config/zsh/init.zsh"'
+    print -- 'fi'
+  } > "$manual_home/.zshrc"
+  output=$(
+    HOME="$manual_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$manual_home/.config/zsh" \
+      --zshrc "$manual_home/.zshrc"
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'installer accepts existing manual source line' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_not_contains "$output" 'Updated zshrc' 'manual source line skips managed block rewrite' || return 1
+  assert_file_not_contains "$manual_home/.zshrc" '# >>> shared zsh config >>>' 'manual source line does not get duplicate managed block' || return 1
+
   broken_home="$tmp_dir/broken-home"
   command mkdir -p "$broken_home" || return 1
   {
@@ -223,6 +246,53 @@ main() {
   }
   assert_contains "$output" 'found an incomplete managed block' 'incomplete marker error is explicit' || return 1
   assert_file_contains "$broken_home/.zshrc" 'export KEEP_ME=1' 'incomplete marker path preserves user zshrc content' || return 1
+
+  misordered_home="$tmp_dir/misordered-home"
+  command mkdir -p "$misordered_home" || return 1
+  {
+    print -- '# <<< shared zsh config <<<'
+    print -- 'export KEEP_TOP=1'
+    print -- '# >>> shared zsh config >>>'
+    print -- 'export KEEP_BOTTOM=1'
+  } > "$misordered_home/.zshrc"
+  output=$(
+    HOME="$misordered_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$misordered_home/.config/zsh" \
+      --zshrc "$misordered_home/.zshrc" 2>&1
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'installer rejects misordered managed markers' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_contains "$output" 'found an incomplete managed block' 'misordered marker error is explicit' || return 1
+  assert_file_contains "$misordered_home/.zshrc" 'export KEEP_TOP=1' 'misordered marker path preserves pre-marker user content' || return 1
+  assert_file_contains "$misordered_home/.zshrc" 'export KEEP_BOTTOM=1' 'misordered marker path preserves post-marker user content' || return 1
+
+  rollback_home="$tmp_dir/rollback-home"
+  command mkdir -p "$rollback_home/.config/zsh" || return 1
+  print -- 'export BEFORE_ROLLBACK=1' > "$rollback_home/.config/zsh/init.zsh"
+  {
+    print -- '# >>> shared zsh config >>>'
+    print -- 'export INCOMPLETE=1'
+  } > "$rollback_home/.zshrc"
+  output=$(
+    HOME="$rollback_home" sh "$repo_dir/scripts/install.sh" \
+      --repo example/zsh \
+      --tag vtest \
+      --archive-url "file://$archive" \
+      --dir "$rollback_home/.config/zsh" \
+      --zshrc "$rollback_home/.zshrc" 2>&1
+  )
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'installer rolls back target when zshrc update fails' || {
+    print -u2 -- "$output"
+    return 1
+  }
+  assert_file_contains "$rollback_home/.config/zsh/init.zsh" 'export BEFORE_ROLLBACK=1' 'rollback keeps previous target after zshrc failure' || return 1
 
   slash_home="$tmp_dir/slash-home"
   command mkdir -p "$slash_home" || return 1
