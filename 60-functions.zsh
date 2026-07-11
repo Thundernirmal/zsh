@@ -2,7 +2,7 @@
 
 # Extract any archive
 extract() {
-  if [ -z "$1" ]; then
+  if [ -z "${1:-}" ]; then
     echo "Usage: extract <file>"
     return 1
   fi
@@ -48,11 +48,18 @@ extract() {
 }
 
 # Create directory and cd into it
-mkcd() { command mkdir -p "$1" && cd "$1"; }
+mkcd() {
+  if [ -z "${1:-}" ]; then
+    echo "Usage: mkcd <directory>"
+    return 1
+  fi
+
+  command mkdir -p "$1" && cd "$1"
+}
 
 # Find files by name
 ff() {
-  if [ -z "$1" ]; then
+  if [ -z "${1:-}" ]; then
     echo "Usage: ff <pattern> [path]"
     return 1
   fi
@@ -76,7 +83,7 @@ ff() {
 
 # Find text in files (uses ripgrep if available, falls back to grep)
 ft() {
-  if [ -z "$1" ]; then
+  if [ -z "${1:-}" ]; then
     echo "Usage: ft <pattern> [path]"
     return 1
   fi
@@ -100,7 +107,7 @@ fkill() {
     return 1
   fi
 
-  local signal=${1:-9}
+  local signal=${1:-15}
   local selected pid
   local -a pids
   local _fzf_pointer='>' _fzf_marker='+'
@@ -132,7 +139,7 @@ fkill() {
 
 # Quick HTTP header check
 headers() {
-  if [ -z "$1" ]; then
+  if [ -z "${1:-}" ]; then
     echo "Usage: headers <url>"
     return 1
   fi
@@ -142,7 +149,7 @@ headers() {
 
 # Preview file (uses bat if available)
 peek() {
-  if [ -z "$1" ]; then
+  if [ -z "${1:-}" ]; then
     echo "Usage: peek <file>"
     return 1
   fi
@@ -163,6 +170,18 @@ _ui_usage_entry_icon() {
     _ui_icon '󰉋' '/'
   else
     _ui_icon '󰈔' '-'
+  fi
+}
+
+_ui_single_line_path() {
+  emulate -L zsh
+
+  local value=$1
+
+  if [[ $value == *[$'\n\r\t']* ]]; then
+    print -r -- "${(q)value}"
+  else
+    print -r -- "$value"
   fi
 }
 
@@ -382,11 +401,10 @@ dusage() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local output line kib entry_path label icon shown visible_count more total_kib bar_width name_width width size_width percent_width
-  local size_text percent_text header_meta footer_text plain_output_file=''
-  local scan_status=0 pipeline_status=0
-  local -a entries
-  local -a lines
+  local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
+  local size_text percent_text header_meta footer_text
+  local scan_status=0 raw_output_file=''
+  local -a entries records lines
 
   if [ ! -d "$target" ]; then
     echo "'$target' is not a directory"
@@ -406,31 +424,38 @@ dusage() {
     return 0
   fi
 
-  if _ui_plain_mode; then
-    plain_output_file=$(command mktemp "${TMPDIR:-/tmp}/dusage.plain.XXXXXX") || return 1
-    du -sh -- "${entries[@]}" 2>/dev/null >"$plain_output_file"
-    scan_status=$?
-    if [ ! -s "$plain_output_file" ] && (( scan_status != 0 )); then
-      command rm -f -- "$plain_output_file"
-      return $scan_status
-    fi
-    command sort -rh -- "$plain_output_file" | command sed -n "1,${limit}p"
-    pipeline_status=$?
-    command rm -f -- "$plain_output_file"
-    return $pipeline_status
-  fi
-
-  output=$(du -sk -- "${entries[@]}" 2>/dev/null)
+  raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/dusage.raw.XXXXXX") || return 1
+  command du -sk --null -- "${entries[@]}" 2>/dev/null >"$raw_output_file"
   scan_status=$?
-  if [ -z "$output" ] && (( scan_status != 0 )); then
-    return $scan_status
-  fi
-  output=$(print -r -- "$output" | command sort -rn) || return 1
-  lines=( ${(f)output} )
-  (( ${#lines[@]} > 0 )) || {
+
+  while IFS=$'\t' read -r -d '' kib entry_path; do
+    [[ $kib == <-> ]] || continue
+    records+=("${kib}"$'\t'"${entry_path}")
+  done <"$raw_output_file"
+
+  command rm -f -- "$raw_output_file"
+
+  if (( ${#records[@]} == 0 )); then
+    (( scan_status != 0 )) && return $scan_status
     echo "No entries found in '$target'"
     return 0
-  }
+  fi
+
+  lines=( "${(@On)records}" )
+
+  if _ui_plain_mode; then
+    shown=$limit
+    (( shown > ${#lines[@]} )) && shown=${#lines[@]}
+
+    integer plain_idx
+    for (( plain_idx = 1; plain_idx <= shown; plain_idx++ )); do
+      line=${lines[$plain_idx]}
+      kib=${line%%$'\t'*}
+      entry_path=${line#*$'\t'}
+      printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_single_line_path "$entry_path")"
+    done
+    return 0
+  fi
 
   for line in "${lines[@]}"; do
     kib=${line%%$'\t'*}
@@ -473,6 +498,7 @@ dusage() {
 
     label=${entry_path##*/}
     [ -n "$label" ] || label=$entry_path
+    label=$(_ui_single_line_path "$label")
     icon=$(_ui_usage_entry_icon "$entry_path")
     label=$(_ui_truncate "$name_width" "$label")
 
@@ -508,10 +534,10 @@ bigfiles() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local line kib file_path label shown more total_kib bar_width path_width footer_text icon width size_width
-  local scan_status=0
-  local raw_output_file='' sorted_output_file='' line_count=0
-  local -a lines
+  local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width
+  local find_status=0 scan_status=0
+  local path_list_file='' raw_output_file='' line_count=0
+  local -a records lines
 
   if [ ! -e "$target" ]; then
     echo "'$target' does not exist"
@@ -525,41 +551,37 @@ bigfiles() {
       ;;
   esac
 
-  raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.raw.XXXXXX") || return 1
+  path_list_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.paths.XXXXXX") || return 1
+  raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.raw.XXXXXX") || {
+    command rm -f -- "$path_list_file"
+    return 1
+  }
 
-  if _ui_plain_mode; then
-    command find "$target" -type f -exec du -h -- {} + 2>/dev/null >"$raw_output_file"
+  command find "$target" -type f -print0 2>/dev/null >"$path_list_file"
+  find_status=$?
+
+  if [ -s "$path_list_file" ]; then
+    command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
     scan_status=$?
-    if [ ! -s "$raw_output_file" ] && (( scan_status != 0 )); then
-      command rm -f -- "$raw_output_file"
-      return $scan_status
+  elif (( find_status != 0 )); then
+    command rm -f -- "$path_list_file" "$raw_output_file"
+    return $find_status
+  fi
+
+  while IFS=$'\t' read -r -d '' kib file_path; do
+    [[ $kib == <-> ]] || continue
+    records+=("${kib}"$'\t'"${file_path}")
+  done <"$raw_output_file"
+
+  command rm -f -- "$path_list_file" "$raw_output_file"
+
+  if (( ${#records[@]} == 0 )); then
+    (( scan_status != 0 )) && return $scan_status
+
+    if _ui_plain_mode; then
+      return 0
     fi
-    command sort -rh -- "$raw_output_file" | command sed -n "1,${limit}p"
-    scan_status=$?
-    command rm -f -- "$raw_output_file"
-    return $scan_status
-  fi
 
-  sorted_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.sorted.XXXXXX") || {
-    command rm -f -- "$raw_output_file"
-    return 1
-  }
-
-  command find "$target" -type f -exec du -k -- {} + 2>/dev/null >"$raw_output_file"
-  scan_status=$?
-  if [ ! -s "$raw_output_file" ] && (( scan_status != 0 )); then
-    command rm -f -- "$raw_output_file" "$sorted_output_file"
-    return $scan_status
-  fi
-  command sort -rn -- "$raw_output_file" >"$sorted_output_file" || {
-    command rm -f -- "$raw_output_file" "$sorted_output_file"
-    return 1
-  }
-
-  line_count=$(command awk 'END { print NR + 0 }' "$sorted_output_file")
-
-  if (( line_count == 0 )); then
-    command rm -f -- "$raw_output_file" "$sorted_output_file"
     _ui_title_line 'Big Files' "$target" accent '󰉋' '*'
     _ui_panel_kv 'Status' 'No files found under target' muted text
     _ui_section_break
@@ -570,11 +592,30 @@ bigfiles() {
     return 0
   fi
 
-  total_kib=$(command awk '{ if ($1 ~ /^[0-9]+$/) sum += $1 } END { print sum + 0 }' "$sorted_output_file")
+  lines=( "${(@On)records}" )
+  line_count=${#lines[@]}
+
+  if _ui_plain_mode; then
+    shown=$limit
+    (( shown > line_count )) && shown=$line_count
+
+    integer plain_idx
+    for (( plain_idx = 1; plain_idx <= shown; plain_idx++ )); do
+      line=${lines[$plain_idx]}
+      kib=${line%%$'\t'*}
+      file_path=${line#*$'\t'}
+      printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_single_line_path "$file_path")"
+    done
+    return 0
+  fi
+
+  for line in "${lines[@]}"; do
+    kib=${line%%$'\t'*}
+    total_kib=$(( total_kib + kib ))
+  done
+
   shown=$(_ui_visible_count "$limit" "$line_count" 6)
-  lines=( ${(f)"$(command sed -n "1,${shown}p" "$sorted_output_file")"} )
   more=$(( line_count - shown ))
-  command rm -f -- "$raw_output_file" "$sorted_output_file"
 
   width=$(_ui_term_width)
   size_width=9
@@ -602,6 +643,7 @@ bigfiles() {
       label=$file_path
     fi
 
+    label=$(_ui_single_line_path "$label")
     label=$(_ui_truncate "$path_width" "$label")
 
     _ui_panel_prefix
@@ -840,7 +882,7 @@ path() {
   local -a entries
   local entry shown width index_width path_width
 
-  entries=( ${(s/:/)PATH} )
+  entries=( "${(@s/:/)PATH}" )
 
   if _ui_plain_mode; then
     print -l -- "${entries[@]}"
