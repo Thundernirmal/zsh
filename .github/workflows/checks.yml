@@ -33,6 +33,12 @@ jobs:
       - name: Run init smoke test
         run: zsh scripts/test-init.zsh
 
+      - name: Check function regression test syntax
+        run: zsh -n scripts/test-functions.zsh
+
+      - name: Run function regression tests
+        run: zsh scripts/test-functions.zsh
+
       - name: Check upkg smoke test syntax
         run: zsh -n scripts/test-upkg.zsh
 

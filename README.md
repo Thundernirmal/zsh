@@ -67,6 +67,8 @@ Missing optional tools keep the shell usable. The config uses runtime checks and
 - Rich dashboards are used only in real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`; pipes, redirects, `TERM=dumb`, and narrow terminals get plain output.
 - Set `NO_NERD_FONT=1` to keep colors while forcing ASCII-safe icons and bars.
 - `path` uses rich indexed output in capable terminals and stays one-entry-per-line in plain contexts.
+- `path` preserves empty `PATH` components exactly; rich output labels them as `.`, while plain output keeps the corresponding empty lines.
+- `fkill` defaults to `SIGTERM` for graceful shutdown; pass `9` explicitly when a process must be force-killed.
 - `tips` is hook-free and only prints when called manually.
 - This shared config targets GNU/Linux environments. Commands such as `ss`, GNU color flags, and several `find`/`du` flows are Linux-oriented.
 
@@ -88,6 +90,7 @@ After changing aliases, functions, completions, tips, or docs, run:
 zsh -n *.zsh
 sh -n scripts/check-deps.sh
 zsh scripts/test-init.zsh
+zsh scripts/test-functions.zsh
 zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
 ```
 
