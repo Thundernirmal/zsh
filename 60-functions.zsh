@@ -2155,15 +2155,15 @@ _upkg_run_search_npm() {
 _upkg_run_outdated_apt() {
   emulate -L zsh
 
-  local output line status
+  local output line rc
   local -a packages
 
   _upkg_print_section apt
 
   output=$(command apt list --upgradable 2>&1)
-  status=$?
+  rc=$?
   output=$(print -r -- "$output" | sed '/^Listing\.\.\.$/d')
-  if (( status != 0 )); then
+  if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
     _upkg_set_last_result 'failed' 'apt list --upgradable failed'
     return 1

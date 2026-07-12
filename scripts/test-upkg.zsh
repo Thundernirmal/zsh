@@ -698,6 +698,10 @@ esac
   command rm -f "$fakebin/paru" "$fakebin/pacman"
   write_fake apt '
 case "$*" in
+  "list --upgradable")
+    printf "%s\n" "Listing..."
+    printf "%s\n" "ripgrep/stable 14.1.1-2 amd64 [upgradable from: 14.1.1-1]"
+    ;;
   "search --names-only ripgrep")
     printf "%s\n" "Sorting..."
     printf "%s\n" "Full Text Search..."
@@ -707,6 +711,12 @@ case "$*" in
   *) exit 2 ;;
 esac
 '
+
+  output=$(_upkg_run_outdated_apt)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'apt outdated backend succeeds with fake apt data' || return 1
+  assert_contains "$output" 'ripgrep/stable 14.1.1-2' 'apt outdated shows upgradable packages' || return 1
+  assert_not_contains "$output" 'Listing...' 'apt outdated removes the apt listing banner' || return 1
 
   _UPKG_SEARCH_ROWS=()
   _upkg_run_search_apt ripgrep >/dev/null
