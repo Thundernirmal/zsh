@@ -973,6 +973,29 @@ fbr() {
 
 # Unified package update/check wrapper across supported managers.
 _upkg_usage() {
+  if ! _ui_plain_mode; then
+    _ui_title_line 'Unified Package Updates' 'upkg help' accent '󰏖' '*'
+    _ui_section_break
+    _ui_panel_kv 'Usage' 'upkg [command] [args] [--only <list>] [--skip <list>] [--sudo] [--dry-run]' muted text
+    _ui_section_break
+    _ui_panel_kv 'outdated / check / list' 'Show outdated packages across detected managers' accent text
+    _ui_panel_kv 'search <query>' 'Search package names across detected managers' accent text
+    _ui_panel_kv 'upgrade / up / update' 'Run upgrades across selected managers' accent text
+    _ui_panel_kv 'plan' 'Preview available upgrades without changing packages' accent text
+    _ui_panel_kv 'managers' 'Show detected managers and alternates' accent text
+    _ui_panel_kv 'help' 'Show this help text' accent text
+    _ui_section_break
+    _ui_panel_kv '--only <list>' 'Include comma-separated manager IDs' muted text
+    _ui_panel_kv '--skip <list>' 'Exclude comma-separated manager IDs' muted text
+    _ui_panel_kv '--sudo' 'Allow privileged upgrade backends to run' muted text
+    _ui_panel_kv '--dry-run' 'Preview upgrades instead of running them' muted text
+    _ui_section_break
+    _ui_panel_kv 'Managers' 'apt, dnf, pacman, paru, brew, flatpak, nix, npm' muted text
+    _ui_panel_kv 'Preview' 'upkg plan --only brew,npm' muted text
+    _ui_panel_kv 'Upgrade' 'upkg upgrade --sudo --only apt' muted text
+    return 0
+  fi
+
   print 'Usage: upkg [command] [args] [--only <list>] [--skip <list>] [--sudo] [--dry-run]'
   print ''
   print 'Commands:'
@@ -1016,6 +1039,14 @@ _upkg_usage() {
 }
 
 _upkg_search_usage() {
+  if ! _ui_plain_mode; then
+    _ui_title_line 'Package Search' 'usage' accent '󰍉' '*'
+    _ui_section_break
+    _ui_panel_kv 'Usage' 'upkg search <query> [--only <list>] [--skip <list>]' muted text
+    _ui_panel_kv 'Example' 'upkg search ripgrep --only npm,flatpak' muted text
+    return 0
+  fi
+
   print 'Usage: upkg search <query> [--only <list>] [--skip <list>]'
   print 'Example: upkg search ripgrep --only npm,flatpak'
 }
@@ -2772,6 +2803,23 @@ upkg() {
     return 0
   fi
 
+  if ! _ui_plain_mode; then
+    _UPKG_THEME_MODE=1
+    case $cmd in
+      search)
+        _ui_title_line 'Package Search' "$query" accent '󰍉' '*'
+        ;;
+      managers)
+        _ui_title_line 'Detected Managers' 'upkg managers' accent '󰒓' '*'
+        ;;
+      *)
+        _ui_title_line 'Package Dashboard' "$cmd" accent '󰏖' '*'
+        ;;
+    esac
+    [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
+    [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
+  fi
+
   _upkg_detect_managers
 
   if (( ${#_UPKG_ACTIVE_MANAGERS[@]} == 0 && ${#_UPKG_ALTERNATE_MANAGERS[@]} == 0 )); then
@@ -2785,10 +2833,6 @@ upkg() {
   done
 
   if [ "$cmd" = 'managers' ]; then
-    if ! _ui_plain_mode; then
-      _UPKG_THEME_MODE=1
-    fi
-
     if [ -n "$only_raw" ] || [ -n "$skip_raw" ]; then
       _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
       filtered=1
@@ -2814,9 +2858,6 @@ upkg() {
     if _ui_plain_mode || [ -z "${_UPKG_THEME_MODE:-}" ]; then
       print 'Detected managers:'
     else
-      _ui_title_line 'Detected Managers' 'upkg managers' accent '󰒓' '*'
-      [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
-      [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
       _ui_section_break
     fi
 
@@ -2881,19 +2922,6 @@ upkg() {
   fi
 
   _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
-
-  if [ "$cmd" = 'outdated' ] || [ "$cmd" = 'plan' ] || [ "$cmd" = 'search' ]; then
-    if ! _ui_plain_mode; then
-      _UPKG_THEME_MODE=1
-      if [ "$cmd" = 'search' ]; then
-        _ui_title_line 'Package Search' "$query" accent '󰍉' '*'
-      else
-        _ui_title_line 'Package Dashboard' "$cmd" accent '󰏖' '*'
-      fi
-      [ -n "$only_raw" ] && _ui_panel_kv 'Only' "$only_raw" muted text
-      [ -n "$skip_raw" ] && _ui_panel_kv 'Skip' "$skip_raw" muted text
-    fi
-  fi
 
   if (( ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
     print -u2 -- 'No package managers selected after applying filters.'

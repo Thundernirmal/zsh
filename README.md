@@ -78,6 +78,8 @@ Missing optional tools keep the shell usable. The config uses runtime checks and
 
 Default `upkg`, `upkg outdated`, `upkg check`, `upkg list`, `upkg search`, `upkg plan`, and `--dry-run` flows are read-only. Upgrades only run through `upkg upgrade`, `upkg up`, or `upkg update`; privileged distro upgrades require explicit `--sudo`.
 
+In rich terminals, every valid `upkg` command path—including help and upgrades—uses the shared dashboard theme. Operational commands include themed titles, manager sections, and summaries; help uses themed command and flag panels. Pipes, redirects, and other plain contexts keep script-friendly output.
+
 `npkg` is defined only when `nix` is available. Interactive `npkg` pickers and `npkg refresh`/`outdated` need `jq`, and the pickers also need `fzf` plus a real terminal.
 
 See [`GUIDE.md`](./GUIDE.md#unified-package-updates-upkg) for the full command reference.
