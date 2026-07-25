@@ -11,6 +11,6 @@ export FZF_CTRL_R_OPTS="
   --color header:italic
   --header 'Press ? to toggle the command preview'"
 
-if command -v fzf >/dev/null 2>&1 && [[ -o interactive ]] && [[ -z "$ZSH_EXECUTION_STRING" ]]; then
+if (( $+commands[fzf] )) && [[ -o interactive ]] && [[ -z "$ZSH_EXECUTION_STRING" ]]; then
   eval "$(fzf --zsh)"
 fi

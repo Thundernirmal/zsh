@@ -1,5 +1,7 @@
 # Shared aliases.
-if command -v lsd >/dev/null 2>&1; then
+# Startup-time tool checks use $+commands (zsh's prehashed command table) instead of
+# `command -v`: a miss costs a full PATH walk, which is very slow on long PATHs.
+if (( $+commands[lsd] )); then
   alias ls='lsd'
   alias ll='lsd -lah --group-dirs=first'
   alias la='lsd -A'
@@ -15,7 +17,7 @@ else
     alias la='command ls -A'
   fi
 
-  if command -v tree >/dev/null 2>&1; then
+  if (( $+commands[tree] )); then
     alias lt='tree -L 3 -a -C'
   fi
 fi
@@ -33,7 +35,7 @@ alias mv='mv -iv'
 alias rm='rm -iv'
 
 # File viewing
-if command -v bat >/dev/null 2>&1; then
+if (( $+commands[bat] )); then
   alias cat='bat --style=numbers --paging=never'
 fi
 

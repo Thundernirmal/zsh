@@ -1,4 +1,6 @@
 # On-demand tips from across the shared shell config.
+# Tool availability is checked with $+commands (zsh's prehashed command table) rather
+# than `command -v`, which walks PATH on every miss and dominates startup time here.
 
 _zsh_tip_pool=(
   "Use .. / ... / .... to go up 1/2/3 levels quickly"
@@ -44,14 +46,14 @@ _zsh_tip_pool=(
   "Combine globals: git log G fix W counts commits mentioning fix"
 )
 
-if command -v zoxide >/dev/null 2>&1; then
+if (( $+commands[zoxide] )); then
   _zsh_tip_pool+=(
     "Use z <pattern> to jump to directories zoxide remembers"
     "Use zi for an interactive zoxide directory picker"
   )
 fi
 
-if command -v fzf >/dev/null 2>&1 && [[ -o interactive ]] && [[ -z "$ZSH_EXECUTION_STRING" ]]; then
+if (( $+commands[fzf] )) && [[ -o interactive ]] && [[ -z "$ZSH_EXECUTION_STRING" ]]; then
   _zsh_tip_pool+=(
     "Press Ctrl+R to fuzzy search your command history"
     "Press Ctrl+T to fuzzy insert a file path at your cursor"
@@ -65,21 +67,21 @@ if alias lt >/dev/null 2>&1; then
   )
 fi
 
-if command -v nix >/dev/null 2>&1; then
+if (( $+commands[nix] )); then
   _zsh_tip_pool+=(
     "Run npkg add bat for a short nix profile add command"
     "Run npkg search ripgrep to search nixpkgs with package descriptions"
   )
 fi
 
-if command -v nix >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+if (( $+commands[nix] && $+commands[jq] )); then
   _zsh_tip_pool+=(
     "Run npkg refresh to rebuild the cached nixpkgs picker index (requires jq)"
     "Run npkg outdated to preview available package upgrades before running npkg upgrade"
   )
 fi
 
-if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+if (( $+commands[nix] && $+commands[fzf] && $+commands[jq] )); then
   _zsh_tip_pool+=(
     "Run npkg install with no args to fuzzy-pick nixpkgs attribute names"
     "Run npkg find nvim to seed the nix package picker with an initial query"
@@ -89,7 +91,7 @@ if command -v nix >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1 && command -
   )
 fi
 
-if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v brew >/dev/null 2>&1 || command -v flatpak >/dev/null 2>&1 || (command -v nix >/dev/null 2>&1 && (( $+functions[npkg] ))) || command -v npm >/dev/null 2>&1; then
+if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] || $+commands[brew] || $+commands[flatpak] || ($+commands[nix] && $+functions[npkg]) || $+commands[npm] )); then
   _zsh_tip_pool+=(
     "Run upkg to list outdated packages across detected package managers"
     "Run upkg search ripgrep to compare matches from detected managers in one compact table"
@@ -106,7 +108,7 @@ if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || comma
   )
 fi
 
-if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
+if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] )); then
   _zsh_tip_pool+=(
     "Run upkg upgrade --sudo to opt into system package upgrades explicitly"
   )

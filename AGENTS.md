@@ -8,7 +8,11 @@
 
 ## Edit Rules
 
-- Keep external tool integrations guarded with `command -v ... >/dev/null 2>&1` and preserve clean fallbacks. This repo is meant to stay portable across machines with different tool sets.
+- Keep external tool integrations guarded and preserve clean fallbacks. This repo is meant to stay portable across machines with different tool sets.
+- Which guard to use depends on when it runs:
+  - Startup-time guards (top level of a module, evaluated on every shell start) use `(( $+commands[tool] ))`. A `command -v` miss walks the whole `PATH`, which dominates startup time on long `PATH`s such as WSL2 setups that inherit Windows entries.
+  - Guards inside function bodies keep `command -v ... >/dev/null 2>&1`. `$commands` is a cached hash, so it can go stale mid-session and it defeats the `PATH`-stubbed fake binaries in `scripts/test-upkg.zsh`.
+- `40-fzf.zsh` also embeds `command -v` inside the exported `FZF_*_OPTS` preview strings. Those run in a separate shell that fzf spawns, so they must stay `command -v`.
 - IMPORTANT: whenever you change a user-facing alias, function, completion behavior, or workflow in this repo, update `80-tips.zsh`, `README.md`, and `GUIDE.md` in the same change so all documentation stays accurate and consistent.
 - If you add or remove a shared external dependency, update `scripts/check-deps.sh` too.
 - `scripts/check-deps.sh` is POSIX `sh`, not Zsh. Keep it portable.

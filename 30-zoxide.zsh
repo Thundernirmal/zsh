@@ -1,4 +1,4 @@
 # Shared zoxide integration.
-if command -v zoxide >/dev/null 2>&1; then
+if (( $+commands[zoxide] )); then
   eval "$(zoxide init zsh)"
 fi
