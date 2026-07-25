@@ -115,8 +115,31 @@ assert_order() {
   print -- "ok: $label"
 }
 
+run_upkg_rich() {
+  (
+    functions[_ui_plain_mode]='return 1'
+    functions[_ui_term_width]='print -r -- 120'
+    functions[_ui_color]=':'
+    functions[_ui_reset]=':'
+    functions[_ui_bold]=':'
+    functions[_ui_icon]='print -nr -- "$2"'
+    upkg "$@"
+  )
+}
+
+run_upkg_rich_without_managers() {
+  (
+    functions[_upkg_detect_managers]='
+      typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
+      _UPKG_ACTIVE_MANAGERS=()
+      _UPKG_ALTERNATE_MANAGERS=()
+    '
+    run_upkg_rich "$@"
+  )
+}
+
 main() {
-  local output cmd_status
+  local output cmd_status route
 
   local default_brew_script='
 case "$*" in
@@ -491,6 +514,78 @@ esac
   assert_status "$cmd_status" 0 'search preserves multi-word query args for backends' || return 1
   assert_contains "$output" 'ripgrep-viewer' 'multi-word search reaches npm as separate argv entries' || return 1
 
+  for route in outdated check list; do
+    output=$(run_upkg_rich "$route" --only=brew)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 "$route succeeds in forced rich mode" || return 1
+    assert_contains "$output" 'Package Dashboard  outdated' "$route reaches the rich outdated dashboard" || return 1
+  done
+
+  output=$(run_upkg_rich --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'default command succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Package Dashboard  outdated' 'default command reaches the rich outdated dashboard' || return 1
+
+  output=$(run_upkg_rich search ripgrep --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Package Search  ripgrep' 'search reaches the rich search dashboard' || return 1
+
+  output=$(run_upkg_rich plan --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'plan succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Package Dashboard  plan' 'plan reaches the rich plan dashboard' || return 1
+
+  output=$(run_upkg_rich upgrade --dry-run --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'upgrade dry-run succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Package Dashboard  plan' 'upgrade dry-run reaches the rich plan dashboard' || return 1
+
+  output=$(run_upkg_rich --dry-run --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'default dry-run succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Package Dashboard  plan' 'default dry-run reaches the rich plan dashboard' || return 1
+
+  output=$(run_upkg_rich managers --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'managers succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Detected Managers  upkg managers' 'managers reaches the rich manager dashboard' || return 1
+
+  for route in help -h --help; do
+    output=$(run_upkg_rich "$route")
+    cmd_status=$?
+    assert_status "$cmd_status" 0 "$route succeeds in forced rich mode" || return 1
+    assert_contains "$output" 'Unified Package Updates  upkg help' "$route reaches the rich help dashboard" || return 1
+  done
+
+  output=$(run_upkg_rich search --help)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search help succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Unified Package Updates  upkg help' 'search help reaches the rich help dashboard' || return 1
+
+  output=$(run_upkg_rich --only=unsupported 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'invalid filter fails in forced rich mode' || return 1
+  assert_contains "$output" 'Package Dashboard  outdated' 'invalid filter retains the rich command header' || return 1
+  assert_contains "$output" 'Unsupported manager id: unsupported' 'invalid filter retains its error detail' || return 1
+
+  output=$(run_upkg_rich unknown 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'unknown command fails in forced rich mode' || return 1
+  assert_contains "$output" 'Unified Package Updates  upkg help' 'unknown command reaches the rich usage dashboard' || return 1
+  assert_contains "$output" 'Unknown argument: unknown' 'unknown command retains its error detail' || return 1
+
+  output=$(run_upkg_rich search 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'missing search query fails in forced rich mode' || return 1
+  assert_contains "$output" 'Package Search  usage' 'missing search query reaches the rich search usage panel' || return 1
+
+  output=$(run_upkg_rich_without_managers 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'missing managers fails in forced rich mode' || return 1
+  assert_contains "$output" 'Package Dashboard  outdated' 'missing managers retains the rich command header' || return 1
+  assert_contains "$output" 'No supported package managers detected.' 'missing managers retains its error detail' || return 1
+
   output=$(upkg plan --only=paru)
   cmd_status=$?
   assert_status "$cmd_status" 0 'paru plan succeeds when repo and AUR checks succeed' || return 1
@@ -505,6 +600,22 @@ esac
   assert_status "$cmd_status" 0 'brew upgrade runs without sudo gating' || return 1
   assert_contains "$output" 'brew upgrade' 'brew upgrade invokes brew directly' || return 1
   assert_contains "$output" 'brew: upgraded' 'brew upgrade summary marks backend upgraded' || return 1
+
+  output=$(run_upkg_rich upgrade --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'brew upgrade succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Package Dashboard' 'upgrade path renders the rich dashboard title' || return 1
+  assert_contains "$output" 'Package Dashboard  upgrade' 'upgrade path shows the active command in the rich title' || return 1
+  assert_contains "$output" 'Homebrew' 'upgrade path renders the rich manager section' || return 1
+  assert_not_contains "$output" '==> Homebrew' 'upgrade path avoids the plain manager heading in rich mode' || return 1
+  assert_not_contains "$output" 'Summary:' 'upgrade path avoids the plain summary heading in rich mode' || return 1
+
+  for route in up update; do
+    output=$(run_upkg_rich "$route" --only=brew)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 "$route succeeds in forced rich mode" || return 1
+    assert_contains "$output" 'Package Dashboard  upgrade' "$route reaches the rich upgrade dashboard" || return 1
+  done
 
   write_fake brew '
 case "$*" in

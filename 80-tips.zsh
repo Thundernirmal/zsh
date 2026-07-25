@@ -102,6 +102,7 @@ if command -v paru >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1 || comma
     "Run upkg managers --only=npm,flatpak to confirm selected execution order before upgrading"
     "On Arch-family systems, upkg treats empty repo and AUR outdated checks as up to date instead of surfacing a false failure"
     "Run upkg plan or upkg --dry-run to preview upgrades without changing packages"
+    "In rich terminals, every upkg command path—including help and upgrades—uses the shared dashboard theme"
     "Use upkg --only=flatpak,npm to limit checks to selected managers"
   )
 fi
