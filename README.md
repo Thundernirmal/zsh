@@ -13,6 +13,7 @@ This directory contains the portable, versioned part of the Zsh setup. It is mea
 | `50-completion.zsh` | Lightweight completion `zstyle`s; assumes `compinit` already ran |
 | `55-ui-helpers.zsh` | Shared rich-terminal UI helpers with plain fallbacks |
 | `60-functions.zsh` | Shell helpers such as `extract`, `ff`, `ft`, `path`, `fbr`, `dusage`, `upkg`, and `npkg` |
+| `65-help.zsh` | Command catalogue, availability checks, plain help, and the searchable `zhelp` palette |
 | `66-compdefs.zsh` | Guarded command-aware completions for the custom function suite |
 | `70-globals.zsh` | Global aliases for pipes and redirection (`G`, `L`, `W`, `H`, `T`, `NE`, `NUL`) |
 | `80-tips.zsh` | On-demand `tips` function |
@@ -65,8 +66,10 @@ Missing optional tools keep the shell usable. The config uses runtime checks and
 - External integrations are guarded before use. Startup-time guards use zsh's prehashed `$+commands` table so a missing tool costs no `PATH` walk; guards inside functions use `command -v` so they stay correct when `PATH` changes mid-session.
 - `40-fzf.zsh` initializes `fzf --zsh` only for normal interactive startup, which avoids `zle` warnings in `zsh -i -c ...` paths.
 - `50-completion.zsh` intentionally stays small and assumes the main `~/.zshrc` or framework already ran `compinit`.
+- `65-help.zsh` registers catalogue data without launching subprocesses. `zhelp` checks the live shell only when invoked.
 - `66-compdefs.zsh` registers custom completions only when `compdef` is available. Without `compinit`, it is a silent no-op.
 - `upkg` completion covers subcommands, aliases, flags, and comma-separated manager IDs. `npkg` completion reads an existing attribute cache when available but never runs Nix or refreshes the cache from Tab.
+- `zhelp` uses fzf only in a suitable interactive terminal. Enter queues the selected example for editing and never executes it; pipes, redirects, missing fzf, `TERM=dumb`, and `--plain` use stable plain text.
 - Rich dashboards are used only in real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`; pipes, redirects, `TERM=dumb`, and narrow terminals get plain output.
 - Set `NO_NERD_FONT=1` to keep colors while forcing ASCII-safe icons and bars.
 - `path` uses rich indexed output in capable terminals and stays one-entry-per-line in plain contexts.
@@ -74,6 +77,20 @@ Missing optional tools keep the shell usable. The config uses runtime checks and
 - `fkill` defaults to `SIGTERM` for graceful shutdown; pass `9` explicitly when a process must be force-killed.
 - `tips` is hook-free and only prints when called manually.
 - This shared config targets GNU/Linux environments. Commands such as `ss`, GNU color flags, and several `find`/`du` flows are Linux-oriented.
+
+## Command Help
+
+Run `zhelp` to browse the commands and important aliases defined by this repository. Search terms match command names, categories, descriptions, usage strings, and examples.
+
+```zsh
+zhelp                  # open fzf, or list available commands in plain mode
+zhelp package          # filter the palette or plain list
+zhelp upkg             # show the exact command record
+zhelp --all npkg       # include an unavailable command and explain its requirements
+zhelp --plain file     # force deterministic text suitable for pipes
+```
+
+The default view hides commands that are unusable in the current shell. `--all` includes them with dependency and availability details. Interactive selection inserts the catalogue example into the command buffer with `print -z`; it does not evaluate or execute the text.
 
 ## Package Helpers
 
@@ -98,6 +115,7 @@ zsh scripts/test-init.zsh
 zsh scripts/test-functions.zsh
 zsh scripts/test-upkg.zsh
 zsh scripts/test-completions.zsh
+zsh scripts/test-help.zsh
 zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
 ```
 

@@ -93,6 +93,7 @@ test_registration() {
     bigfiles _zsh_bigfiles
     fkill _zsh_fkill
     headers _zsh_headers
+    zhelp _zsh_zhelp
     fbr _zsh_no_arguments
     croot _zsh_no_arguments
     path _zsh_no_arguments
@@ -108,6 +109,7 @@ test_registration() {
 
   unset '_comps[npkg]'
   unfunction npkg 2>/dev/null || true
+  source "$repo_dir/65-help.zsh"
   source "$repo_dir/66-compdefs.zsh"
 
   for command_name expected in ${(kv)mappings}; do
@@ -119,6 +121,20 @@ test_registration() {
   npkg() { :; }
   source "$repo_dir/66-compdefs.zsh"
   assert_equals "${_comps[npkg]-}" '_zsh_npkg' 'npkg is registered when its function exists' || return 1
+}
+
+test_zhelp_values() {
+  local spec
+  local -a captured values
+
+  _describe() { captured=( "${(@P)4}" ); }
+  _zsh_zhelp_commands
+  for spec in "${captured[@]}"; do
+    values+=("${spec%%:*}")
+  done
+  unfunction _describe
+
+  assert_equals "${(j: :)values}" "${(j: :)_ZSH_HELP_ORDER}" 'zhelp completion offers every catalogue command' || return 1
 }
 
 test_static_values() {
@@ -220,6 +236,7 @@ printf "%s\n" "$0" >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/$tool"
 main() {
   test_without_compinit || return 1
   test_registration || return 1
+  test_zhelp_values || return 1
   test_static_values || return 1
   test_cached_npkg_attributes || return 1
   test_source_has_no_subprocesses || return 1

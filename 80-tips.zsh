@@ -41,6 +41,7 @@ _zsh_tip_pool=(
   "Command spell-correction prompts are intentionally disabled"
   "Tab completion is case-insensitive for names and paths"
   "Custom commands complete only the argument types they accept, such as archives, directories, counts, URLs, and signals"
+  "Run zhelp to search available commands and queue an editable example without executing it"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
   "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"

@@ -50,3 +50,9 @@ jobs:
 
       - name: Run completion regression tests
         run: zsh scripts/test-completions.zsh
+
+      - name: Check help regression test syntax
+        run: zsh -n scripts/test-help.zsh
+
+      - name: Run help regression tests
+        run: zsh scripts/test-help.zsh
