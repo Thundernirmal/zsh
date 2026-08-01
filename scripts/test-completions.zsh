@@ -104,7 +104,7 @@ test_registration() {
   )
 
   autoload -Uz compinit
-  compinit -D
+  compinit -D -i
 
   unset '_comps[npkg]'
   unfunction npkg 2>/dev/null || true
