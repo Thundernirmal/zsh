@@ -40,6 +40,7 @@ _zsh_tip_pool=(
   "file2 sorts before file10 because NUMERIC_GLOB_SORT is enabled"
   "Command spell-correction prompts are intentionally disabled"
   "Tab completion is case-insensitive for names and paths"
+  "Custom commands complete only the argument types they accept, such as archives, directories, counts, URLs, and signals"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
   "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"
@@ -71,6 +72,7 @@ if (( $+commands[nix] )); then
   _zsh_tip_pool+=(
     "Run npkg add bat for a short nix profile add command"
     "Run npkg search ripgrep to search nixpkgs with package descriptions"
+    "Press Tab after npkg to browse its commands; cached package attributes are offered without running Nix"
   )
 fi
 
@@ -106,6 +108,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Run upkg plan or upkg --dry-run to preview upgrades without changing packages"
     "In rich terminals, every upkg command path—including help and upgrades—uses the shared dashboard theme"
     "Use upkg --only=flatpak,npm to limit checks to selected managers"
+    "Press Tab after upkg or --only= to browse commands, flags, and supported manager IDs"
   )
 fi
 

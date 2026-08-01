@@ -44,3 +44,9 @@ jobs:
 
       - name: Run upkg smoke test
         run: zsh scripts/test-upkg.zsh
+
+      - name: Check completion regression test syntax
+        run: zsh -n scripts/test-completions.zsh
+
+      - name: Run completion regression tests
+        run: zsh scripts/test-completions.zsh
