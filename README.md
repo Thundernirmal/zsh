@@ -13,6 +13,7 @@ This directory contains the portable, versioned part of the Zsh setup. It is mea
 | `50-completion.zsh` | Lightweight completion `zstyle`s; assumes `compinit` already ran |
 | `55-ui-helpers.zsh` | Shared rich-terminal UI helpers with plain fallbacks |
 | `60-functions.zsh` | Shell helpers such as `extract`, `ff`, `ft`, `path`, `fbr`, `dusage`, `upkg`, and `npkg` |
+| `66-compdefs.zsh` | Guarded command-aware completions for the custom function suite |
 | `70-globals.zsh` | Global aliases for pipes and redirection (`G`, `L`, `W`, `H`, `T`, `NE`, `NUL`) |
 | `80-tips.zsh` | On-demand `tips` function |
 
@@ -64,6 +65,8 @@ Missing optional tools keep the shell usable. The config uses runtime checks and
 - External integrations are guarded before use. Startup-time guards use zsh's prehashed `$+commands` table so a missing tool costs no `PATH` walk; guards inside functions use `command -v` so they stay correct when `PATH` changes mid-session.
 - `40-fzf.zsh` initializes `fzf --zsh` only for normal interactive startup, which avoids `zle` warnings in `zsh -i -c ...` paths.
 - `50-completion.zsh` intentionally stays small and assumes the main `~/.zshrc` or framework already ran `compinit`.
+- `66-compdefs.zsh` registers custom completions only when `compdef` is available. Without `compinit`, it is a silent no-op.
+- `upkg` completion covers subcommands, aliases, flags, and comma-separated manager IDs. `npkg` completion reads an existing attribute cache when available but never runs Nix or refreshes the cache from Tab.
 - Rich dashboards are used only in real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`; pipes, redirects, `TERM=dumb`, and narrow terminals get plain output.
 - Set `NO_NERD_FONT=1` to keep colors while forcing ASCII-safe icons and bars.
 - `path` uses rich indexed output in capable terminals and stays one-entry-per-line in plain contexts.
@@ -93,6 +96,8 @@ zsh -n *.zsh
 sh -n scripts/check-deps.sh
 zsh scripts/test-init.zsh
 zsh scripts/test-functions.zsh
+zsh scripts/test-upkg.zsh
+zsh scripts/test-completions.zsh
 zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
 ```
 

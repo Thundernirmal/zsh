@@ -19,6 +19,7 @@ for zsh_config_file in \
   "$HOME/.config/zsh/50-completion.zsh" \
   "$HOME/.config/zsh/55-ui-helpers.zsh" \
   "$HOME/.config/zsh/60-functions.zsh" \
+  "$HOME/.config/zsh/66-compdefs.zsh" \
   "$HOME/.config/zsh/70-globals.zsh" \
   "$HOME/.config/zsh/80-tips.zsh"; do
   if [ -r "$zsh_config_file" ]; then

@@ -12,6 +12,7 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
 ├── 55-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers, title lines, and consistent section separators
 ├── 60-functions.zsh        → Shell functions (extract, search, kill, fanprofile, git helpers, upkg, npkg, etc.)
+├── 66-compdefs.zsh          → Command-aware completion for custom functions
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
 └── 80-tips.zsh             → On-demand tips function
 ```
@@ -305,7 +306,7 @@ The picker uses matching pointer and marker glyphs when Nerd Fonts are enabled.
 
 ## Tab Completion
 
-Configured in `50-completion.zsh`. OMZ / `compinit` provides the base; this file adds lightweight tuning only.
+Configured in two layers. `50-completion.zsh` keeps the global styles lightweight, while `66-compdefs.zsh` adds command-specific definitions after the custom functions load. OMZ / `compinit` still provides the completion system itself; if `compdef` is unavailable, the command-specific module silently does nothing.
 
 ### Case-insensitive matching
 
@@ -326,7 +327,25 @@ Extra slashes are cleaned up during path completion automatically.
 kill <Tab>    # shows PID, user, command for each process
 ```
 
-> **Note:** Heavy completion UI features (menu selection, colored listings, grouped results, per-option descriptions) were intentionally removed because they made completion lists noticeably slower. If you want them, add them locally in `~/.zshrc` after sourcing `init.zsh`.
+### Custom command completion
+
+The shared command suite completes arguments according to what each function accepts:
+
+```zsh
+upkg <Tab>                 # commands and aliases
+upkg --only=<Tab>          # apt, dnf, pacman, paru, brew, flatpak, nix, npm
+upkg --only=apt,<Tab>      # remaining manager IDs in the same argument
+npkg <Tab>                 # commands and aliases, when npkg is available
+extract <Tab>              # supported archive types only
+ff pattern <Tab>           # search root directories
+fkill <Tab>                # signal names and numbers
+```
+
+`npkg add` and picker-oriented `npkg find` completion may read attribute names from files already under `${XDG_CACHE_HOME:-~/.cache}/npkg/`. A missing cache produces no package candidates. Tab never runs `nix search`, `nix eval`, `nix profile list`, a cache refresh, or a network lookup.
+
+File, directory, numeric-count, URL, signal, and no-argument functions also suppress irrelevant fallback completion where appropriate. All completion work is deferred until Tab is pressed, and sourcing the module launches no subprocesses.
+
+> **Note:** Heavy global completion UI features such as menu selection, colored listings, and grouped results remain intentionally disabled because they made completion lists noticeably slower. The concise descriptions attached to custom commands do not enable those global UI layers. Add any heavier presentation locally in `~/.zshrc` after sourcing `init.zsh`.
 
 ---
 
@@ -826,6 +845,10 @@ npkg refresh        → rebuild nixpkgs attribute cache
 ```
 <Tab>               → trigger completion (case-insensitive)
 kill <Tab>          → shows process list with PID, user, command
+upkg <Tab>          → commands, aliases, and flags
+upkg --only=<Tab>   → comma-separated package-manager IDs
+npkg <Tab>          → commands and aliases when Nix is available
+extract <Tab>       → supported archive files only
 ```
 
 ### History
