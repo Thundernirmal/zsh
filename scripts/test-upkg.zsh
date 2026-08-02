@@ -152,6 +152,21 @@ run_upkg_with_managers() {
   )
 }
 
+run_upkg_as_root_with_managers() {
+  local manager_spec=$1
+  shift
+
+  (
+    functions[_upkg_is_root]='return 0'
+    functions[_upkg_detect_managers]="
+      typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
+      _UPKG_ACTIVE_MANAGERS=($manager_spec)
+      _UPKG_ALTERNATE_MANAGERS=()
+    "
+    upkg "$@"
+  )
+}
+
 run_upkg_rich_with_managers() {
   local manager_spec=$1
   shift
@@ -761,6 +776,9 @@ esac
   local clean_log="$tmp_prefix/upkg-clean-invocations"
   export UPKG_TEST_CLEAN_LOG=$clean_log
 
+  # Exercise the non-root cleanup contract regardless of the test runner's UID.
+  functions[_upkg_is_root]='return 1'
+
   write_fake sudo '
 printf "%s\n" "sudo $*" >> "$UPKG_TEST_CLEAN_LOG"
 exec "$@"
@@ -881,6 +899,16 @@ esac
   assert_contains "$output" 'nix-collect-garbage --dry-run' 'nix preview uses garbage collector dry-run' || return 1
   assert_contains "$output" 'npm cache npx ls' 'npm preview lists the npx cache' || return 1
 
+  : > "$clean_log"
+  output=$(run_upkg_as_root_with_managers 'apt dnf pacman' clean --dry-run --only=apt,dnf,pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'cleanup dry-run succeeds in simulated root mode' || return 1
+  assert_contains "$output" 'would run: apt autoclean' 'root APT preview omits sudo' || return 1
+  assert_contains "$output" 'would run: dnf clean all' 'root DNF preview omits sudo' || return 1
+  assert_contains "$output" 'would run: pacman -Rs -- orphan-one orphan-two' 'root Pacman preview omits sudo' || return 1
+  assert_not_contains "$output" 'would run: sudo ' 'root cleanup previews never display sudo' || return 1
+  assert_not_contains "$(<"$clean_log")" 'sudo ' 'root cleanup dry-run never invokes sudo' || return 1
+
   output=$(run_upkg_with_managers 'brew npm' clean --dry-run --only=npm,brew)
   cmd_status=$?
   assert_status "$cmd_status" 0 'cleanup honors explicit only order' || return 1
@@ -923,6 +951,17 @@ esac
   assert_not_contains "$output" ' -y' 'distro cleanup sends no automatic confirmation flag' || return 1
   assert_not_contains "$output" '-Scc' 'pacman cleanup avoids aggressive cache deletion' || return 1
   assert_not_contains "$output" '-Rn' 'pacman cleanup preserves backup configuration' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_as_root_with_managers 'apt dnf pacman' clean --only=apt,dnf,pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'distro cleanup succeeds in simulated root mode without --sudo' || return 1
+  output=$(<"$clean_log")
+  assert_order "$output" 'apt autoremove' 'apt autoclean' 'root APT cleanup runs directly in phase order' || return 1
+  assert_order "$output" 'dnf autoremove' 'dnf clean all' 'root DNF cleanup runs directly in phase order' || return 1
+  assert_order "$output" 'pacman -Qtdq' 'pacman -Rs -- orphan-one orphan-two' 'root Pacman cleanup removes its orphan array directly' || return 1
+  assert_order "$output" 'pacman -Rs -- orphan-one orphan-two' 'pacman -Sc' 'root Pacman cleanup runs directly in phase order' || return 1
+  assert_not_contains "$output" 'sudo ' 'root distro cleanup never invokes sudo' || return 1
 
   write_fake pacman '
 printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"

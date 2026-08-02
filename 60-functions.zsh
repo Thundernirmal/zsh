@@ -1447,8 +1447,12 @@ _upkg_run_cleanup_step() {
   _upkg_record_cleanup_result "$rc" "$failure_detail"
 }
 
+_upkg_is_root() {
+  (( EUID == 0 ))
+}
+
 _upkg_cleanup_privilege_prefix() {
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     print -r -- ''
   else
     print -r -- 'sudo '
@@ -1515,7 +1519,7 @@ _upkg_print_npm_prefix_hint() {
 _upkg_require_sudo_command() {
   emulate -L zsh
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     return 0
   fi
 
@@ -2590,7 +2594,7 @@ _upkg_run_upgrade_apt() {
 
   _upkg_print_section apt
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'apt upgrade requires root; rerun with: upkg upgrade --sudo --only apt'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only apt'
     return 0
@@ -2598,7 +2602,7 @@ _upkg_run_upgrade_apt() {
 
   _upkg_require_sudo_command || return 0
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     command apt update
     rc=$?
     if (( rc != 0 )); then
@@ -2627,7 +2631,7 @@ _upkg_run_upgrade_dnf() {
 
   _upkg_print_section dnf
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'dnf upgrade requires root; rerun with: upkg upgrade --sudo --only dnf'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only dnf'
     return 0
@@ -2635,7 +2639,7 @@ _upkg_run_upgrade_dnf() {
 
   _upkg_require_sudo_command || return 0
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     command dnf upgrade --refresh
   else
     command sudo dnf upgrade --refresh
@@ -2652,7 +2656,7 @@ _upkg_run_upgrade_pacman() {
 
   _upkg_print_section pacman
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'pacman upgrade requires root; rerun with: upkg upgrade --sudo --only pacman'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only pacman'
     return 0
@@ -2660,7 +2664,7 @@ _upkg_run_upgrade_pacman() {
 
   _upkg_require_sudo_command || return 0
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     command pacman -Syu
   else
     command sudo pacman -Syu
@@ -2777,7 +2781,7 @@ _upkg_run_clean_apt() {
     return $?
   fi
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'apt cleanup requires root; rerun with: upkg clean --sudo --only apt'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only apt'
     return 0
@@ -2786,14 +2790,14 @@ _upkg_run_clean_apt() {
   _upkg_require_sudo_command || return 0
 
   _upkg_print_cleanup_phase 'Unused packages'
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     _upkg_run_cleanup_step 'apt autoremove failed' apt autoremove
   else
     _upkg_run_cleanup_step 'apt autoremove failed' sudo apt autoremove
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     _upkg_run_cleanup_step 'apt autoclean failed' apt autoclean
   else
     _upkg_run_cleanup_step 'apt autoclean failed' sudo apt autoclean
@@ -2825,7 +2829,7 @@ _upkg_run_clean_dnf() {
     return $?
   fi
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'dnf cleanup requires root; rerun with: upkg clean --sudo --only dnf'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only dnf'
     return 0
@@ -2834,14 +2838,14 @@ _upkg_run_clean_dnf() {
   _upkg_require_sudo_command || return 0
 
   _upkg_print_cleanup_phase 'Unused packages'
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     _upkg_run_cleanup_step 'dnf autoremove failed' dnf autoremove
   else
     _upkg_run_cleanup_step 'dnf autoremove failed' sudo dnf autoremove
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     _upkg_run_cleanup_step 'dnf clean all failed' dnf clean all
   else
     _upkg_run_cleanup_step 'dnf clean all failed' sudo dnf clean all
@@ -2859,7 +2863,7 @@ _upkg_run_clean_pacman() {
 
   _upkg_print_section pacman
 
-  if (( ! _UPKG_DRY_RUN && EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_DRY_RUN && ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'pacman cleanup requires root; rerun with: upkg clean --sudo --only pacman'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only pacman'
     return 0
@@ -2883,7 +2887,7 @@ _upkg_run_clean_pacman() {
       print -r -- "would run: ${prefix}pacman -Rs -- ${(j: :)orphans}"
       (( succeeded++ ))
     else
-      if (( EUID == 0 )); then
+      if _upkg_is_root; then
         _upkg_run_cleanup_step 'pacman orphan removal failed' pacman -Rs -- "${orphans[@]}"
       else
         _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}"
@@ -2903,7 +2907,7 @@ _upkg_run_clean_pacman() {
     print -r -- "would run: ${prefix}pacman -Sc"
     (( succeeded++ ))
   else
-    if (( EUID == 0 )); then
+    if _upkg_is_root; then
       _upkg_run_cleanup_step 'pacman -Sc failed' pacman -Sc
     else
       _upkg_run_cleanup_step 'pacman -Sc failed' sudo pacman -Sc
