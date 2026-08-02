@@ -76,6 +76,7 @@ Missing optional tools keep the shell usable. The config uses runtime checks and
 - Set `NO_NERD_FONT=1` to keep colors while forcing ASCII-safe icons and bars.
 - `path` uses rich indexed output in capable terminals and stays one-entry-per-line in plain contexts.
 - `path` preserves empty `PATH` components exactly; rich output labels them as `.`, while plain output keeps the corresponding empty lines.
+- `dusage`, `bigfiles`, and `path` sanitize filesystem- and environment-controlled labels before measuring or rendering them. Control bytes become visible escapes such as `\e`, `\n`, or `\x7f`, while ordinary ASCII and printable Unicode remain unchanged.
 - `fkill` defaults to `SIGTERM` for graceful shutdown; pass `9` explicitly when a process must be force-killed.
 - `tips` is hook-free and only prints when called manually.
 - This shared config targets GNU/Linux environments. Commands such as `ss`, GNU color flags, and several `find`/`du` flows are Linux-oriented.

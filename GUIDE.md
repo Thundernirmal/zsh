@@ -453,7 +453,7 @@ headers https://example.com  # follows redirects and prints response headers
 
 Shows the largest immediate children of a directory, including dotfiles, sorted by size.
 
-In rich terminals it renders a responsive dashboard with icons, sizes, and proportional bars. In pipes or narrow terminals it prints a sorted size-and-path list. If one child is unreadable, `dusage` still shows the readable entries instead of failing the whole listing. Control characters in valid filenames are escaped so each entry stays on one output line.
+In rich terminals it renders a responsive dashboard with icons, sizes, and proportional bars. In pipes or narrow terminals it prints a sorted size-and-path list. If one child is unreadable, `dusage` still shows the readable entries instead of failing the whole listing. Requested targets and entry paths are sanitized before measurement or styling: controls appear as visible escapes such as `\e`, `\n`, and `\x7f`, so a hostile filename cannot inject terminal behavior or create a second output row. Printable Unicode is preserved.
 
 ```zsh
 dusage           # top 20 largest items, human-readable
@@ -462,7 +462,7 @@ dusage /var 10   # top 10 items in /var
 
 ### bigfiles — Largest files in tree
 
-In rich terminals it renders a responsive dashboard with truncated paths and proportional bars. In pipes or narrow terminals it prints a recursive size-and-path list. If one subtree is unreadable, `bigfiles` still reports the readable files it can inspect. Its scan is NUL-delimited, and control characters in filenames are escaped for unambiguous one-line display.
+In rich terminals it renders a responsive dashboard with truncated paths and proportional bars. In pipes or narrow terminals it prints a recursive size-and-path list. If one subtree is unreadable, `bigfiles` still reports the readable files it can inspect. Its scan is NUL-delimited, and requested targets plus file paths use the same safe-text contract as `dusage`. Truncation is calculated after escaping and never splits a visible escape token.
 
 ```zsh
 bigfiles         # top 20 largest files recursively
@@ -482,7 +482,7 @@ croot            # jumps to ~/projects/myapp
 path    # shows each PATH entry
 ```
 
-In rich terminals it renders a compact dashboard with indexed entries. In pipes, redirects, `TERM=dumb`, `NO_COLOR=1`, or narrow terminals, it prints one PATH entry per line. Empty components, which make the current directory part of command lookup, are preserved; rich output labels them as `.`, while plain output represents them as empty lines.
+In rich terminals it renders a compact dashboard with indexed entries. In pipes, redirects, `TERM=dumb`, `NO_COLOR=1`, or narrow terminals, it prints one PATH entry per line. Empty components, which make the current directory part of command lookup, are preserved; rich output labels them as `.`, while plain output represents them as empty lines. Every environment-controlled entry is sanitized before rendering, so C0, DEL, and C1 controls are visible text rather than active terminal bytes.
 
 ### fbr — Fuzzy-pick and checkout a git branch
 

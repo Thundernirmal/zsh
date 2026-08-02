@@ -173,16 +173,112 @@ _ui_usage_entry_icon() {
   fi
 }
 
-_ui_single_line_path() {
+_ui_safe_text() {
   emulate -L zsh
+  setopt MULTIBYTE
 
   local value=$1
+  local char escaped output=''
+  integer index code
 
-  if [[ $value == *[$'\n\r\t']* ]]; then
-    print -r -- "${(q)value}"
-  else
-    print -r -- "$value"
+  for (( index = 1; index <= ${#value}; index++ )); do
+    char=${value[$index]}
+
+    case $char in
+      $'\n') output+='\n' ;;
+      $'\r') output+='\r' ;;
+      $'\t') output+='\t' ;;
+      $'\e') output+='\e' ;;
+      $'\a') output+='\a' ;;
+      $'\b') output+='\b' ;;
+      $'\f') output+='\f' ;;
+      $'\v') output+='\v' ;;
+      *)
+        printf -v code '%d' "'$char"
+        if (( code < 32 || code == 127 || (code >= 128 && code <= 159) )); then
+          printf -v escaped '\\x%02x' "$code"
+          output+=$escaped
+        else
+          output+=$char
+        fi
+        ;;
+    esac
+  done
+
+  print -r -- "$output"
+}
+
+_ui_safe_truncate() {
+  emulate -L zsh
+
+  local width=$1
+  shift
+
+  local text="$*"
+  local marker='…'
+  local token pair quad prefix='' suffix=''
+  local -a tokens
+  integer index left right token_length
+
+  (( width > 0 )) || {
+    print -r -- ''
+    return 0
+  }
+
+  if _ui_ascii_mode; then
+    marker='...'
   fi
+
+  if (( ${#text} <= width )); then
+    print -r -- "$text"
+    return 0
+  fi
+
+  if (( width <= ${#marker} )); then
+    print -r -- "${marker[1,width]}"
+    return 0
+  fi
+
+  for (( index = 1; index <= ${#text}; index++ )); do
+    token=${text[$index]}
+
+    if [[ $token == $'\\' ]]; then
+      pair=${text[$index,$(( index + 1 ))]}
+      quad=${text[$index,$(( index + 3 ))]}
+
+      if [[ $quad == \\x[0-9a-fA-F][0-9a-fA-F] ]]; then
+        token=$quad
+        (( index += 3 ))
+      else
+        case $pair in
+          '\n'|'\r'|'\t'|'\e'|'\a'|'\b'|'\f'|'\v')
+            token=$pair
+            (( index++ ))
+            ;;
+        esac
+      fi
+    fi
+
+    tokens+=("$token")
+  done
+
+  left=$(( (width - ${#marker}) / 2 ))
+  right=$(( width - ${#marker} - left ))
+
+  for token in "${tokens[@]}"; do
+    token_length=${#token}
+    (( ${#prefix} + token_length <= left )) || break
+    prefix+=$token
+  done
+
+  for (( index = ${#tokens[@]}; index >= 1; index-- )); do
+    token=${tokens[$index]}
+    token_length=${#token}
+    (( ${#suffix} + token_length <= right )) || break
+    suffix="${token}${suffix}"
+  done
+
+  print -r -- "${prefix}${marker}${suffix}"
 }
 
 _ui_profile_role() {
@@ -402,12 +498,14 @@ dusage() {
   local target=${1:-.}
   local limit=${2:-20}
   local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
-  local size_text percent_text header_meta footer_text
+  local size_text percent_text header_meta footer_text display_target
   local scan_status=0 raw_output_file=''
   local -a entries records lines
 
+  display_target=$(_ui_safe_text "$target")
+
   if [ ! -d "$target" ]; then
-    echo "'$target' is not a directory"
+    echo "'$display_target' is not a directory"
     return 1
   fi
 
@@ -420,7 +518,7 @@ dusage() {
 
   entries=( "$target"/*(DN) )
   if (( ${#entries[@]} == 0 )); then
-    echo "No entries found in '$target'"
+    echo "No entries found in '$display_target'"
     return 0
   fi
 
@@ -437,7 +535,7 @@ dusage() {
 
   if (( ${#records[@]} == 0 )); then
     (( scan_status != 0 )) && return $scan_status
-    echo "No entries found in '$target'"
+    echo "No entries found in '$display_target'"
     return 0
   fi
 
@@ -452,7 +550,7 @@ dusage() {
       line=${lines[$plain_idx]}
       kib=${line%%$'\t'*}
       entry_path=${line#*$'\t'}
-      printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_single_line_path "$entry_path")"
+      printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_safe_text "$entry_path")"
     done
     return 0
   fi
@@ -477,7 +575,7 @@ dusage() {
   name_width=$(( width - size_width - percent_width - bar_width - 8 ))
   (( name_width < 10 )) && name_width=10
 
-  header_meta="$target"
+  header_meta=$display_target
   footer_text="showing ${visible_count}/${#lines[@]} entries"
   _ui_title_line 'Disk Usage' "$header_meta" accent '󰋊' '*'
   _ui_panel_kv 'Entries' "${#lines[@]}" muted text
@@ -498,9 +596,9 @@ dusage() {
 
     label=${entry_path##*/}
     [ -n "$label" ] || label=$entry_path
-    label=$(_ui_single_line_path "$label")
+    label=$(_ui_safe_text "$label")
     icon=$(_ui_usage_entry_icon "$entry_path")
-    label=$(_ui_truncate "$name_width" "$label")
+    label=$(_ui_safe_truncate "$name_width" "$label")
 
     _ui_panel_prefix
     print -nr -- "$icon "
@@ -535,12 +633,14 @@ bigfiles() {
   local target=${1:-.}
   local limit=${2:-20}
   local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width
-  local find_status=0 scan_status=0
+  local find_status=0 scan_status=0 display_target
   local path_list_file='' raw_output_file='' line_count=0
   local -a records lines
 
+  display_target=$(_ui_safe_text "$target")
+
   if [ ! -e "$target" ]; then
-    echo "'$target' does not exist"
+    echo "'$display_target' does not exist"
     return 1
   fi
 
@@ -582,7 +682,7 @@ bigfiles() {
       return 0
     fi
 
-    _ui_title_line 'Big Files' "$target" accent '󰉋' '*'
+    _ui_title_line 'Big Files' "$display_target" accent '󰉋' '*'
     _ui_panel_kv 'Status' 'No files found under target' muted text
     _ui_section_break
     print -nr -- '  '
@@ -604,7 +704,7 @@ bigfiles() {
       line=${lines[$plain_idx]}
       kib=${line%%$'\t'*}
       file_path=${line#*$'\t'}
-      printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_single_line_path "$file_path")"
+      printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_safe_text "$file_path")"
     done
     return 0
   fi
@@ -625,7 +725,7 @@ bigfiles() {
   path_width=$(( width - size_width - bar_width - 7 ))
   (( path_width < 10 )) && path_width=10
 
-  _ui_title_line 'Big Files' "$target" accent '󰉋' '*'
+  _ui_title_line 'Big Files' "$display_target" accent '󰉋' '*'
   _ui_panel_kv 'Files found' "$line_count" muted text
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
   _ui_section_break
@@ -643,8 +743,8 @@ bigfiles() {
       label=$file_path
     fi
 
-    label=$(_ui_single_line_path "$label")
-    label=$(_ui_truncate "$path_width" "$label")
+    label=$(_ui_safe_text "$label")
+    label=$(_ui_safe_truncate "$path_width" "$label")
 
     _ui_panel_prefix
     print -nr -- "$icon "
@@ -880,12 +980,14 @@ path() {
   emulate -L zsh
 
   local -a entries
-  local entry shown width index_width path_width
+  local entry display_entry shown width index_width path_width
 
   entries=( "${(@s/:/)PATH}" )
 
   if _ui_plain_mode; then
-    print -l -- "${entries[@]}"
+    for entry in "${entries[@]}"; do
+      _ui_safe_text "$entry"
+    done
     return 0
   fi
 
@@ -902,6 +1004,7 @@ path() {
   for (( idx = 1; idx <= shown; idx++ )); do
     entry=${entries[$idx]}
     [ -n "$entry" ] || entry='.'
+    display_entry=$(_ui_safe_text "$entry")
 
     _ui_panel_prefix
     _ui_color muted
@@ -909,7 +1012,7 @@ path() {
     _ui_reset
     print -nr -- ' '
     _ui_color text
-    print -nr -- "$(_ui_truncate "$path_width" "$entry")"
+    print -nr -- "$(_ui_safe_truncate "$path_width" "$display_entry")"
     _ui_reset
     print ''
   done

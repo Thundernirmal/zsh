@@ -15,6 +15,7 @@ _zsh_tip_pool=(
   "Run mkcd <dir> to create a directory and cd into it in one step"
   "Run croot to jump to the root of the current git repo"
   "Run path to inspect each PATH entry with rich output in capable terminals"
+  "dusage, bigfiles, and path render control characters as visible escapes without changing printable Unicode"
   "Run fbr to fuzzy-pick and checkout a git branch from local or remote refs"
   "Run dusage [path] [count] to summarize any directory with a custom limit"
   "Run bigfiles [path] [count] to inspect any tree with a custom limit"
