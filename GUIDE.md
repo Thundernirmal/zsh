@@ -600,13 +600,13 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 | `brew` | `brew autoremove` | `brew cleanup` | Runs in Homebrew user space without `--prune=all` or `--scrub` |
 | `flatpak` | `flatpak uninstall --unused --user`, then `flatpak uninstall --unused --system` | Included in Flatpak's uninstall pruning | Keeps application data and allows normal polkit authentication for the system installation |
 | `nix` | None | `nix-collect-garbage` | Deletes only unreachable store objects; never deletes profile generations or the `npkg` attribute cache |
-| `npm` | None | `npm cache npx rm`, then `npm cache verify` | Runs in user space, uses npm rather than raw directory deletion, and never runs `npm cache clean --force` |
+| `npm` | None | List with `npm cache npx ls`, remove the returned keys with `npm cache npx rm <key>...`, then run `npm cache verify` | Runs in user space, uses npm rather than raw directory deletion, and never passes `--force` |
 
 Cleanup does not delete application data such as `~/.var/app`, project-local `node_modules`, lockfiles, virtual environments, build output, user-edited package configuration, or Nix rollback generations. It also does not inject `-y`, `--assumeyes`, `--noconfirm`, or an equivalent response to native prompts. Backend output can report its own reclaimed space, but `upkg` does not fabricate a cross-manager byte total.
 
 Dry-run cleanup uses native read-only probes where available: APT simulation for unused packages, `dnf --cacheonly repoquery --unneeded`, `pacman -Qtdq`, both Homebrew `--dry-run` forms, `nix-collect-garbage --dry-run`, and `npm cache npx ls`. DNF's cache-only mode prevents a metadata refresh. Steps without a safe unprivileged simulation—including APT cache cleanup—are printed as `would run` and are not invoked. Privileged commands are displayed with `sudo` context when needed, but a preview never calls `sudo` or requires `--sudo`.
 
-If `nix-collect-garbage` is unexpectedly unavailable, Nix cleanup fails with an installation/PATH hint rather than deleting store paths directly. Older npm releases may reject the npx cache subcommand; `upkg` still verifies and garbage-collects the normal npm cache, reports npm as `partial`, returns nonzero overall, and recommends upgrading npm.
+If `nix-collect-garbage` is unexpectedly unavailable, Nix cleanup fails with an installation/PATH hint rather than deleting store paths directly. npm releases that require `--force` for a keyless npx-cache removal are supported by listing and passing explicit cache keys instead. Older npm releases may reject the npx cache subcommands entirely; `upkg` still verifies and garbage-collects the normal npm cache, reports npm as `partial`, returns nonzero overall, and recommends upgrading npm.
 
 ### Behavior notes
 
@@ -653,8 +653,9 @@ npm note:
 - `upkg upgrade --only npm` checks the configured global prefix before running.
 - If that prefix is not writable by the current user, `upkg` blocks the npm backend and tells you to move the prefix under your home directory.
 - `upkg` never recommends `sudo npm`.
-- `upkg clean --only npm` does not inspect the global prefix: it removes npm-managed npx execution-cache entries and then verifies/garbage-collects the content-addressable cache in user space.
-- When an older npm does not support `npm cache npx rm`, cache verification still runs and the manager is reported as `partial` with an npm upgrade recommendation.
+- `upkg clean --only npm` does not inspect the global prefix: it lists npm-managed npx execution-cache entries, passes only those explicit keys to `npm cache npx rm`, and then verifies/garbage-collects the content-addressable cache in user space.
+- `upkg` never uses the keyless, whole-npx-cache `npm cache npx rm --force` form.
+- When an older npm does not support the npx cache subcommands, cache verification still runs and the manager is reported as `partial` with an npm upgrade recommendation.
 
 ### Examples
 

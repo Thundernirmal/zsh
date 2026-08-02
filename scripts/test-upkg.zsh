@@ -395,6 +395,11 @@ EOF
     assert_contains "$output" "[$state_role]" "rich cleanup summary renders $state_role" || return 1
   done
 
+  output=$'npm error code EUSAGE\nnpm error Please use --force to remove entire npx cache\nnpm error Usage:\nnpm error npm cache npx ls\nnpm error npm cache npx rm [<key>...]'
+  _upkg_npm_npx_cache_unsupported "$output"
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'force-required whole-cache usage still indicates npx subcommands are supported' || return 1
+
   output=$(upkg managers)
   assert_contains "$output" 'paru' 'detects paru' || return 1
   assert_contains "$output" 'brew' 'detects brew' || return 1
@@ -836,8 +841,8 @@ esac
 printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
 case "$*" in
   "search --parseable clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
-  "cache npx ls") printf "%s\n" "npx-cache-key" ;;
-  "cache npx rm") printf "%s\n" "MUTATING npm npx cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm npx cache removed" ;;
+  "cache npx ls") printf "%s\n" "npx-cache-key-one: test-package" "npx-cache-key-two: another-package" ;;
+  "cache npx rm npx-cache-key-one npx-cache-key-two") printf "%s\n" "MUTATING npm npx cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm npx cache removed" ;;
   "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
   *) exit 2 ;;
 esac
@@ -974,12 +979,48 @@ esac
   assert_order "$output" 'brew autoremove' 'brew cleanup' 'Homebrew removes dependencies before standard cleanup' || return 1
   assert_order "$output" 'flatpak uninstall --unused --user' 'flatpak uninstall --unused --system' 'Flatpak cleans user refs before system refs' || return 1
   assert_order "$output" 'npm cache npx rm' 'npm cache verify' 'npm removes the npx cache before verifying its content cache' || return 1
+  assert_contains "$output" 'npm cache npx rm npx-cache-key-one npx-cache-key-two' 'npm removes the explicit keys returned by its npx cache listing' || return 1
+  assert_not_contains "$output" 'npm cache npx rm --force' 'npm avoids whole-cache force removal for npx entries' || return 1
   assert_not_contains "$output" '--delete-data' 'Flatpak cleanup preserves application data' || return 1
   assert_not_contains "$output" '--force-remove' 'Flatpak cleanup avoids force removal' || return 1
   assert_not_contains "$output" '--prune=all' 'Homebrew cleanup uses its conservative defaults' || return 1
   assert_not_contains "$output" '--delete-old' 'Nix cleanup preserves profile generations' || return 1
   assert_not_contains "$output" ' -d' 'Nix cleanup preserves rollback history' || return 1
   assert_not_contains "$output" 'cache clean --force' 'npm cleanup avoids aggressive cache deletion' || return 1
+
+  write_fake npm '
+printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "cache npx ls") : ;;
+  "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'npm' clean --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'npm cleanup succeeds when the npx cache listing is empty' || return 1
+  assert_contains "$output" 'No npx cache entries found.' 'empty npm npx cache is explained' || return 1
+  assert_contains "$output" 'npm: cleaned' 'empty npx cache plus successful verification is cleaned' || return 1
+  assert_not_contains "$(<"$clean_log")" 'npm cache npx rm' 'empty npm npx cache invokes no removal' || return 1
+  assert_contains "$(<"$clean_log")" 'npm cache verify' 'empty npm npx cache still gets verified' || return 1
+
+  write_fake npm '
+printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "cache npx ls") printf "%s\n" "--force: unsafe-option-shaped-key" ;;
+  "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'npm' clean --only=npm 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'untrusted npm npx cache keys fail cleanup safely' || return 1
+  assert_contains "$output" 'Could not safely parse npm npx cache keys' 'unsafe npm npx cache key is explained' || return 1
+  assert_contains "$output" 'npm: partial - npx cache listing could not be parsed' 'unsafe npm npx cache key plus successful verification is partial' || return 1
+  assert_not_contains "$(<"$clean_log")" 'npm cache npx rm' 'unsafe npm npx cache key invokes no removal' || return 1
+  assert_contains "$(<"$clean_log")" 'npm cache verify' 'unsafe npm npx cache key does not suppress verification' || return 1
 
   write_fake pacman '
 printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
@@ -1008,7 +1049,7 @@ esac
   write_fake npm '
 printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
 case "$*" in
-  "cache npx rm") printf "%s\n" "npm cache usage: unsupported npx subcommand" >&2 ; exit 1 ;;
+  "cache npx ls") printf "%s\n" "npm cache usage: unsupported npx subcommand" >&2 ; exit 1 ;;
   "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
   *) exit 2 ;;
 esac
@@ -1021,7 +1062,8 @@ esac
   assert_contains "$output" 'npm: partial - npx cache cleanup is unsupported; npm cache verified' 'unsupported npx cleanup plus verified npm cache is partial' || return 1
   assert_contains "$output" 'upgrade npm to enable npx cache cleanup' 'unsupported npx cleanup recommends upgrading npm' || return 1
   assert_order "$(<"$clean_log")" 'brew autoremove' 'brew cleanup' 'failed Homebrew first phase does not suppress cache cleanup' || return 1
-  assert_order "$(<"$clean_log")" 'brew cleanup' 'npm cache npx rm' 'partial Homebrew cleanup does not stop the next manager' || return 1
+  assert_order "$(<"$clean_log")" 'brew cleanup' 'npm cache npx ls' 'partial Homebrew cleanup does not stop the next manager' || return 1
+  assert_not_contains "$(<"$clean_log")" 'npm cache npx rm' 'unsupported npx listing never attempts a removal' || return 1
 
   npm_stdout="$tmp_prefix/npm-clean.stdout"
   npm_stderr="$tmp_prefix/npm-clean.stderr"

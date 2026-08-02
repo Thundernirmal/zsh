@@ -116,6 +116,12 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
   )
 fi
 
+if (( $+commands[npm] )); then
+  _zsh_tip_pool+=(
+    "npm cleanup lists npx cache keys and removes only those explicit entries without --force"
+  )
+fi
+
 if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] )); then
   _zsh_tip_pool+=(
     "Run upkg upgrade --sudo to opt into system package upgrades explicitly"

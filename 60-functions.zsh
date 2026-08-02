@@ -3033,6 +3033,8 @@ _upkg_run_npm_npx_cache_command() {
   local rc
   integer stdout_fd stderr_fd
 
+  typeset -g _UPKG_NPM_NPX_STDOUT=''
+  typeset -g _UPKG_NPM_NPX_STDERR=''
   typeset -g _UPKG_NPM_NPX_DIAGNOSTIC=''
 
   stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm-npx.stdout.XXXXXX") || {
@@ -3065,6 +3067,8 @@ _upkg_run_npm_npx_cache_command() {
 
   stdout_output=$(<"$stdout_file")
   stderr_output=$(<"$stderr_file")
+  _UPKG_NPM_NPX_STDOUT=$stdout_output
+  _UPKG_NPM_NPX_STDERR=$stderr_output
   _UPKG_NPM_NPX_DIAGNOSTIC="${stdout_output}"$'\n'"${stderr_output}"
   command rm -f -- "$stdout_file" "$stderr_file"
 
@@ -3076,19 +3080,27 @@ _upkg_npm_npx_cache_unsupported() {
 
   local output=${(L)1}
 
-  [[ $output == *'unknown command'* ||
+  if [[ $output == *'unknown command'* ||
     $output == *'invalid subcommand'* ||
-    $output == *'not a valid npm command'* ||
-    $output == *'usage: npm cache'* ||
-    $output == *'npm cache usage:'* ]]
+    $output == *'not a valid npm command'* ]]; then
+    return 0
+  fi
+
+  if [[ $output == *'usage:'* || $output == *'npm cache usage:'* ]]; then
+    [[ $output != *'npm cache npx ls'* && $output != *'npm cache npx rm'* ]]
+    return $?
+  fi
+
+  return 1
 }
 
 _upkg_run_clean_npm() {
   emulate -L zsh
 
-  local output rc npx_failure_detail npx_unsupported=0 verify_failures_before=0
+  local output listing line key rc npx_failure_detail
+  local npx_unsupported=0 parse_failed=0 verify_failures_before=0
   local succeeded=0 failed=0
-  local -a failures
+  local -a failures npx_keys
 
   _upkg_print_section npm
 
@@ -3097,7 +3109,7 @@ _upkg_run_clean_npm() {
     _upkg_run_npm_npx_cache_command ls
     rc=$?
     output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
-    unset _UPKG_NPM_NPX_DIAGNOSTIC
+    unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
     _upkg_record_cleanup_result "$rc" 'npx cache preview failed'
     if (( rc != 0 )) && _upkg_npm_npx_cache_unsupported "$output"; then
       print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
@@ -3110,17 +3122,48 @@ _upkg_run_clean_npm() {
     return $?
   fi
 
-  _upkg_run_npm_npx_cache_command rm
+  _upkg_run_npm_npx_cache_command ls
   rc=$?
   output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
-  unset _UPKG_NPM_NPX_DIAGNOSTIC
-  npx_failure_detail='npx cache cleanup failed'
-  if (( rc != 0 )) && _upkg_npm_npx_cache_unsupported "$output"; then
-    npx_unsupported=1
-    npx_failure_detail='npx cache cleanup is unsupported'
-    print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
+  listing=${_UPKG_NPM_NPX_STDOUT:-}
+  unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
+
+  if (( rc != 0 )); then
+    npx_failure_detail='npx cache listing failed'
+    if _upkg_npm_npx_cache_unsupported "$output"; then
+      npx_unsupported=1
+      npx_failure_detail='npx cache cleanup is unsupported'
+      print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
+    fi
+    _upkg_record_cleanup_result "$rc" "$npx_failure_detail"
+  elif [ -z "$listing" ]; then
+    print 'No npx cache entries found.'
+    _upkg_record_cleanup_result 0 ''
+  else
+    for line in ${(f)listing}; do
+      [ -n "$line" ] || continue
+      if [[ $line != *:* ]]; then
+        parse_failed=1
+        break
+      fi
+
+      key=${line%%:*}
+      case $key in
+        ''|-*|*[![:alnum:]_-]*)
+          parse_failed=1
+          break
+          ;;
+      esac
+      npx_keys+=("$key")
+    done
+
+    if (( parse_failed || ${#npx_keys[@]} == 0 )); then
+      print -u2 -- 'Could not safely parse npm npx cache keys; no npx entries were removed.'
+      _upkg_record_cleanup_result 1 'npx cache listing could not be parsed'
+    else
+      _upkg_run_cleanup_step 'npx cache cleanup failed' npm cache npx rm "${npx_keys[@]}"
+    fi
   fi
-  _upkg_record_cleanup_result "$rc" "$npx_failure_detail"
 
   _upkg_print_cleanup_phase 'npm cache'
   verify_failures_before=$failed

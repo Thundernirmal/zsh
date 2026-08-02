@@ -110,9 +110,9 @@ Cleanup stays inside each manager's conservative, documented operations. It neve
 | `brew` | `brew autoremove`, then standard `brew cleanup` without aggressive prune flags |
 | `flatpak` | `flatpak uninstall --unused --user`, then `--system`, without deleting application data |
 | `nix` | `nix-collect-garbage` without generation-deletion flags, preserving rollback history |
-| `npm` | `npm cache npx rm`, then `npm cache verify`, always in user space |
+| `npm` | List npx cache keys with `npm cache npx ls`, remove those explicit keys with `npm cache npx rm <key>...`, then run `npm cache verify`, always in user space and without `--force` |
 
-Cleanup never injects `-y`, `--assumeyes`, or equivalent confirmation flags. A failed phase does not suppress later independent phases or managers. An older npm that rejects `npm cache npx rm` still gets `npm cache verify`; the result is reported as `partial`, the overall command returns nonzero, and the output recommends upgrading npm.
+Cleanup never injects `-y`, `--assumeyes`, or equivalent confirmation flags. A failed phase does not suppress later independent phases or managers. npm versions that require `--force` for a keyless `npm cache npx rm` are handled by passing the keys returned by `npm cache npx ls`; `upkg` never requests whole-cache forced removal. An older npm that rejects the npx cache subcommands still gets `npm cache verify`; the result is reported as `partial`, the overall command returns nonzero, and the output recommends upgrading npm.
 
 ```zsh
 upkg clean --dry-run
