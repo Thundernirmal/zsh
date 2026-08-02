@@ -35,7 +35,7 @@ _zsh_tip_pool=(
   "Use cd ~1 after dirs -v to jump back through your directory stack"
   "Run ll for a long listing with hidden files and readable sizes"
   "Use **/*.ext for recursive glob matching (EXTENDED_GLOB)"
-  "* includes dotfiles because GLOB_DOTS is enabled"
+  "Use *(D) or **/*(D) when a glob should explicitly include dotfiles"
   "Use *(.m-1) to glob files modified in the last day"
   "file2 sorts before file10 because NUMERIC_GLOB_SORT is enabled"
   "Command spell-correction prompts are intentionally disabled"

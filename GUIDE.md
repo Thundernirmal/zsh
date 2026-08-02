@@ -70,11 +70,14 @@ ls *(.m-1)              # files modified in last day
 ls *(Lk+100)            # files larger than 100KB
 ```
 
-### GLOB_DOTS
-Include hidden files (dotfiles) in glob patterns.
+### GLOB_DOTS is disabled
+Ordinary globs keep zsh's conventional safety boundary: `*` and `**/*` exclude leading-dot entries. `init.zsh` explicitly disables `GLOB_DOTS`, so this remains true even if a framework enabled it earlier. Opt in only where hidden matches are intentional with the `(D)` qualifier or a command whose contract includes hidden files.
 
 ```zsh
-ls *     # now includes .gitignore, .env, etc.
+print -rl -- *        # visible entries only
+print -rl -- *(D)     # visible and hidden entries
+print -rl -- **/*(D)  # recursive, including hidden entries
+ls -A                 # ls explicitly includes hidden entries
 ```
 
 ### NUMERIC_GLOB_SORT

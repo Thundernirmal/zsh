@@ -40,6 +40,21 @@ assert_no_output() {
   print -- "ok: $label"
 }
 
+assert_equals() {
+  local actual=$1
+  local expected=$2
+  local label=$3
+
+  if [[ $actual != "$expected" ]]; then
+    print -u2 -- "not ok: $label"
+    print -u2 -- "expected: $expected"
+    print -u2 -- "actual: $actual"
+    return 1
+  fi
+
+  print -- "ok: $label"
+}
+
 run_init_case() {
   local label=$1
   local setup=${2-}
@@ -74,6 +89,71 @@ run_init_case() {
   command rm -f "$stdout_file" "$stderr_file"
 }
 
+test_glob_policy() {
+  local fixture_dir="$tmp_home/glob-fixture"
+  local fakebin="$tmp_home/glob-fakebin"
+  local glob_log="$tmp_home/glob-stub.log"
+  local ordinary_file="$tmp_home/glob-ordinary.out"
+  local recursive_file="$tmp_home/glob-recursive.out"
+  local explicit_file="$tmp_home/glob-explicit.out"
+  local stdout_file="$tmp_home/glob.stdout"
+  local stderr_file="$tmp_home/glob.stderr"
+  local cmd_status output
+
+  command mkdir -p -- "$fixture_dir/.git" "$fixture_dir/tree" "$fakebin" || return 1
+  : > "$fixture_dir/visible"
+  : > "$fixture_dir/.hidden"
+  : > "$fixture_dir/.git/config"
+  : > "$fixture_dir/tree/child"
+
+  print -r -- '#!/bin/sh
+printf "%s\n" "$@" > "$GLOB_STUB_LOG"' > "$fakebin/rm"
+  command chmod +x "$fakebin/rm"
+
+  HOME="$tmp_home" \
+    PATH="$fakebin:$PATH" \
+    GLOB_FIXTURE_DIR="$fixture_dir" \
+    GLOB_ORDINARY_FILE="$ordinary_file" \
+    GLOB_RECURSIVE_FILE="$recursive_file" \
+    GLOB_EXPLICIT_FILE="$explicit_file" \
+    GLOB_STUB_LOG="$glob_log" \
+    zsh -fc '
+      setopt GLOB_DOTS
+      source "$HOME/.config/zsh/init.zsh"
+      cd "$GLOB_FIXTURE_DIR" || exit 1
+      print -rl -- * > "$GLOB_ORDINARY_FILE"
+      print -rl -- **/* > "$GLOB_RECURSIVE_FILE"
+      print -rl -- *(D) > "$GLOB_EXPLICIT_FILE"
+      eval "rm -rf *"
+    ' >"$stdout_file" 2>"$stderr_file"
+  cmd_status=$?
+
+  assert_status "$cmd_status" 0 'glob policy fixture exits cleanly' || {
+    command cat "$stderr_file" >&2
+    return 1
+  }
+  assert_no_output "$stdout_file" 'glob policy fixture keeps stdout clean' || return 1
+  assert_no_output "$stderr_file" 'glob policy fixture keeps stderr clean' || return 1
+
+  output=$(<"$ordinary_file")
+  assert_equals "$output" $'tree\nvisible' 'ordinary glob excludes hidden entries after an inherited GLOB_DOTS setting' || return 1
+
+  output=$(<"$recursive_file")
+  assert_equals "$output" $'tree\ntree/child\nvisible' 'recursive ordinary glob excludes hidden entries' || return 1
+
+  output=$(<"$explicit_file")
+  assert_equals "$output" $'.git\n.hidden\ntree\nvisible' 'explicit (D) glob includes hidden entries' || return 1
+
+  output=$(<"$glob_log")
+  assert_equals "$output" $'-iv\n-rf\ntree\nvisible' 'stubbed destructive command receives visible matches only' || return 1
+
+  [[ -e "$fixture_dir/visible" && -e "$fixture_dir/.hidden" && -d "$fixture_dir/.git" ]] || {
+    print -u2 -- 'not ok: destructive-command fixture never removes real files'
+    return 1
+  }
+  print -- 'ok: destructive-command fixture never removes real files'
+}
+
 main() {
   local -a high_risk_aliases
   local high_risk_alias_setup
@@ -91,6 +171,7 @@ main() {
 
   run_init_case 'clean init smoke test' || return 1
   run_init_case 'high-risk alias init smoke test' "$high_risk_alias_setup" || return 1
+  test_glob_policy || return 1
 }
 
 main "$@"
