@@ -103,6 +103,8 @@ test_catalogue() {
   done
   print -- 'ok: every catalogue entry has required help fields'
 
+  assert_equals "${_ZSH_HELP_SUMMARY[upkg]}" 'Check, search, plan, upgrade, or clean detected package managers' 'upkg help summary includes cleanup' || return 1
+
   before_count=${#_ZSH_HELP_ORDER[@]}
   _zsh_help_register extract Files duplicate duplicate duplicate none function none
   rc=$?
@@ -137,6 +139,7 @@ test_plain_rendering_and_availability() {
 
   output=$(zhelp --plain --all upkg)
   assert_contains "$output" 'Command:      upkg' 'exact lookup renders the selected command' || return 1
+  assert_contains "$output" 'Description:  Check, search, plan, upgrade, or clean detected package managers' 'exact lookup describes upkg cleanup' || return 1
   assert_contains "$output" 'Example:      upkg search ripgrep --only=apt,nix' 'exact lookup renders the catalogue example' || return 1
 
   output=$(zhelp --plain npkg 2>&1)

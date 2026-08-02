@@ -174,7 +174,7 @@ _ui_status_icon() {
   local state=$1
 
   case $state in
-    'up to date'|upgraded)
+    'up to date'|upgraded|cleaned)
       _ui_icon '󰄬' '*'
       ;;
     'updates available')
@@ -185,6 +185,12 @@ _ui_status_icon() {
       ;;
     'no matches')
       _ui_icon '󰍉' '0'
+      ;;
+    planned)
+      _ui_icon '󰋼' '>'
+      ;;
+    partial)
+      _ui_icon '󰀦' '!'
       ;;
     blocked)
       _ui_icon '󰍛' '-'

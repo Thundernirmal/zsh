@@ -142,13 +142,16 @@ test_static_values() {
 
   spec_values "${_ZSH_UPKG_COMMAND_SPECS[@]}"
   values=( "${reply[@]}" )
-  assert_equals "${(j: :)values}" 'outdated check list search upgrade up update plan managers help' 'upkg commands match the public interface' || return 1
+  assert_equals "${(j: :)values}" 'outdated check list search upgrade up update plan clean managers help' 'upkg commands match the public interface' || return 1
   assert_unique 'upkg command values are unique' "${values[@]}" || return 1
+  assert_equals "${_ZSH_UPKG_COMMAND_SPECS[9]}" 'clean:Remove unused packages and stale caches' 'upkg completion describes cleanup explicitly' || return 1
 
   spec_values "${_ZSH_UPKG_FLAGS[@]}"
   values=( "${reply[@]}" )
   assert_equals "${(j: :)values}" '--only --skip --sudo --dry-run --help' 'upkg flags match the public interface' || return 1
   assert_unique 'upkg flag values are unique' "${values[@]}" || return 1
+  assert_equals "${_ZSH_UPKG_FLAGS[3]}" '--sudo:Authorize privileged upgrade and cleanup backends' 'upkg sudo completion describes cleanup authorization' || return 1
+  assert_equals "${_ZSH_UPKG_FLAGS[4]}" '--dry-run:Preview upgrades or cleanup without changing packages' 'upkg dry-run completion covers cleanup previews' || return 1
 
   assert_equals "${(j: :)_ZSH_UPKG_MANAGERS}" 'apt dnf pacman paru brew flatpak nix npm' 'upkg manager IDs match the supported backends' || return 1
   assert_unique 'upkg manager IDs are unique' "${_ZSH_UPKG_MANAGERS[@]}" || return 1

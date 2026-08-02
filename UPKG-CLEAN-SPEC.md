@@ -1,6 +1,6 @@
 # `upkg clean` feature specification
 
-Status: Proposed
+Status: Implemented
 
 ## Summary
 
