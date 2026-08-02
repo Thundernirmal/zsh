@@ -74,6 +74,7 @@ if (( $+commands[nix] )); then
     "Run npkg add bat for a short nix profile add command"
     "Run npkg search ripgrep to search nixpkgs with package descriptions"
     "Press Tab after npkg to browse its commands; cached package attributes are offered without running Nix"
+    "Nix cleanup uses nix-collect-garbage; the dependency checker reports when a Nix install is missing it"
   )
 fi
 
@@ -107,15 +108,24 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Run upkg managers --only=npm,flatpak to confirm selected execution order before upgrading"
     "On Arch-family systems, upkg treats empty repo and AUR outdated checks as up to date instead of surfacing a false failure"
     "Run upkg plan or upkg --dry-run to preview upgrades without changing packages"
+    "Run upkg clean --dry-run to preview unused-package and stale-cache cleanup without changing manager state"
+    "Run upkg clean to let each selected package manager conservatively remove data it classifies as unused or stale"
     "In rich terminals, every upkg command path—including help and upgrades—uses the shared dashboard theme"
     "Use upkg --only=flatpak,npm to limit checks to selected managers"
     "Press Tab after upkg or --only= to browse commands, flags, and supported manager IDs"
   )
 fi
 
+if (( $+commands[npm] )); then
+  _zsh_tip_pool+=(
+    "npm cleanup lists npx cache keys and removes only those explicit entries without --force"
+  )
+fi
+
 if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] )); then
   _zsh_tip_pool+=(
     "Run upkg upgrade --sudo to opt into system package upgrades explicitly"
+    "Run upkg clean --sudo to authorize cleanup for selected system package managers"
   )
 fi
 

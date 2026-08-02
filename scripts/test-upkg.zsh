@@ -138,8 +138,51 @@ run_upkg_rich_without_managers() {
   )
 }
 
+run_upkg_with_managers() {
+  local manager_spec=$1
+  shift
+
+  (
+    functions[_upkg_detect_managers]="
+      typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
+      _UPKG_ACTIVE_MANAGERS=($manager_spec)
+      _UPKG_ALTERNATE_MANAGERS=()
+    "
+    upkg "$@"
+  )
+}
+
+run_upkg_as_root_with_managers() {
+  local manager_spec=$1
+  shift
+
+  (
+    functions[_upkg_is_root]='return 0'
+    functions[_upkg_detect_managers]="
+      typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
+      _UPKG_ACTIVE_MANAGERS=($manager_spec)
+      _UPKG_ALTERNATE_MANAGERS=()
+    "
+    upkg "$@"
+  )
+}
+
+run_upkg_rich_with_managers() {
+  local manager_spec=$1
+  shift
+
+  (
+    functions[_upkg_detect_managers]="
+      typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
+      _UPKG_ACTIVE_MANAGERS=($manager_spec)
+      _UPKG_ALTERNATE_MANAGERS=()
+    "
+    run_upkg_rich "$@"
+  )
+}
+
 main() {
-  local output cmd_status route
+  local output cmd_status route state_role npm_stdout npm_stderr
 
   local default_brew_script='
 case "$*" in
@@ -345,6 +388,33 @@ EOF
   )
   assert_contains "$output" 'Failed managers: brew' 'rich search summary names failed managers' || return 1
 
+  output=$(
+    (
+      functions[_ui_plain_mode]='return 1'
+      functions[_ui_color]=':'
+      functions[_ui_reset]=':'
+      functions[_ui_icon]='print -nr -- "*"'
+      functions[_ui_badge]='print -nr -- "[$1:$2]"'
+      functions[_ui_section_break]=':'
+      _UPKG_THEME_MODE=1
+      _UPKG_OPERATION=clean
+      typeset -ga _UPKG_SUMMARY_ORDER
+      typeset -gA _UPKG_SUMMARY_STATE _UPKG_SUMMARY_DETAIL
+      _UPKG_SUMMARY_ORDER=(apt brew npm nix flatpak pacman)
+      _UPKG_SUMMARY_STATE=(apt blocked brew cleaned npm partial nix failed flatpak planned pacman skipped)
+      _UPKG_SUMMARY_DETAIL=()
+      _upkg_print_summary
+    )
+  )
+  for state_role in blocked:warning cleaned:success partial:danger failed:danger planned:info skipped:muted; do
+    assert_contains "$output" "[$state_role]" "rich cleanup summary renders $state_role" || return 1
+  done
+
+  output=$'npm error code EUSAGE\nnpm error Please use --force to remove entire npx cache\nnpm error Usage:\nnpm error npm cache npx ls\nnpm error npm cache npx rm [<key>...]'
+  _upkg_npm_npx_cache_unsupported "$output"
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'force-required whole-cache usage still indicates npx subcommands are supported' || return 1
+
   output=$(upkg managers)
   assert_contains "$output" 'paru' 'detects paru' || return 1
   assert_contains "$output" 'brew' 'detects brew' || return 1
@@ -482,7 +552,7 @@ esac
   output=$(upkg managers --dry-run 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'dry-run rejects managers command' || return 1
-  assert_contains "$output" '--dry-run is only valid with the default outdated check, plan, or upgrade' 'dry-run error explains valid commands' || return 1
+  assert_contains "$output" '--dry-run is only valid with the default outdated check, plan, upgrade, or clean' 'dry-run error explains valid commands' || return 1
 
   output=$(upkg search upgrade --only=npm)
   cmd_status=$?
@@ -702,6 +772,373 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 1 'paru upgrade remains gated' || return 1
   assert_contains "$output" 'rerun with: upkg upgrade --sudo --only paru' 'paru upgrade remains gated' || return 1
+
+  local clean_log="$tmp_prefix/upkg-clean-invocations"
+  export UPKG_TEST_CLEAN_LOG=$clean_log
+
+  # Exercise the non-root cleanup contract regardless of the test runner's UID.
+  functions[_upkg_is_root]='return 1'
+
+  write_fake sudo '
+printf "%s\n" "sudo $*" >> "$UPKG_TEST_CLEAN_LOG"
+exec "$@"
+'
+
+  write_fake apt '
+printf "%s\n" "apt $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "list --upgradable") printf "%s\n" "Listing..." ;;
+  "--simulate autoremove") printf "%s\n" "APT autoremove simulation" ;;
+  "--simulate autoclean") printf "%s\n" "APT autoclean simulation" ;;
+  "autoremove") printf "%s\n" "MUTATING apt autoremove" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "APT autoremove" ;;
+  "autoclean") printf "%s\n" "MUTATING apt autoclean" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "APT autoclean" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake dnf '
+printf "%s\n" "dnf $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "--cacheonly repoquery --unneeded") printf "%s\n" "unused-dependency" ;;
+  "autoremove") printf "%s\n" "MUTATING dnf autoremove" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "DNF autoremove" ;;
+  "clean all") printf "%s\n" "MUTATING dnf clean all" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "DNF clean all" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake pacman '
+printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "-Qtdq") printf "%s\n" "orphan-one" "orphan-two" ;;
+  "-Rs -- orphan-one orphan-two") printf "%s\n" "MUTATING pacman orphan removal" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Pacman orphan removal" ;;
+  "-Sc") printf "%s\n" "MUTATING pacman cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Pacman cache cleanup" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake paru '
+printf "%s\n" "paru $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "-c") printf "%s\n" "MUTATING paru dependencies" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Paru dependency cleanup" ;;
+  "-Sc") printf "%s\n" "MUTATING paru cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Paru cache cleanup" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake brew '
+printf "%s\n" "brew $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ;;
+  "autoremove --dry-run") printf "%s\n" "Homebrew autoremove preview" ;;
+  "cleanup --dry-run") printf "%s\n" "Homebrew cleanup preview" ;;
+  "autoremove") printf "%s\n" "MUTATING brew autoremove" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Homebrew autoremove" ;;
+  "cleanup") printf "%s\n" "MUTATING brew cleanup" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Homebrew cleanup" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake flatpak '
+printf "%s\n" "flatpak $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "uninstall --unused --user") printf "%s\n" "MUTATING flatpak user" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Flatpak user cleanup" ;;
+  "uninstall --unused --system") printf "%s\n" "MUTATING flatpak system" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Flatpak system cleanup" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake nix-collect-garbage '
+printf "%s\n" "nix-collect-garbage $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "--dry-run") printf "%s\n" "Nix garbage collection preview" ;;
+  "") printf "%s\n" "MUTATING nix garbage collection" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Nix garbage collection" ;;
+  *) exit 2 ;;
+esac
+'
+
+  write_fake npm '
+printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "search --parseable clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
+  "cache npx ls") printf "%s\n" "npx-cache-key-one: test-package" "npx-cache-key-two: another-package" ;;
+  "cache npx rm npx-cache-key-one npx-cache-key-two") printf "%s\n" "MUTATING npm npx cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm npx cache removed" ;;
+  "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
+  *) exit 2 ;;
+esac
+'
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'brew' --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'bare upkg still routes to outdated after adding clean' || return 1
+  assert_contains "$output" 'wget (1.24.5) < 1.25.0' 'bare upkg keeps the outdated backend path' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'npm' search clean --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search accepts clean as a literal query' || return 1
+  assert_contains "$output" 'clean-package' 'clean keyword searches still reach npm' || return 1
+  assert_contains "$(<"$clean_log")" 'npm search --parseable clean' 'search passes clean to the npm backend' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'apt dnf pacman paru brew flatpak nix npm' clean --dry-run --only=apt,dnf,pacman,paru,brew,flatpak,nix,npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'cleanup dry-run succeeds across every backend' || return 1
+  for manager in apt dnf pacman paru brew flatpak nix npm; do
+    assert_contains "$output" "$manager: planned" "$manager dry-run summary is planned" || return 1
+  done
+  assert_contains "$output" 'would run: sudo apt autoclean' 'APT preview prints cache cleanup without reading its privileged cache' || return 1
+  assert_contains "$output" 'would run: sudo pacman -Rs -- orphan-one orphan-two' 'pacman preview includes orphan removal privilege context' || return 1
+  assert_contains "$output" 'would run: flatpak uninstall --unused --system' 'flatpak preview prints the exact system cleanup command' || return 1
+  assert_contains "$output" 'would run: npm cache verify' 'npm preview does not execute cache verification' || return 1
+  output=$(<"$clean_log")
+  assert_not_contains "$output" 'MUTATING' 'cleanup dry-run invokes no mutating fake command form' || return 1
+  assert_not_contains "$output" 'sudo ' 'cleanup dry-run never invokes sudo' || return 1
+  assert_not_contains "$output" 'apt --simulate autoclean' 'cleanup dry-run avoids APT cache reads that can require root' || return 1
+  assert_contains "$output" 'dnf --cacheonly repoquery --unneeded' 'DNF preview cannot refresh package metadata' || return 1
+  assert_order "$output" 'brew autoremove --dry-run' 'brew cleanup --dry-run' 'brew preview runs both native dry-run forms in order' || return 1
+  assert_contains "$output" 'nix-collect-garbage --dry-run' 'nix preview uses garbage collector dry-run' || return 1
+  assert_contains "$output" 'npm cache npx ls' 'npm preview lists the npx cache' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_as_root_with_managers 'apt dnf pacman' clean --dry-run --only=apt,dnf,pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'cleanup dry-run succeeds in simulated root mode' || return 1
+  assert_contains "$output" 'would run: apt autoclean' 'root APT preview omits sudo' || return 1
+  assert_contains "$output" 'would run: dnf clean all' 'root DNF preview omits sudo' || return 1
+  assert_contains "$output" 'would run: pacman -Rs -- orphan-one orphan-two' 'root Pacman preview omits sudo' || return 1
+  assert_not_contains "$output" 'would run: sudo ' 'root cleanup previews never display sudo' || return 1
+  assert_not_contains "$(<"$clean_log")" 'sudo ' 'root cleanup dry-run never invokes sudo' || return 1
+
+  output=$(run_upkg_with_managers 'brew npm' clean --dry-run --only=npm,brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'cleanup honors explicit only order' || return 1
+  assert_order "$output" '==> npm' '==> Homebrew' 'cleanup sections follow only order' || return 1
+
+  output=$(run_upkg_rich_with_managers 'brew' clean --dry-run --only=brew)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'cleanup preview succeeds in forced rich mode' || return 1
+  assert_contains "$output" 'Package Cleanup  dry-run' 'cleanup preview uses the rich cleanup dashboard title' || return 1
+  assert_contains "$output" '[planned]' 'rich cleanup summary renders the planned state' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'paru pacman' clean --dry-run --skip=pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'cleanup skip filter succeeds' || return 1
+  assert_contains "$output" 'pacman: skipped' 'cleanup summary records skipped managers' || return 1
+  assert_not_contains "$(<"$clean_log")" 'pacman -Qtdq' 'skipped cleanup does not invoke the backend' || return 1
+
+  for manager in apt dnf pacman; do
+    : > "$clean_log"
+    output=$(run_upkg_with_managers "$manager" clean --only="$manager" 2>&1)
+    cmd_status=$?
+    assert_status "$cmd_status" 1 "$manager cleanup is blocked without --sudo" || return 1
+    assert_contains "$output" "$manager cleanup requires root; rerun with: upkg clean --sudo --only $manager" "$manager cleanup prints a copyable privilege retry" || return 1
+    assert_not_contains "$(<"$clean_log")" 'MUTATING' "$manager blocked cleanup invokes no mutating command" || return 1
+  done
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'apt dnf pacman' clean --sudo --only=apt,dnf,pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'authorized distro cleanup succeeds' || return 1
+  assert_contains "$output" 'apt: cleaned' 'authorized apt cleanup is cleaned' || return 1
+  assert_contains "$output" 'dnf: cleaned' 'authorized dnf cleanup is cleaned' || return 1
+  assert_contains "$output" 'pacman: cleaned' 'authorized pacman cleanup is cleaned' || return 1
+  output=$(<"$clean_log")
+  assert_order "$output" 'sudo apt autoremove' 'sudo apt autoclean' 'apt cleans unused packages before its cache through sudo' || return 1
+  assert_order "$output" 'sudo dnf autoremove' 'sudo dnf clean all' 'dnf cleans unused packages before its cache through sudo' || return 1
+  assert_order "$output" 'pacman -Qtdq' 'sudo pacman -Rs -- orphan-one orphan-two' 'pacman queries and removes its orphan array' || return 1
+  assert_order "$output" 'sudo pacman -Rs -- orphan-one orphan-two' 'sudo pacman -Sc' 'pacman removes orphans before cleaning its cache' || return 1
+  assert_not_contains "$output" ' -y' 'distro cleanup sends no automatic confirmation flag' || return 1
+  assert_not_contains "$output" '-Scc' 'pacman cleanup avoids aggressive cache deletion' || return 1
+  assert_not_contains "$output" '-Rn' 'pacman cleanup preserves backup configuration' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_as_root_with_managers 'apt dnf pacman' clean --only=apt,dnf,pacman)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'distro cleanup succeeds in simulated root mode without --sudo' || return 1
+  output=$(<"$clean_log")
+  assert_order "$output" 'apt autoremove' 'apt autoclean' 'root APT cleanup runs directly in phase order' || return 1
+  assert_order "$output" 'dnf autoremove' 'dnf clean all' 'root DNF cleanup runs directly in phase order' || return 1
+  assert_order "$output" 'pacman -Qtdq' 'pacman -Rs -- orphan-one orphan-two' 'root Pacman cleanup removes its orphan array directly' || return 1
+  assert_order "$output" 'pacman -Rs -- orphan-one orphan-two' 'pacman -Sc' 'root Pacman cleanup runs directly in phase order' || return 1
+  assert_not_contains "$output" 'sudo ' 'root distro cleanup never invokes sudo' || return 1
+
+  write_fake pacman '
+printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "-Qtdq")
+    printf "%s\n" "warning: optional package database is unavailable" >&2
+    printf "%s\n" "orphan-one" "orphan-two"
+    ;;
+  "-Rs -- orphan-one orphan-two") printf "%s\n" "MUTATING pacman orphan removal" >> "$UPKG_TEST_CLEAN_LOG" ;;
+  "-Sc") printf "%s\n" "MUTATING pacman cache" >> "$UPKG_TEST_CLEAN_LOG" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'pacman' clean --sudo --only=pacman 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'pacman warnings do not contaminate the orphan array' || return 1
+  assert_contains "$output" 'warning: optional package database is unavailable' 'pacman orphan-query stderr passes through' || return 1
+  assert_contains "$(<"$clean_log")" 'sudo pacman -Rs -- orphan-one orphan-two' 'pacman removes only package names from query stdout' || return 1
+  assert_not_contains "$(<"$clean_log")" 'sudo pacman -Rs -- warning:' 'pacman never treats query stderr as a package name' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'paru' clean --only=paru 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'paru cleanup requires explicit authorization' || return 1
+  assert_contains "$output" 'rerun with: upkg clean --sudo --only paru' 'paru cleanup prints its authorization retry' || return 1
+  assert_not_contains "$(<"$clean_log")" 'MUTATING' 'blocked paru cleanup invokes nothing' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'paru pacman' clean --sudo --only=paru)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'authorized paru cleanup succeeds' || return 1
+  output=$(<"$clean_log")
+  assert_order "$output" 'paru -c' 'paru -Sc' 'paru removes unused dependencies before its cache' || return 1
+  assert_not_contains "$output" 'sudo paru' 'paru retains control of its privilege helper' || return 1
+  assert_not_contains "$output" 'pacman ' 'explicit paru cleanup does not duplicate the pacman route' || return 1
+
+  : > "$clean_log"
+  output=$(upkg clean --sudo --skip=brew,flatpak,nix,npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'default Arch cleanup route succeeds through Paru' || return 1
+  assert_contains "$output" 'paru: cleaned' 'default Arch cleanup summarizes Paru' || return 1
+  assert_not_contains "$(<"$clean_log")" 'pacman ' 'default Paru cleanup route does not duplicate Pacman' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'brew flatpak nix npm' clean --only=brew,flatpak,nix,npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'user-space cleanup backends succeed' || return 1
+  for manager in brew flatpak nix npm; do
+    assert_contains "$output" "$manager: cleaned" "$manager cleanup summary is cleaned" || return 1
+  done
+  output=$(<"$clean_log")
+  assert_not_contains "$output" 'sudo ' 'brew, flatpak, nix, and npm are never prefixed with sudo' || return 1
+  assert_order "$output" 'brew autoremove' 'brew cleanup' 'Homebrew removes dependencies before standard cleanup' || return 1
+  assert_order "$output" 'flatpak uninstall --unused --user' 'flatpak uninstall --unused --system' 'Flatpak cleans user refs before system refs' || return 1
+  assert_order "$output" 'npm cache npx rm' 'npm cache verify' 'npm removes the npx cache before verifying its content cache' || return 1
+  assert_contains "$output" 'npm cache npx rm npx-cache-key-one npx-cache-key-two' 'npm removes the explicit keys returned by its npx cache listing' || return 1
+  assert_not_contains "$output" 'npm cache npx rm --force' 'npm avoids whole-cache force removal for npx entries' || return 1
+  assert_not_contains "$output" '--delete-data' 'Flatpak cleanup preserves application data' || return 1
+  assert_not_contains "$output" '--force-remove' 'Flatpak cleanup avoids force removal' || return 1
+  assert_not_contains "$output" '--prune=all' 'Homebrew cleanup uses its conservative defaults' || return 1
+  assert_not_contains "$output" '--delete-old' 'Nix cleanup preserves profile generations' || return 1
+  assert_not_contains "$output" ' -d' 'Nix cleanup preserves rollback history' || return 1
+  assert_not_contains "$output" 'cache clean --force' 'npm cleanup avoids aggressive cache deletion' || return 1
+
+  write_fake npm '
+printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "cache npx ls") : ;;
+  "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'npm' clean --only=npm)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'npm cleanup succeeds when the npx cache listing is empty' || return 1
+  assert_contains "$output" 'No npx cache entries found.' 'empty npm npx cache is explained' || return 1
+  assert_contains "$output" 'npm: cleaned' 'empty npx cache plus successful verification is cleaned' || return 1
+  assert_not_contains "$(<"$clean_log")" 'npm cache npx rm' 'empty npm npx cache invokes no removal' || return 1
+  assert_contains "$(<"$clean_log")" 'npm cache verify' 'empty npm npx cache still gets verified' || return 1
+
+  write_fake npm '
+printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "cache npx ls") printf "%s\n" "--force: unsafe-option-shaped-key" ;;
+  "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'npm' clean --only=npm 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'untrusted npm npx cache keys fail cleanup safely' || return 1
+  assert_contains "$output" 'Could not safely parse npm npx cache keys' 'unsafe npm npx cache key is explained' || return 1
+  assert_contains "$output" 'npm: partial - npx cache listing could not be parsed' 'unsafe npm npx cache key plus successful verification is partial' || return 1
+  assert_not_contains "$(<"$clean_log")" 'npm cache npx rm' 'unsafe npm npx cache key invokes no removal' || return 1
+  assert_contains "$(<"$clean_log")" 'npm cache verify' 'unsafe npm npx cache key does not suppress verification' || return 1
+
+  write_fake pacman '
+printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "-Qtdq") printf "%s\n" "warning: no optional sync database" >&2 ; exit 1 ;;
+  "-Sc") printf "%s\n" "MUTATING pacman cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Pacman cache cleanup" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'pacman' clean --sudo --only=pacman 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'empty pacman orphan query exit 1 is normal' || return 1
+  assert_contains "$output" 'warning: no optional sync database' 'empty pacman query preserves stderr without treating it as output' || return 1
+  assert_contains "$output" 'No orphaned packages found.' 'empty pacman orphan query is explained' || return 1
+  assert_contains "$(<"$clean_log")" 'sudo pacman -Sc' 'pacman still cleans its cache after an empty orphan query' || return 1
+
+  write_fake brew '
+printf "%s\n" "brew $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "autoremove") printf "%s\n" "simulated Homebrew autoremove failure" >&2 ; exit 1 ;;
+  "cleanup") printf "%s\n" "MUTATING brew cleanup" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Homebrew cleanup" ;;
+  *) exit 2 ;;
+esac
+'
+  write_fake npm '
+printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "cache npx ls") printf "%s\n" "npm cache usage: unsupported npx subcommand" >&2 ; exit 1 ;;
+  "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'brew npm' clean --only=brew,npm 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'partial cleanup makes the overall command fail after later managers run' || return 1
+  assert_contains "$output" 'brew: partial - brew autoremove failed' 'failed first phase plus successful cache cleanup is partial' || return 1
+  assert_contains "$output" 'npm: partial - npx cache cleanup is unsupported; npm cache verified' 'unsupported npx cleanup plus verified npm cache is partial' || return 1
+  assert_contains "$output" 'upgrade npm to enable npx cache cleanup' 'unsupported npx cleanup recommends upgrading npm' || return 1
+  assert_order "$(<"$clean_log")" 'brew autoremove' 'brew cleanup' 'failed Homebrew first phase does not suppress cache cleanup' || return 1
+  assert_order "$(<"$clean_log")" 'brew cleanup' 'npm cache npx ls' 'partial Homebrew cleanup does not stop the next manager' || return 1
+  assert_not_contains "$(<"$clean_log")" 'npm cache npx rm' 'unsupported npx listing never attempts a removal' || return 1
+
+  npm_stdout="$tmp_prefix/npm-clean.stdout"
+  npm_stderr="$tmp_prefix/npm-clean.stderr"
+  run_upkg_with_managers 'npm' clean --only=npm >"$npm_stdout" 2>"$npm_stderr"
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'unsupported npx cleanup remains partial with split output streams' || return 1
+  assert_contains "$(<"$npm_stderr")" 'npm cache usage: unsupported npx subcommand' 'npm npx stderr passes through on stderr' || return 1
+  assert_not_contains "$(<"$npm_stdout")" 'npm cache usage: unsupported npx subcommand' 'npm npx stderr is not replayed on stdout' || return 1
+  assert_contains "$(<"$npm_stdout")" 'npm cache verified' 'npm cache verification stdout passes through on stdout' || return 1
+
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'npm' clean --dry-run --only=npm 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'failed cleanup preview probe returns nonzero' || return 1
+  assert_contains "$output" 'npm: failed - npx cache preview failed' 'failed cleanup preview probe is summarized as failed' || return 1
+  assert_not_contains "$(<"$clean_log")" 'MUTATING' 'failed cleanup preview still invokes no mutating form' || return 1
+
+  write_fake flatpak '
+printf "%s\n" "flatpak $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "uninstall --unused --user") printf "%s\n" "MUTATING flatpak user" >> "$UPKG_TEST_CLEAN_LOG" ;;
+  "uninstall --unused --system") printf "%s\n" "simulated Flatpak system failure" >&2 ; exit 1 ;;
+  *) exit 2 ;;
+esac
+'
+  output=$(run_upkg_with_managers 'flatpak' clean --only=flatpak 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'one successful Flatpak installation cleanup is partial' || return 1
+  assert_contains "$output" 'flatpak: partial - flatpak system cleanup failed' 'Flatpak partial summary identifies the failed installation' || return 1
+
+  command rm -f "$fakebin/nix-collect-garbage"
+  output=$(run_upkg_with_managers 'nix' clean --only=nix 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'missing nix-collect-garbage fails Nix cleanup' || return 1
+  assert_contains "$output" 'nix-collect-garbage is required for Nix cleanup' 'missing Nix garbage collector prints an actionable message' || return 1
+  assert_contains "$output" 'nix: failed - nix-collect-garbage is not available' 'missing Nix garbage collector is summarized as failed' || return 1
 
   inspect_tmp=$(mktemp -d) || {
     print -u2 -- 'not ok: mktemp creates inspect tmpdir'

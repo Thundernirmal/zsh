@@ -57,6 +57,7 @@ Optional extras:
 - `fd` / `fdfind`
 - `jq`
 - `nix`
+- `nix-collect-garbage` for Nix cleanup (checked when `nix` is installed)
 
 Missing optional tools keep the shell usable. The config uses runtime checks and either skips the integration or falls back to a simpler command where possible.
 
@@ -94,11 +95,33 @@ The default view hides commands that are unusable in the current shell. `--all` 
 
 ## Package Helpers
 
-`upkg` is the shared package-update wrapper. It detects supported managers at runtime: one distro backend (`paru`, `pacman`, `apt`, or `dnf`), plus optional `brew`, `flatpak`, `nix` via `npkg`, and global `npm`.
+`upkg` is the shared package-maintenance wrapper. It detects supported managers at runtime: one distro backend (`paru`, `pacman`, `apt`, or `dnf`), plus optional `brew`, `flatpak`, `nix` via `npkg`, and global `npm`.
 
-Default `upkg`, `upkg outdated`, `upkg check`, `upkg list`, `upkg search`, `upkg plan`, and `--dry-run` flows are read-only. Upgrades only run through `upkg upgrade`, `upkg up`, or `upkg update`; privileged distro upgrades require explicit `--sudo`.
+Default `upkg`, `upkg outdated`, `upkg check`, `upkg list`, `upkg search`, and `upkg plan` flows are read-only. Upgrades only run through `upkg upgrade`, `upkg up`, or `upkg update`. `upkg clean` is also explicitly mutating: use `upkg clean --dry-run` to preview cleanup without changing packages, caches, profiles, or manager state. `--only` and `--skip` select comma-separated manager IDs for every operational command; `--sudo` authorizes privileged distro upgrade or cleanup backends without auto-confirming native prompts.
 
-In rich terminals, every valid `upkg` command path—including help and upgrades—uses the shared dashboard theme. Operational commands include themed titles, manager sections, and summaries; help uses themed command and flag panels. Pipes, redirects, and other plain contexts keep script-friendly output.
+Cleanup stays inside each manager's conservative, documented operations. It never deletes cache directories directly, application data, project-local files, user configuration, or Nix profile generations, and it does not claim a portable reclaimed-byte total.
+
+| Manager | `upkg clean` policy |
+|---|---|
+| `apt` | `apt autoremove`, then `apt autoclean` |
+| `dnf` | `dnf autoremove`, then `dnf clean all` |
+| `pacman` | Remove the array returned by `pacman -Qtdq` with `pacman -Rs --`, then run `pacman -Sc` |
+| `paru` | `paru -c`, then `paru -Sc`; requires `--sudo` authorization but runs Paru unprefixed and does not duplicate Pacman |
+| `brew` | `brew autoremove`, then standard `brew cleanup` without aggressive prune flags |
+| `flatpak` | `flatpak uninstall --unused --user`, then `--system`, without deleting application data |
+| `nix` | `nix-collect-garbage` without generation-deletion flags, preserving rollback history |
+| `npm` | List npx cache keys with `npm cache npx ls`, remove those explicit keys with `npm cache npx rm <key>...`, then run `npm cache verify`, always in user space and without `--force` |
+
+Cleanup never injects `-y`, `--assumeyes`, or equivalent confirmation flags. A failed phase does not suppress later independent phases or managers. npm versions that require `--force` for a keyless `npm cache npx rm` are handled by passing the keys returned by `npm cache npx ls`; `upkg` never requests whole-cache forced removal. An older npm that rejects the npx cache subcommands still gets `npm cache verify`; the result is reported as `partial`, the overall command returns nonzero, and the output recommends upgrading npm.
+
+```zsh
+upkg clean --dry-run
+upkg clean --only brew,npm
+upkg clean --skip nix
+upkg clean --sudo --only apt
+```
+
+In rich terminals, every valid `upkg` command path—including help, upgrades, and cleanup—uses the shared dashboard theme. Operational commands include themed titles, manager sections, and summaries; help uses themed command and flag panels. Pipes, redirects, and other plain contexts keep script-friendly output.
 
 `npkg` is defined only when `nix` is available. Interactive `npkg` pickers and `npkg refresh`/`outdated` need `jq`, and the pickers also need `fzf` plus a real terminal.
 

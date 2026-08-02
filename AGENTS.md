@@ -36,7 +36,7 @@ Run these in order after edits:
 8. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
-- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `nix`) still exit `0` and only print hints.
+- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
 
 ## Manual QA Checklist
 

@@ -102,7 +102,7 @@ _zsh_help_register myip System 'Show the public IP address over HTTPS' 'myip' 'm
 _zsh_help_register path System 'List the current PATH entries' 'path' 'path' none function none
 
 # Packages and meta helpers
-_zsh_help_register upkg Packages 'Check, search, plan, or upgrade detected package managers' 'upkg [command] [args] [flags]' 'upkg search ripgrep --only=apt,nix' 'a supported package manager' function package-manager
+_zsh_help_register upkg Packages 'Check, search, plan, upgrade, or clean detected package managers' 'upkg [command] [args] [flags]' 'upkg search ripgrep --only=apt,nix' 'a supported package manager' function package-manager
 _zsh_help_register npkg Packages 'Manage the current Nix profile with short commands and pickers' 'npkg <command> [args]' 'npkg search ripgrep' 'nix; jq and fzf for optional workflows' function nix
 _zsh_help_register G Meta 'Pipe command output to grep' '<command> G <pattern>' 'git log --oneline G fix' grep alias grep
 _zsh_help_register L Meta 'Pipe command output to less' '<command> L' 'git diff L' less alias less

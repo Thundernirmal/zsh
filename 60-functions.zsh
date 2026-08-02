@@ -971,7 +971,7 @@ fbr() {
   return 1
 }
 
-# Unified package update/check wrapper across supported managers.
+# Unified package check, update, and cleanup wrapper across supported managers.
 _upkg_usage() {
   if ! _ui_plain_mode; then
     _ui_title_line 'Unified Package Updates' 'upkg help' accent '󰏖' '*'
@@ -982,17 +982,19 @@ _upkg_usage() {
     _ui_panel_kv 'search <query>' 'Search package names across detected managers' accent text
     _ui_panel_kv 'upgrade / up / update' 'Run upgrades across selected managers' accent text
     _ui_panel_kv 'plan' 'Preview available upgrades without changing packages' accent text
+    _ui_panel_kv 'clean' 'Remove unused packages and stale manager-owned caches' accent text
     _ui_panel_kv 'managers' 'Show detected managers and alternates' accent text
     _ui_panel_kv 'help' 'Show this help text' accent text
     _ui_section_break
     _ui_panel_kv '--only <list>' 'Include comma-separated manager IDs' muted text
     _ui_panel_kv '--skip <list>' 'Exclude comma-separated manager IDs' muted text
-    _ui_panel_kv '--sudo' 'Allow privileged upgrade backends to run' muted text
-    _ui_panel_kv '--dry-run' 'Preview upgrades instead of running them' muted text
+    _ui_panel_kv '--sudo' 'Authorize privileged upgrade and cleanup backends' muted text
+    _ui_panel_kv '--dry-run' 'Preview upgrades or cleanup without changing packages' muted text
     _ui_section_break
     _ui_panel_kv 'Managers' 'apt, dnf, pacman, paru, brew, flatpak, nix, npm' muted text
     _ui_panel_kv 'Preview' 'upkg plan --only brew,npm' muted text
     _ui_panel_kv 'Upgrade' 'upkg upgrade --sudo --only apt' muted text
+    _ui_panel_kv 'Cleanup preview' 'upkg clean --dry-run --only brew,npm' muted text
     return 0
   fi
 
@@ -1007,14 +1009,15 @@ _upkg_usage() {
   print '  up                  Alias for upgrade'
   print '  update              Alias for upgrade'
   print '  plan                Preview available upgrades without changing packages'
+  print '  clean               Remove unused packages and stale manager-owned caches'
   print '  managers            Show detected managers and alternates'
   print '  help                Show this help text'
   print ''
   print 'Flags:'
   print '  --only <list>       Comma-separated manager IDs to include'
   print '  --skip <list>       Comma-separated manager IDs to exclude'
-  print '  --sudo              Allow privileged upgrade backends to run'
-  print '  --dry-run           Preview upgrades instead of running them'
+  print '  --sudo              Authorize privileged upgrade and cleanup backends'
+  print '  --dry-run           Preview upgrades or cleanup without changing packages'
   print ''
   print 'Supported manager IDs:'
   print '  apt, dnf, pacman, paru, brew, flatpak, nix, npm'
@@ -1026,12 +1029,16 @@ _upkg_usage() {
   print '  upkg plan                            # preview upgrades'
   print '  upkg upgrade --dry-run --only npm    # preview selected upgrades'
   print '  upkg upgrade --sudo --only apt       # run a privileged backend'
+  print '  upkg clean --dry-run --only brew,npm # preview manager-owned cleanup'
+  print '  upkg clean --sudo --only apt         # remove unused APT data'
   print '  upkg managers --only npm,flatpak     # inspect selected order'
   print ''
   print 'Notes:'
   print '  - upkg with no command defaults to outdated'
   print '  - search prints one compact table with a manager column'
-  print '  - plan and --dry-run use the read-only outdated checks'
+  print '  - plan and upgrade --dry-run use the read-only outdated checks'
+  print '  - clean is mutating; use clean --dry-run for a read-only preview'
+  print '  - cleanup uses conservative manager commands and never deletes app data or user config directly'
   print '  - upgrades never inject sudo automatically'
   print '  - paru upgrades require explicit --sudo opt-in but still run unprefixed'
   print '  - brew upgrades run unprefixed and stay in Homebrew user space'
@@ -1277,23 +1284,33 @@ _upkg_summary_managers_by_state() {
 _upkg_print_summary() {
   emulate -L zsh
 
-  local manager detail state role title
-  local ok_count=0 updates_count=0 matches_count=0 empty_count=0 blocked_count=0 failed_count=0 skipped_count=0
+  local manager detail state role title metadata bucket family glyph fallback
+  local cleanup_summary=0
+  local -A status_counts=(
+    ok 0
+    updates 0
+    matches 0
+    empty 0
+    cleaned 0
+    planned 0
+    partial 0
+    blocked 0
+    failed 0
+    skipped 0
+    other 0
+  )
 
-  for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-    state=${_UPKG_SUMMARY_STATE[$manager]}
-    case $state in
-      'up to date'|upgraded) (( ok_count++ )) ;;
-      'updates available')   (( updates_count++ )) ;;
-      'matches found')       (( matches_count++ )) ;;
-      'no matches')          (( empty_count++ )) ;;
-      blocked)               (( blocked_count++ )) ;;
-      failed)                (( failed_count++ )) ;;
-      skipped)               (( skipped_count++ )) ;;
-    esac
-  done
+  [ "${_UPKG_OPERATION:-}" = 'clean' ] && cleanup_summary=1
 
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
+    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+      state=${_UPKG_SUMMARY_STATE[$manager]}
+      metadata=$(_ui_status_metadata "$state")
+      IFS=$'\t' read -r role bucket family glyph fallback <<< "$metadata"
+      (( status_counts[$bucket]++ ))
+      [ "$family" = 'cleanup' ] && cleanup_summary=1
+    done
+
     _ui_section_break
     _ui_color muted
     _ui_icon '󰍹' '>'
@@ -1303,28 +1320,40 @@ _upkg_print_summary() {
     print -nr -- 'Summary'
     _ui_reset
     print -nr -- ' '
-    _ui_badge "$ok_count ok" success
-    print -nr -- ' '
-    _ui_badge "$updates_count updates" warning
-    if (( matches_count > 0 )); then
+    if (( cleanup_summary )); then
+      _ui_badge "${status_counts[cleaned]} cleaned" success
+      if (( status_counts[planned] > 0 )); then
+        print -nr -- ' '
+        _ui_badge "${status_counts[planned]} planned" info
+      fi
+      if (( status_counts[partial] > 0 )); then
+        print -nr -- ' '
+        _ui_badge "${status_counts[partial]} partial" danger
+      fi
+    else
+      _ui_badge "${status_counts[ok]} ok" success
       print -nr -- ' '
-      _ui_badge "$matches_count matches" info
+      _ui_badge "${status_counts[updates]} updates" warning
+      if (( status_counts[matches] > 0 )); then
+        print -nr -- ' '
+        _ui_badge "${status_counts[matches]} matches" info
+      fi
+      if (( status_counts[empty] > 0 )); then
+        print -nr -- ' '
+        _ui_badge "${status_counts[empty]} empty" muted
+      fi
     fi
-    if (( empty_count > 0 )); then
+    if (( status_counts[blocked] > 0 )); then
       print -nr -- ' '
-      _ui_badge "$empty_count empty" muted
+      _ui_badge "${status_counts[blocked]} blocked" warning
     fi
-    if (( blocked_count > 0 )); then
+    if (( status_counts[failed] > 0 )); then
       print -nr -- ' '
-      _ui_badge "$blocked_count blocked" warning
+      _ui_badge "${status_counts[failed]} failed" danger
     fi
-    if (( failed_count > 0 )); then
+    if (( status_counts[skipped] > 0 )); then
       print -nr -- ' '
-      _ui_badge "$failed_count failed" danger
-    fi
-    if (( skipped_count > 0 )); then
-      print -nr -- ' '
-      _ui_badge "$skipped_count skipped" muted
+      _ui_badge "${status_counts[skipped]} skipped" muted
     fi
     print ''
 
@@ -1332,16 +1361,8 @@ _upkg_print_summary() {
       detail=${_UPKG_SUMMARY_DETAIL[$manager]}
       state=${_UPKG_SUMMARY_STATE[$manager]}
       title=$(_upkg_manager_title "$manager")
-      case $state in
-        'up to date'|upgraded)    role='success' ;;
-        'updates available')      role='warning' ;;
-        'matches found')          role='info'    ;;
-        'no matches')             role='muted'   ;;
-        blocked)                  role='warning' ;;
-        failed)                   role='danger'  ;;
-        skipped)                  role='muted'   ;;
-        *)                        role='accent'  ;;
-      esac
+      metadata=$(_ui_status_metadata "$state")
+      IFS=$'\t' read -r role bucket family glyph fallback <<< "$metadata"
 
       print -nr -- '  '
       _ui_color "$role"
@@ -1392,6 +1413,76 @@ _upkg_finish_upgrade_result() {
   return 1
 }
 
+_upkg_print_cleanup_phase() {
+  print ''
+  print "$1:"
+}
+
+_upkg_record_cleanup_result() {
+  emulate -L zsh
+
+  local rc=$1
+  local failure_detail=$2
+
+  # Cleanup handlers provide these caller-local counters and failure details.
+  if (( rc == 0 )); then
+    (( succeeded++ ))
+  else
+    (( failed++ ))
+    failures+=("$failure_detail")
+  fi
+
+  return 0
+}
+
+_upkg_run_cleanup_step() {
+  emulate -L zsh
+
+  local failure_detail=$1
+  local rc
+  shift
+
+  command "$@"
+  rc=$?
+  _upkg_record_cleanup_result "$rc" "$failure_detail"
+}
+
+_upkg_is_root() {
+  (( EUID == 0 ))
+}
+
+_upkg_cleanup_privilege_prefix() {
+  if _upkg_is_root; then
+    print -r -- ''
+  else
+    print -r -- 'sudo '
+  fi
+}
+
+_upkg_finish_cleanup_result() {
+  emulate -L zsh
+
+  local succeeded=$1
+  local failed=$2
+  local detail=$3
+
+  if (( failed == 0 )); then
+    if (( _UPKG_DRY_RUN )); then
+      _upkg_set_last_result 'planned' ''
+    else
+      _upkg_set_last_result 'cleaned' ''
+    fi
+    return 0
+  fi
+
+  if (( _UPKG_DRY_RUN || succeeded == 0 )); then
+    _upkg_set_last_result 'failed' "$detail"
+  else
+    _upkg_set_last_result 'partial' "$detail"
+  fi
+  return 1
+}
+
 _upkg_arch_outdated_has_no_updates() {
   emulate -L zsh
 
@@ -1428,7 +1519,7 @@ _upkg_print_npm_prefix_hint() {
 _upkg_require_sudo_command() {
   emulate -L zsh
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     return 0
   fi
 
@@ -2503,7 +2594,7 @@ _upkg_run_upgrade_apt() {
 
   _upkg_print_section apt
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'apt upgrade requires root; rerun with: upkg upgrade --sudo --only apt'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only apt'
     return 0
@@ -2511,7 +2602,7 @@ _upkg_run_upgrade_apt() {
 
   _upkg_require_sudo_command || return 0
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     command apt update
     rc=$?
     if (( rc != 0 )); then
@@ -2540,7 +2631,7 @@ _upkg_run_upgrade_dnf() {
 
   _upkg_print_section dnf
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'dnf upgrade requires root; rerun with: upkg upgrade --sudo --only dnf'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only dnf'
     return 0
@@ -2548,7 +2639,7 @@ _upkg_run_upgrade_dnf() {
 
   _upkg_require_sudo_command || return 0
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     command dnf upgrade --refresh
   else
     command sudo dnf upgrade --refresh
@@ -2565,7 +2656,7 @@ _upkg_run_upgrade_pacman() {
 
   _upkg_print_section pacman
 
-  if (( EUID != 0 && ! _UPKG_ALLOW_SUDO )); then
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
     print 'pacman upgrade requires root; rerun with: upkg upgrade --sudo --only pacman'
     _upkg_set_last_result 'blocked' 'rerun with --sudo --only pacman'
     return 0
@@ -2573,7 +2664,7 @@ _upkg_run_upgrade_pacman() {
 
   _upkg_require_sudo_command || return 0
 
-  if (( EUID == 0 )); then
+  if _upkg_is_root; then
     command pacman -Syu
   else
     command sudo pacman -Syu
@@ -2667,6 +2758,427 @@ _upkg_run_upgrade_npm() {
   _upkg_finish_upgrade_result "$rc" 'npm update -g failed'
 }
 
+_upkg_run_clean_apt() {
+  emulate -L zsh
+
+  local prefix
+  local succeeded=0 failed=0
+  local -a failures
+
+  _upkg_print_section apt
+
+  if (( _UPKG_DRY_RUN )); then
+    prefix=$(_upkg_cleanup_privilege_prefix)
+    _upkg_print_cleanup_phase 'Unused packages'
+    print -r -- "preview: ${prefix}apt --simulate autoremove"
+    _upkg_run_cleanup_step 'apt autoremove preview failed' apt --simulate autoremove
+
+    _upkg_print_cleanup_phase 'Package cache'
+    print -r -- "would run: ${prefix}apt autoclean"
+    (( succeeded++ ))
+
+    _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+    return $?
+  fi
+
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
+    print 'apt cleanup requires root; rerun with: upkg clean --sudo --only apt'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only apt'
+    return 0
+  fi
+
+  _upkg_require_sudo_command || return 0
+
+  _upkg_print_cleanup_phase 'Unused packages'
+  if _upkg_is_root; then
+    _upkg_run_cleanup_step 'apt autoremove failed' apt autoremove
+  else
+    _upkg_run_cleanup_step 'apt autoremove failed' sudo apt autoremove
+  fi
+
+  _upkg_print_cleanup_phase 'Package cache'
+  if _upkg_is_root; then
+    _upkg_run_cleanup_step 'apt autoclean failed' apt autoclean
+  else
+    _upkg_run_cleanup_step 'apt autoclean failed' sudo apt autoclean
+  fi
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_clean_dnf() {
+  emulate -L zsh
+
+  local prefix
+  local succeeded=0 failed=0
+  local -a failures
+
+  _upkg_print_section dnf
+
+  if (( _UPKG_DRY_RUN )); then
+    prefix=$(_upkg_cleanup_privilege_prefix)
+    _upkg_print_cleanup_phase 'Unused packages'
+    print 'preview: dnf --cacheonly repoquery --unneeded'
+    _upkg_run_cleanup_step 'dnf cache-only unneeded-package preview failed' dnf --cacheonly repoquery --unneeded
+
+    _upkg_print_cleanup_phase 'Package cache'
+    print -r -- "would run: ${prefix}dnf clean all"
+    (( succeeded++ ))
+
+    _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+    return $?
+  fi
+
+  if (( ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
+    print 'dnf cleanup requires root; rerun with: upkg clean --sudo --only dnf'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only dnf'
+    return 0
+  fi
+
+  _upkg_require_sudo_command || return 0
+
+  _upkg_print_cleanup_phase 'Unused packages'
+  if _upkg_is_root; then
+    _upkg_run_cleanup_step 'dnf autoremove failed' dnf autoremove
+  else
+    _upkg_run_cleanup_step 'dnf autoremove failed' sudo dnf autoremove
+  fi
+
+  _upkg_print_cleanup_phase 'Package cache'
+  if _upkg_is_root; then
+    _upkg_run_cleanup_step 'dnf clean all failed' dnf clean all
+  else
+    _upkg_run_cleanup_step 'dnf clean all failed' sudo dnf clean all
+  fi
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_clean_pacman() {
+  emulate -L zsh
+
+  local orphan_output rc prefix
+  local succeeded=0 failed=0
+  local -a failures orphans
+
+  _upkg_print_section pacman
+
+  if (( ! _UPKG_DRY_RUN && ! _UPKG_ALLOW_SUDO )) && ! _upkg_is_root; then
+    print 'pacman cleanup requires root; rerun with: upkg clean --sudo --only pacman'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only pacman'
+    return 0
+  fi
+
+  if (( ! _UPKG_DRY_RUN )); then
+    _upkg_require_sudo_command || return 0
+  fi
+
+  prefix=$(_upkg_cleanup_privilege_prefix)
+  _upkg_print_cleanup_phase 'Unused packages'
+  orphan_output=$(command pacman -Qtdq)
+  rc=$?
+  if (( rc == 0 )); then
+    orphans=( ${(f)orphan_output} )
+    if (( ${#orphans[@]} == 0 )); then
+      print 'No orphaned packages found.'
+      (( succeeded++ ))
+    elif (( _UPKG_DRY_RUN )); then
+      print -r -- "$orphan_output"
+      print -r -- "would run: ${prefix}pacman -Rs -- ${(j: :)orphans}"
+      (( succeeded++ ))
+    else
+      if _upkg_is_root; then
+        _upkg_run_cleanup_step 'pacman orphan removal failed' pacman -Rs -- "${orphans[@]}"
+      else
+        _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}"
+      fi
+    fi
+  elif (( rc == 1 )) && [ -z "$orphan_output" ]; then
+    print 'No orphaned packages found.'
+    (( succeeded++ ))
+  else
+    [ -n "$orphan_output" ] && print -r -- "$orphan_output"
+    (( failed++ ))
+    failures+=('pacman orphan query failed')
+  fi
+
+  _upkg_print_cleanup_phase 'Package cache'
+  if (( _UPKG_DRY_RUN )); then
+    print -r -- "would run: ${prefix}pacman -Sc"
+    (( succeeded++ ))
+  else
+    if _upkg_is_root; then
+      _upkg_run_cleanup_step 'pacman -Sc failed' pacman -Sc
+    else
+      _upkg_run_cleanup_step 'pacman -Sc failed' sudo pacman -Sc
+    fi
+  fi
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_clean_paru() {
+  emulate -L zsh
+
+  local succeeded=0 failed=0
+  local -a failures
+
+  _upkg_print_section paru
+
+  if (( _UPKG_DRY_RUN )); then
+    _upkg_print_cleanup_phase 'Unused packages'
+    print 'would run: paru -c'
+    (( succeeded++ ))
+    _upkg_print_cleanup_phase 'Package cache'
+    print 'would run: paru -Sc'
+    (( succeeded++ ))
+    _upkg_finish_cleanup_result "$succeeded" "$failed" ''
+    return $?
+  fi
+
+  if (( ! _UPKG_ALLOW_SUDO )); then
+    print 'paru cleanup requires explicit --sudo opt-in; rerun with: upkg clean --sudo --only paru'
+    _upkg_set_last_result 'blocked' 'rerun with --sudo --only paru'
+    return 0
+  fi
+
+  _upkg_print_cleanup_phase 'Unused packages'
+  _upkg_run_cleanup_step 'paru -c failed' paru -c
+
+  _upkg_print_cleanup_phase 'Package cache'
+  _upkg_run_cleanup_step 'paru -Sc failed' paru -Sc
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_clean_brew() {
+  emulate -L zsh
+
+  local succeeded=0 failed=0
+  local -a failures
+
+  _upkg_print_section brew
+
+  _upkg_print_cleanup_phase 'Unused packages'
+  if (( _UPKG_DRY_RUN )); then
+    _upkg_run_cleanup_step 'brew autoremove preview failed' brew autoremove --dry-run
+  else
+    _upkg_run_cleanup_step 'brew autoremove failed' brew autoremove
+  fi
+
+  _upkg_print_cleanup_phase 'Package cache'
+  if (( _UPKG_DRY_RUN )); then
+    _upkg_run_cleanup_step 'brew cleanup preview failed' brew cleanup --dry-run
+  else
+    _upkg_run_cleanup_step 'brew cleanup failed' brew cleanup
+  fi
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_clean_flatpak() {
+  emulate -L zsh
+
+  local succeeded=0 failed=0
+  local -a failures
+
+  _upkg_print_section flatpak
+
+  if (( _UPKG_DRY_RUN )); then
+    _upkg_print_cleanup_phase 'Unused user refs'
+    print 'would run: flatpak uninstall --unused --user'
+    (( succeeded++ ))
+    _upkg_print_cleanup_phase 'Unused system refs'
+    print 'would run: flatpak uninstall --unused --system'
+    (( succeeded++ ))
+    _upkg_finish_cleanup_result "$succeeded" "$failed" ''
+    return $?
+  fi
+
+  _upkg_print_cleanup_phase 'Unused user refs'
+  _upkg_run_cleanup_step 'flatpak user cleanup failed' flatpak uninstall --unused --user
+
+  _upkg_print_cleanup_phase 'Unused system refs'
+  _upkg_run_cleanup_step 'flatpak system cleanup failed' flatpak uninstall --unused --system
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_clean_nix() {
+  emulate -L zsh
+
+  local succeeded=0 failed=0
+  local -a failures
+
+  _upkg_print_section nix
+
+  if ! command -v nix-collect-garbage >/dev/null 2>&1; then
+    print 'nix-collect-garbage is required for Nix cleanup; ensure it is installed and available on PATH.'
+    _upkg_set_last_result 'failed' 'nix-collect-garbage is not available'
+    return 1
+  fi
+
+  _upkg_print_cleanup_phase 'Unreachable store objects'
+  if (( _UPKG_DRY_RUN )); then
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage --dry-run
+  else
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage
+  fi
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_npm_npx_cache_command() {
+  emulate -L zsh
+  setopt multios
+
+  local action=$1
+  local stdout_file='' stderr_file='' stdout_output='' stderr_output=''
+  local rc
+  integer stdout_fd stderr_fd
+
+  typeset -g _UPKG_NPM_NPX_STDOUT=''
+  typeset -g _UPKG_NPM_NPX_STDERR=''
+  typeset -g _UPKG_NPM_NPX_DIAGNOSTIC=''
+
+  stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm-npx.stdout.XXXXXX") || {
+    print -u2 -- 'Could not create temporary output capture for npm npx cache cleanup.'
+    return 1
+  }
+  stderr_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm-npx.stderr.XXXXXX") || {
+    command rm -f -- "$stdout_file"
+    print -u2 -- 'Could not create temporary error capture for npm npx cache cleanup.'
+    return 1
+  }
+
+  exec {stdout_fd}>&1 || {
+    command rm -f -- "$stdout_file" "$stderr_file"
+    return 1
+  }
+  exec {stderr_fd}>&2 || {
+    exec {stdout_fd}>&-
+    command rm -f -- "$stdout_file" "$stderr_file"
+    return 1
+  }
+
+  # Zsh multios duplicate each native stream to its original descriptor and a
+  # private diagnostic file, preserving output while allowing capability checks.
+  command npm cache npx "$action" >&$stdout_fd >"$stdout_file" 2>&$stderr_fd 2>"$stderr_file"
+  rc=$?
+
+  exec {stdout_fd}>&-
+  exec {stderr_fd}>&-
+
+  stdout_output=$(<"$stdout_file")
+  stderr_output=$(<"$stderr_file")
+  _UPKG_NPM_NPX_STDOUT=$stdout_output
+  _UPKG_NPM_NPX_STDERR=$stderr_output
+  _UPKG_NPM_NPX_DIAGNOSTIC="${stdout_output}"$'\n'"${stderr_output}"
+  command rm -f -- "$stdout_file" "$stderr_file"
+
+  return $rc
+}
+
+_upkg_npm_npx_cache_unsupported() {
+  emulate -L zsh
+
+  local output=${(L)1}
+
+  if [[ $output == *'unknown command'* ||
+    $output == *'invalid subcommand'* ||
+    $output == *'not a valid npm command'* ]]; then
+    return 0
+  fi
+
+  if [[ $output == *'usage:'* || $output == *'npm cache usage:'* ]]; then
+    [[ $output != *'npm cache npx ls'* && $output != *'npm cache npx rm'* ]]
+    return $?
+  fi
+
+  return 1
+}
+
+_upkg_run_clean_npm() {
+  emulate -L zsh
+
+  local output listing line key rc npx_failure_detail
+  local npx_unsupported=0 parse_failed=0 verify_failures_before=0
+  local succeeded=0 failed=0
+  local -a failures npx_keys
+
+  _upkg_print_section npm
+
+  _upkg_print_cleanup_phase 'npx cache'
+  if (( _UPKG_DRY_RUN )); then
+    _upkg_run_npm_npx_cache_command ls
+    rc=$?
+    output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
+    unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
+    _upkg_record_cleanup_result "$rc" 'npx cache preview failed'
+    if (( rc != 0 )) && _upkg_npm_npx_cache_unsupported "$output"; then
+      print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
+    fi
+
+    _upkg_print_cleanup_phase 'npm cache'
+    print 'would run: npm cache verify'
+    (( succeeded++ ))
+    _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+    return $?
+  fi
+
+  _upkg_run_npm_npx_cache_command ls
+  rc=$?
+  output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
+  listing=${_UPKG_NPM_NPX_STDOUT:-}
+  unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
+
+  if (( rc != 0 )); then
+    npx_failure_detail='npx cache listing failed'
+    if _upkg_npm_npx_cache_unsupported "$output"; then
+      npx_unsupported=1
+      npx_failure_detail='npx cache cleanup is unsupported'
+      print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
+    fi
+    _upkg_record_cleanup_result "$rc" "$npx_failure_detail"
+  elif [ -z "$listing" ]; then
+    print 'No npx cache entries found.'
+    _upkg_record_cleanup_result 0 ''
+  else
+    for line in ${(f)listing}; do
+      [ -n "$line" ] || continue
+      if [[ $line != *:* ]]; then
+        parse_failed=1
+        break
+      fi
+
+      key=${line%%:*}
+      case $key in
+        ''|-*|*[![:alnum:]_-]*)
+          parse_failed=1
+          break
+          ;;
+      esac
+      npx_keys+=("$key")
+    done
+
+    if (( parse_failed || ${#npx_keys[@]} == 0 )); then
+      print -u2 -- 'Could not safely parse npm npx cache keys; no npx entries were removed.'
+      _upkg_record_cleanup_result 1 'npx cache listing could not be parsed'
+    else
+      _upkg_run_cleanup_step 'npx cache cleanup failed' npm cache npx rm "${npx_keys[@]}"
+    fi
+  fi
+
+  _upkg_print_cleanup_phase 'npm cache'
+  verify_failures_before=$failed
+  _upkg_run_cleanup_step 'npm cache verify failed' npm cache verify
+  if (( npx_unsupported && failed == verify_failures_before )); then
+    failures[-1]='npx cache cleanup is unsupported; npm cache verified'
+  fi
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
 upkg() {
   emulate -L zsh
 
@@ -2744,7 +3256,7 @@ upkg() {
       -h|--help)
         raw_cmd='help'
         ;;
-      outdated|check|list|search|upgrade|up|update|plan|managers)
+      outdated|check|list|search|upgrade|up|update|plan|clean|managers)
         if [ "$raw_cmd" = 'search' ]; then
           query_parts+=("$1")
         else
@@ -2774,6 +3286,7 @@ upkg() {
     search) cmd='search' ;;
     upgrade|up|update) cmd='upgrade' ;;
     plan) cmd='plan' ;;
+    clean) cmd='clean' ;;
     managers) cmd='managers' ;;
     help) cmd='help' ;;
   esac
@@ -2791,8 +3304,10 @@ upkg() {
       cmd='plan'
     elif [ "$cmd" = 'outdated' ] || [ "$cmd" = 'plan' ]; then
       cmd='plan'
+    elif [ "$cmd" = 'clean' ]; then
+      :
     else
-      print -u2 -- '--dry-run is only valid with the default outdated check, plan, or upgrade'
+      print -u2 -- '--dry-run is only valid with the default outdated check, plan, upgrade, or clean'
       _upkg_usage
       return 1
     fi
@@ -2811,6 +3326,13 @@ upkg() {
         ;;
       managers)
         _ui_title_line 'Detected Managers' 'upkg managers' accent '󰒓' '*'
+        ;;
+      clean)
+        if (( dry_run )); then
+          _ui_title_line 'Package Cleanup' 'dry-run' accent '󰃢' '*'
+        else
+          _ui_title_line 'Package Cleanup' 'upkg clean' accent '󰃢' '*'
+        fi
         ;;
       *)
         _ui_title_line 'Package Dashboard' "$cmd" accent '󰏖' '*'
@@ -2932,6 +3454,8 @@ upkg() {
   fi
 
   typeset -g _UPKG_ALLOW_SUDO=$allow_sudo
+  typeset -g _UPKG_DRY_RUN=$dry_run
+  typeset -g _UPKG_OPERATION=$cmd
   typeset -g -a _UPKG_SUMMARY_ORDER
   typeset -g -A _UPKG_SUMMARY_STATE _UPKG_SUMMARY_DETAIL
   _UPKG_SUMMARY_ORDER=()
@@ -2991,6 +3515,14 @@ upkg() {
       upgrade:flatpak) _upkg_run_upgrade_flatpak ;;
       upgrade:nix) _upkg_run_upgrade_nix ;;
       upgrade:npm) _upkg_run_upgrade_npm ;;
+      clean:apt) _upkg_run_clean_apt ;;
+      clean:dnf) _upkg_run_clean_dnf ;;
+      clean:pacman) _upkg_run_clean_pacman ;;
+      clean:paru) _upkg_run_clean_paru ;;
+      clean:brew) _upkg_run_clean_brew ;;
+      clean:flatpak) _upkg_run_clean_flatpak ;;
+      clean:nix) _upkg_run_clean_nix ;;
+      clean:npm) _upkg_run_clean_npm ;;
       *)
         _upkg_print_section "$manager"
         print "No handler defined for $manager"
@@ -3001,7 +3533,7 @@ upkg() {
     _upkg_record_summary "$manager" "$_UPKG_LAST_STATE" "$_UPKG_LAST_DETAIL"
 
     case $_UPKG_LAST_STATE in
-      blocked|failed)
+      partial|blocked|failed)
         exit_code=1
         ;;
     esac

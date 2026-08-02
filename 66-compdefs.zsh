@@ -12,14 +12,15 @@ if (( $+functions[compdef] )); then
     'up:Alias for upgrade'
     'update:Alias for upgrade'
     'plan:Preview available upgrades'
+    'clean:Remove unused packages and stale caches'
     'managers:Show detected managers and alternates'
     'help:Show usage help'
   )
   typeset -ga _ZSH_UPKG_FLAGS=(
     '--only:Include comma-separated manager IDs'
     '--skip:Exclude comma-separated manager IDs'
-    '--sudo:Allow privileged upgrade backends'
-    '--dry-run:Preview upgrades without changing packages'
+    '--sudo:Authorize privileged upgrade and cleanup backends'
+    '--dry-run:Preview upgrades or cleanup without changing packages'
     '--help:Show usage help'
   )
   typeset -ga _ZSH_UPKG_MANAGERS=(
@@ -72,8 +73,8 @@ if (( $+functions[compdef] )); then
       '(-h --help)'{-h,--help}'[show usage help]' \
       '--only=[include comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
       '--skip=[exclude comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
-      '--sudo[allow privileged upgrade backends]' \
-      '--dry-run[preview upgrades without changing packages]' \
+      '--sudo[authorize privileged upgrade and cleanup backends]' \
+      '--dry-run[preview upgrades or cleanup without changing packages]' \
       '1:upkg command:->command' \
       '*:command argument:->argument' && return 0
 

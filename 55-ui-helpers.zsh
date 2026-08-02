@@ -168,37 +168,31 @@ _ui_icon() {
   fi
 }
 
+_ui_status_metadata() {
+  emulate -L zsh
+
+  case $1 in
+    'up to date'|upgraded) print -r -- $'success\tok\tpackage\t󰄬\t*' ;;
+    cleaned)               print -r -- $'success\tcleaned\tcleanup\t󰄬\t*' ;;
+    'updates available')   print -r -- $'warning\tupdates\tpackage\t󰚰\t!' ;;
+    'matches found')       print -r -- $'info\tmatches\tsearch\t󰍉\t?' ;;
+    'no matches')          print -r -- $'muted\tempty\tsearch\t󰍉\t0' ;;
+    planned)               print -r -- $'info\tplanned\tcleanup\t󰋼\t>' ;;
+    partial)               print -r -- $'danger\tpartial\tcleanup\t󰀦\t!' ;;
+    blocked)               print -r -- $'warning\tblocked\tneutral\t󰍛\t-' ;;
+    failed)                print -r -- $'danger\tfailed\tneutral\t󰅚\tx' ;;
+    skipped)               print -r -- $'muted\tskipped\tneutral\t󰒭\t~' ;;
+    *)                     print -r -- $'accent\tother\tneutral\t󰘥\t>' ;;
+  esac
+}
+
 _ui_status_icon() {
   emulate -L zsh
 
-  local state=$1
+  local role bucket family glyph fallback
 
-  case $state in
-    'up to date'|upgraded)
-      _ui_icon '󰄬' '*'
-      ;;
-    'updates available')
-      _ui_icon '󰚰' '!'
-      ;;
-    'matches found')
-      _ui_icon '󰍉' '?'
-      ;;
-    'no matches')
-      _ui_icon '󰍉' '0'
-      ;;
-    blocked)
-      _ui_icon '󰍛' '-'
-      ;;
-    failed)
-      _ui_icon '󰅚' 'x'
-      ;;
-    skipped)
-      _ui_icon '󰒭' '~'
-      ;;
-    *)
-      _ui_icon '󰘥' '>'
-      ;;
-  esac
+  IFS=$'\t' read -r role bucket family glyph fallback <<< "$(_ui_status_metadata "$1")"
+  _ui_icon "$glyph" "$fallback"
 }
 
 _ui_manager_icon() {

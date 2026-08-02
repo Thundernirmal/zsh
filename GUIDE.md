@@ -534,7 +534,7 @@ docker ps G "running" W
 
 ## Unified Package Updates (upkg)
 
-Defined in `60-functions.zsh`. `upkg` is a single entrypoint for checking outdated packages or running upgrades across the package managers available on the current machine. Runtime detection is the source of truth: there is no bootstrap variable to keep in sync, and `upkg` only uses managers that `command -v` can see right now.
+Defined in `60-functions.zsh`. `upkg` is a single entrypoint for checking, searching, upgrading, and conservatively cleaning the package managers available on the current machine. Runtime detection is the source of truth: there is no bootstrap variable to keep in sync, and `upkg` only uses managers that `command -v` can see right now.
 
 Detection order is:
 
@@ -559,6 +559,7 @@ If both `paru` and `pacman` are installed, `paru` is the default Arch-family bac
 | `upkg up` | Alias for `upgrade` |
 | `upkg update` | Alias for `upgrade` |
 | `upkg plan` | Preview available upgrades without changing packages |
+| `upkg clean` | Remove packages and manager-owned cache data the selected backends classify as unused, stale, or unreachable |
 | `upkg managers` | Show detected managers; filtered selections appear in execution order first |
 | `upkg help` | Show usage help |
 
@@ -568,8 +569,8 @@ If both `paru` and `pacman` are installed, `paru` is the default Arch-family bac
 |---|---|
 | `--only <list>` / `--only=<list>` | Include only the comma-separated manager IDs you name |
 | `--skip <list>` / `--skip=<list>` | Exclude the comma-separated manager IDs you name |
-| `--sudo` | Explicitly allow privileged upgrade paths to run |
-| `--dry-run` | Preview upgrades instead of running them |
+| `--sudo` | Explicitly authorize privileged distro upgrade and cleanup paths; native prompts are still authoritative |
+| `--dry-run` | Preview upgrades or cleanup without changing packages or manager state |
 
 Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, `npm`.
 
@@ -586,17 +587,39 @@ Supported manager IDs: `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`,
 | `nix` | `npkg outdated` | `npkg upgrade` | Reuses the existing `npkg` wrapper instead of duplicating Nix logic |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` | Upgrade path is user-space only; `upkg` will not suggest `sudo npm` |
 
+### Cleanup backends
+
+`upkg clean` is mutating. Within each manager it removes unused packages before cleaning caches, so artifacts made stale by the first phase can become candidates in the second. Each manager owns the decision about what is safe to remove; `upkg` does not delete cache directories itself.
+
+| Manager | Unused-package phase | Cache/store phase | Safety boundary |
+|---|---|---|---|
+| `apt` | `apt autoremove` | `apt autoclean` | Root or `--sudo` is required; `autoclean` preserves archives APT still considers downloadable |
+| `dnf` | `dnf autoremove` | `dnf clean all` | Root or `--sudo` is required; DNF owns removal of cached packages, metadata, and temporary repository files |
+| `pacman` | Query `pacman -Qtdq`, then pass a non-empty orphan array to `pacman -Rs --` | `pacman -Sc` | Root or `--sudo` is required; avoids `-Rn`, `-Scc`, and automatic confirmation |
+| `paru` | `paru -c` | `paru -Sc` | Requires explicit `--sudo` authorization but runs unprefixed so Paru controls its privilege helper; the default Paru route does not also run Pacman |
+| `brew` | `brew autoremove` | `brew cleanup` | Runs in Homebrew user space without `--prune=all` or `--scrub` |
+| `flatpak` | `flatpak uninstall --unused --user`, then `flatpak uninstall --unused --system` | Included in Flatpak's uninstall pruning | Keeps application data and allows normal polkit authentication for the system installation |
+| `nix` | None | `nix-collect-garbage` | Deletes only unreachable store objects; never deletes profile generations or the `npkg` attribute cache |
+| `npm` | None | List with `npm cache npx ls`, remove the returned keys with `npm cache npx rm <key>...`, then run `npm cache verify` | Runs in user space, uses npm rather than raw directory deletion, and never passes `--force` |
+
+Cleanup does not delete application data such as `~/.var/app`, project-local `node_modules`, lockfiles, virtual environments, build output, user-edited package configuration, or Nix rollback generations. It also does not inject `-y`, `--assumeyes`, `--noconfirm`, or an equivalent response to native prompts. Backend output can report its own reclaimed space, but `upkg` does not fabricate a cross-manager byte total.
+
+Dry-run cleanup uses native read-only probes where available: APT simulation for unused packages, `dnf --cacheonly repoquery --unneeded`, `pacman -Qtdq`, both Homebrew `--dry-run` forms, `nix-collect-garbage --dry-run`, and `npm cache npx ls`. DNF's cache-only mode prevents a metadata refresh. Steps without a safe unprivileged simulation—including APT cache cleanup—are printed as `would run` and are not invoked. Privileged commands are displayed with `sudo` context when needed, but a preview never calls `sudo` or requires `--sudo`.
+
+If `nix-collect-garbage` is unexpectedly unavailable, Nix cleanup fails with an installation/PATH hint rather than deleting store paths directly. npm releases that require `--force` for a keyless npx-cache removal are supported by listing and passing explicit cache keys instead. Older npm releases may reject the npx cache subcommands entirely; `upkg` still verifies and garbage-collects the normal npm cache, reports npm as `partial`, returns nonzero overall, and recommends upgrading npm.
+
 ### Behavior notes
 
 - `upkg` with no arguments is read-only and does not refresh package metadata automatically.
 - `upkg search <query>` is also read-only and searches the active/default managers unless you narrow it with `--only` or `--skip`; Homebrew formulae and casks are queried separately so the search path matches current `brew` flag handling. Results are aggregated into one compact table with a `Manager` column, no-match output is summarized once across the selected managers, backend failures are summarized with the failing manager IDs, multi-word searches are passed to backends as separate query arguments, and `upkg search --help` shows usage.
 - In rich terminals, `upkg search` prints a transient progress line with a distinct progress icon and manager icon while each backend is running; simplified text equivalents would read `Searching npm...` or `Searching Homebrew (formulae)...`, and the real line is cleared before the compact table is rendered.
-- `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade.
-- In rich terminals, every valid `upkg` command path—including `upkg help` and `upkg upgrade`—uses the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available. Operational commands include themed titles, manager sections, and summaries; help uses themed command and flag panels. Pipes, redirects, and other plain contexts keep script-friendly output.
+- `upkg plan`, `upkg --dry-run`, and `upkg upgrade --dry-run` use the read-only outdated checks to preview what would be considered for upgrade. `upkg clean --dry-run` instead previews the cleanup phases described above.
+- In rich terminals, every valid `upkg` command path—including `upkg help`, `upkg upgrade`, and `upkg clean`—uses the same shared dashboard treatment as the rest of the repo, plus Nerd Font manager/status icons when available. Cleanup uses a `Package Cleanup` title. Operational commands include themed titles, manager sections, and summaries; help uses themed command and flag panels. Pipes, redirects, and other plain contexts keep script-friendly output.
 - Distro outdated results depend on the package metadata already present on the machine.
-- The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`.
+- The authoritative full system update path for root-managed distros is `upkg upgrade --sudo`; the corresponding cleanup authorization is `upkg clean --sudo`.
 - When `--sudo` is requested from a non-root shell, `upkg` expects `sudo` to be installed; otherwise it blocks the backend and tells you to rerun it as root.
-- Multi-manager runs continue after a backend fails or is blocked, then print a final summary.
+- Multi-manager runs continue after a backend fails or is blocked, then print a final summary. Multi-phase cleanup also attempts later independent phases after an earlier phase fails.
+- Cleanup summary states are `cleaned` when every phase succeeds, `planned` for a successful dry-run preview, `partial` when some cleanup work succeeds and some fails, `failed` when no required work succeeds or a preview probe fails, `blocked` for missing authorization/capability, and `skipped` for a filter omission. `partial`, `failed`, and `blocked` make the overall command return `1` after all selected managers have run.
 - `blocked` means the backend needed explicit privilege or local setup that was not available.
 - `skipped` means the backend was intentionally omitted by `--skip`.
 - `--only` runs managers in the order you name them; default runs use detection order.
@@ -615,18 +638,24 @@ Flatpak note:
 
 - `upkg` checks both user and system Flatpak installations by default.
 - `flatpak update` without `--user` may prompt for authentication via polkit when upgrading system packages.
+- `upkg clean` addresses user and system installations separately and never passes `--delete-data`, `--force-remove`, or `--assumeyes`.
 
 Nix bridge details:
 
 - `upkg` only exposes the `nix` backend when `nix` is installed and the `npkg` shell function is defined in the current shell.
 - `upkg outdated --only nix` is blocked when `jq` is missing because `npkg outdated` depends on it.
 - `upkg upgrade --only nix` still works without `jq`.
+- `upkg clean --only nix` calls `nix-collect-garbage` directly without generation-deletion flags, so it does not depend on `jq` and preserves rollback history.
+- The dependency checker verifies `nix-collect-garbage` when Nix is installed and reports it as an optional missing capability.
 
 npm note:
 
 - `upkg upgrade --only npm` checks the configured global prefix before running.
 - If that prefix is not writable by the current user, `upkg` blocks the npm backend and tells you to move the prefix under your home directory.
 - `upkg` never recommends `sudo npm`.
+- `upkg clean --only npm` does not inspect the global prefix: it lists npm-managed npx execution-cache entries, passes only those explicit keys to `npm cache npx rm`, and then verifies/garbage-collects the content-addressable cache in user space.
+- `upkg` never uses the keyless, whole-npx-cache `npm cache npx rm --force` form.
+- When an older npm does not support the npx cache subcommands, cache verification still runs and the manager is reported as `partial` with an npm upgrade recommendation.
 
 ### Examples
 
@@ -646,6 +675,10 @@ upkg upgrade --sudo
 upkg upgrade --sudo --only apt
 upkg upgrade --only npm
 upkg --only pacman
+upkg clean --dry-run
+upkg clean --only brew,npm
+upkg clean --skip nix
+upkg clean --sudo --only apt
 ```
 
 Compact search output keeps every selected backend in one table:
