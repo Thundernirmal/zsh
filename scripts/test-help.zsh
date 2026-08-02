@@ -148,7 +148,7 @@ test_plain_rendering_and_availability() {
   assert_contains "$output" "Run 'zhelp --all npkg'" 'unavailable exact lookup explains how to include the command' || return 1
 
   output=$(zhelp --plain --all npkg)
-  assert_contains "$output" 'Availability: unavailable (requires nix; jq and fzf for optional workflows)' '--all labels unavailable command requirements' || return 1
+  assert_contains "$output" 'Availability: unavailable (requires nix; jq and fzf 0.52.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
 
   command mkdir -p -- "$fakebin"
   print -r -- '#!/bin/sh
@@ -180,6 +180,7 @@ test_palette_queue_and_cancel() {
 
   command mkdir -p -- "$fakebin"
   _zsh_help_register test-palette Meta 'Palette safety fixture' 'test-palette' "$dangerous_example" none function none || return 1
+  functions[_fzf_require_ready]='return 0'
 
   print -r -- '#!/bin/sh
 while IFS= read -r line; do
@@ -213,6 +214,7 @@ exit 130' > "$fakebin/fzf"
   read -z queued
   PATH=$old_path
   unset ZSH_HELP_TEST_ID
+  unfunction _fzf_require_ready
   assert_status "$rc" 0 'palette cancellation returns success' || return 1
   assert_equals "$queued" 'existing command buffer' 'palette cancellation leaves the command queue unchanged' || return 1
 }

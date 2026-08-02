@@ -254,11 +254,23 @@ z -t foo        # jump by recency (most recent)
 zi              # interactive picker with fzf
 ```
 
+The interactive `zi` path uses the same stable `fzf` 0.52.0+ gate as the repository's other pickers. If fuzzy integration is blocked, ordinary `z` navigation remains available and `zi` returns before asking zoxide to launch a picker.
+
 ---
 
 ## FZF — Fuzzy Finder
 
-The shared `fzf` layer is guarded carefully: the bindings only initialize when `fzf` exists, the shell is interactive, and `ZSH_EXECUTION_STRING` is empty. That keeps `zsh -i -c ...` startup paths from tripping `zle` warnings.
+The complete shared fuzzy layer requires a stable `fzf` 0.52.0 or newer. This retains the Catppuccin theme—including `selected-bg`—the generated completion and keybindings, every preview, and all three specialized option variables. There is no reduced compatibility mode for older releases.
+
+During normal interactive startup, the config resolves `fzf`, parses its numeric version components, then captures and syntax-checks non-empty `fzf --zsh` output before evaluating it. Only after those checks pass does it export `FZF_DEFAULT_OPTS`, `FZF_CTRL_T_OPTS`, `FZF_ALT_C_OPTS`, and `FZF_CTRL_R_OPTS`. Missing, malformed, prerelease, older, empty-output, or failing installations block only fuzzy workflows and print this once on stderr:
+
+```text
+zsh config: fzf 0.52.0 or newer is required (found: <version-or-reason>). Upgrade fzf and restart the shell.
+```
+
+The ready or blocked result is cached by resolved executable path. Ctrl+R, Ctrl+T, Alt+C, `fkill`, `fbr`, `zi`, the `zhelp` palette, and every interactive `npkg` path recheck the shared gate before invoking a picker; changing `PATH` to a different `fzf` causes that binary to be validated first. Normal non-interactive sourcing and `zsh -i -c ...` do not inspect the version, initialize ZLE bindings, or print the diagnostic.
+
+Run `~/.config/zsh/scripts/check-deps.sh` after installation. It reports the installed and minimum `fzf` versions and exits nonzero for every blocked case. Its hint directs you to a current package or the official upstream installation instructions rather than promising that an older distribution package is compatible.
 
 ### Ctrl+T — Insert file/directory
 
@@ -296,7 +308,7 @@ Press `Alt+C` to fuzzy search directories and cd into one.
 
 ### fkill function
 
-Fuzzy select one or more processes and send a signal. This helper requires both `fzf` and an interactive terminal.
+Fuzzy select one or more processes and send a signal. This helper requires supported `fzf` 0.52.0+ and an interactive terminal.
 
 ```zsh
 fkill           # opens process picker
@@ -367,9 +379,9 @@ zhelp --plain file     # force deterministic plain text
 zhelp --help           # show zhelp usage
 ```
 
-In a real terminal with fzf available, the palette shows command, category, and summary rows with a detail preview. Enter closes the picker and places the selected example in the editable command buffer; it never runs the example. Escape cancels successfully without changing the buffer. `NO_COLOR=1` keeps the picker interactive but removes colour, while `NO_NERD_FONT=1` uses ASCII markers.
+In a real terminal with supported fzf available, the palette shows command, category, and summary rows with a detail preview. Enter closes the picker and places the selected example in the editable command buffer; it never runs the example. Escape cancels successfully without changing the buffer. `NO_COLOR=1` keeps the picker interactive but removes colour, while `NO_NERD_FONT=1` uses ASCII markers.
 
-When fzf is missing, stdin or stdout is redirected, `TERM=dumb`, or `--plain` is passed, `zhelp` prints a stable uncoloured table instead. Exact command records remain detailed in either mode. Commands unavailable in the live shell are hidden by default and included with `--all`.
+When fzf is blocked, stdin or stdout is redirected, `TERM=dumb`, or `--plain` is passed, `zhelp` prints a stable uncoloured table instead and never launches the blocked picker. Exact command records remain detailed in either mode. Commands unavailable in the live shell are hidden by default and included with `--all`.
 
 Module sourcing registers data only. Availability checks and fzf launch only after `zhelp` is called, so the catalogue adds no startup subprocesses.
 
@@ -486,7 +498,7 @@ In rich terminals it renders a compact dashboard with indexed entries. In pipes,
 
 ### fbr — Fuzzy-pick and checkout a git branch
 
-Requires `fzf` and an interactive terminal. Shows local and remote branches sorted by most recent commit, with a log preview.
+Requires supported `fzf` 0.52.0+ and an interactive terminal. Shows local and remote branches sorted by most recent commit, with a log preview.
 
 ```zsh
 fbr              # opens branch picker and checks out the selected branch
@@ -702,7 +714,7 @@ Search summary: 2 result(s) across 2 manager(s).
 
 ## Nix Package Manager (npkg)
 
-Defined in `60-functions.zsh`. Only available when `nix` is installed. It is an `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require `jq`, `fzf`, and a real terminal.
+Defined in `60-functions.zsh`. Only available when `nix` is installed. It is an `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require `jq`, supported `fzf` 0.52.0+, and a real terminal.
 
 ### Commands
 
@@ -750,7 +762,7 @@ tips    # prints one random tip, e.g.:
         # tip: Run mkcd <dir> to create a directory and cd into it in one step
 ```
 
-Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific tips only appear when the supporting commands are available. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are available, and `upkg` tips are added automatically whenever at least one supported package manager is detected.
+Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific fuzzy tips appear only when the shared `fzf` gate is ready. Extra `npkg` picker tips are added automatically when `nix`, `jq`, and supported `fzf` are available, and `upkg` tips are added automatically whenever at least one supported package manager is detected.
 
 One tip points to `zhelp` for searchable command discovery. Command-tip catalogue consolidation remains separate from the palette itself, so the existing tip pool and hook-free behavior are otherwise unchanged.
 

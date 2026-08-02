@@ -43,6 +43,7 @@ _zsh_tip_pool=(
   "Tab completion is case-insensitive for names and paths"
   "Custom commands complete only the argument types they accept, such as archives, directories, counts, URLs, and signals"
   "Run zhelp to search available commands and queue an editable example without executing it"
+  "Fuzzy workflows require stable fzf 0.52.0 or newer; check setup with scripts/check-deps.sh"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
   "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"
@@ -52,11 +53,13 @@ _zsh_tip_pool=(
 if (( $+commands[zoxide] )); then
   _zsh_tip_pool+=(
     "Use z <pattern> to jump to directories zoxide remembers"
-    "Use zi for an interactive zoxide directory picker"
   )
+  if [[ ${_FZF_STATE:-blocked} == ready ]]; then
+    _zsh_tip_pool+=("Use zi for an interactive zoxide directory picker")
+  fi
 fi
 
-if (( $+commands[fzf] )) && [[ -o interactive ]] && [[ -z "$ZSH_EXECUTION_STRING" ]]; then
+if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
   _zsh_tip_pool+=(
     "Press Ctrl+R to fuzzy search your command history"
     "Press Ctrl+T to fuzzy insert a file path at your cursor"
@@ -86,7 +89,7 @@ if (( $+commands[nix] && $+commands[jq] )); then
   )
 fi
 
-if (( $+commands[nix] && $+commands[fzf] && $+commands[jq] )); then
+if (( $+commands[nix] && $+commands[jq] )) && [[ ${_FZF_STATE:-blocked} == ready ]]; then
   _zsh_tip_pool+=(
     "Run npkg install with no args to fuzzy-pick nixpkgs attribute names"
     "Run npkg find nvim to seed the nix package picker with an initial query"

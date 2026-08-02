@@ -48,7 +48,7 @@ Required for the intended shared setup:
 - `ss`
 - `lsd`
 - `zoxide`
-- `fzf`
+- `fzf` 0.52.0 or newer
 
 Optional extras:
 
@@ -61,17 +61,20 @@ Optional extras:
 
 Missing optional tools keep the shell usable. The config uses runtime checks and either skips the integration or falls back to a simpler command where possible.
 
+The dependency checker reads `fzf --version`, reports both the installed and minimum versions, and fails for a missing, malformed, prerelease, or pre-0.52 build. Its install hint points to a current supported package or the official upstream instructions instead of assuming an older distribution package is sufficient.
+
 ## Behavior Notes
 
 - `init.zsh` skips unreadable module files instead of failing shell startup.
 - Ordinary `*` and `**/*` globs exclude hidden entries, even if an earlier framework enabled `GLOB_DOTS`; opt in with `*(D)` or `**/*(D)` when hidden matches are intentional.
 - External integrations are guarded before use. Startup-time guards use zsh's prehashed `$+commands` table so a missing tool costs no `PATH` walk; guards inside functions use `command -v` so they stay correct when `PATH` changes mid-session.
-- `40-fzf.zsh` initializes `fzf --zsh` only for normal interactive startup, which avoids `zle` warnings in `zsh -i -c ...` paths.
+- `40-fzf.zsh` requires stable `fzf` 0.52.0 or newer. It validates the resolved executable, generated Zsh code, and non-empty output before exporting any `FZF_*` settings or evaluating `fzf --zsh`. Missing, older, malformed, prerelease, and broken installations hard-block only fuzzy workflows and print one actionable diagnostic during normal interactive startup; non-interactive and `zsh -i -c ...` paths stay silent.
+- The `fzf` result is cached by resolved executable path. Every repository picker—including Ctrl+R, Ctrl+T, Alt+C, `fkill`, `fbr`, `zi`, `zhelp`, and interactive `npkg` paths—consults that shared gate before launch, so a different binary selected after a `PATH` change is checked before use.
 - `50-completion.zsh` intentionally stays small and assumes the main `~/.zshrc` or framework already ran `compinit`.
 - `65-help.zsh` registers catalogue data without launching subprocesses. `zhelp` checks the live shell only when invoked.
 - `66-compdefs.zsh` registers custom completions only when `compdef` is available. Without `compinit`, it is a silent no-op.
 - `upkg` completion covers subcommands, aliases, flags, and comma-separated manager IDs. `npkg` completion reads an existing attribute cache when available but never runs Nix or refreshes the cache from Tab.
-- `zhelp` uses fzf only in a suitable interactive terminal. Enter queues the selected example for editing and never executes it; pipes, redirects, missing fzf, `TERM=dumb`, and `--plain` use stable plain text.
+- `zhelp` uses fzf only in a suitable interactive terminal with a supported, ready version. Enter queues the selected example for editing and never executes it; pipes, redirects, blocked fzf, `TERM=dumb`, and `--plain` use stable plain text without launching the blocked binary.
 - Rich dashboards are used only in real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`; pipes, redirects, `TERM=dumb`, and narrow terminals get plain output.
 - Set `NO_NERD_FONT=1` to keep colors while forcing ASCII-safe icons and bars.
 - `path` uses rich indexed output in capable terminals and stays one-entry-per-line in plain contexts.

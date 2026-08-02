@@ -95,12 +95,17 @@ ft() {
   fi
 }
 
-# Fuzzy kill process
-fkill() {
-  if ! command -v fzf >/dev/null 2>&1; then
-    echo "fzf is required for fkill"
+_zsh_require_fzf() {
+  if (( ! $+functions[_fzf_require_ready] )); then
+    print -u2 -r -- 'zsh config: fzf 0.52.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
     return 1
   fi
+  _fzf_require_ready
+}
+
+# Fuzzy kill process
+fkill() {
+  _zsh_require_fzf || return 1
 
   if [ ! -t 0 ] || [ ! -t 1 ]; then
     echo "fkill requires an interactive terminal"
@@ -1021,10 +1026,7 @@ path() {
 
 # Fuzzy-pick and checkout a git branch
 fbr() {
-  if ! command -v fzf >/dev/null 2>&1; then
-    echo "fzf is required for fbr"
-    return 1
-  fi
+  _zsh_require_fzf || return 1
 
   if [ ! -t 0 ] || [ ! -t 1 ]; then
     echo "fbr requires an interactive terminal"
@@ -3711,7 +3713,7 @@ if command -v nix >/dev/null 2>&1; then
     print '  - Bare install names are expanded to nixpkgs#<name>'
     print '  - npkg find searches a cached list of nixpkgs attribute names'
     print '  - npkg refresh and outdated need jq'
-    print '  - Interactive add/find/remove needs jq and fzf'
+    print '  - Interactive add/find/remove needs jq and fzf 0.52.0+'
     print '  - Advanced nix flags can be passed through by calling nix directly'
   }
 
@@ -3809,10 +3811,7 @@ if command -v nix >/dev/null 2>&1; then
       return 1
     fi
 
-    if ! command -v fzf >/dev/null 2>&1; then
-      echo "fzf is required for interactive npkg ${action}"
-      return 1
-    fi
+    _zsh_require_fzf || return 1
 
     if [ ! -t 0 ] || [ ! -t 1 ]; then
       echo "Interactive npkg ${action} requires a terminal"

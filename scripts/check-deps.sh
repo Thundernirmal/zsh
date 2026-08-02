@@ -4,6 +4,8 @@ set -u
 
 missing_required=""
 missing_optional=""
+fzf_min_version=0.52.0
+fzf_problem=0
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
@@ -48,6 +50,86 @@ check_any_cmd() {
   record_missing "$kind" "$display"
 }
 
+check_fzf() {
+  if ! have_cmd fzf; then
+    fzf_problem=1
+    printf 'missing required: fzf (minimum %s)\n' "$fzf_min_version"
+    record_missing required "fzf>=$fzf_min_version"
+    return
+  fi
+
+  fzf_version_output=$(fzf --version 2>/dev/null)
+  fzf_version_status=$?
+  if [ "$fzf_version_status" -ne 0 ]; then
+    fzf_problem=1
+    printf 'unsupported required: fzf version check failed (minimum %s)\n' "$fzf_min_version"
+    record_missing required "fzf>=$fzf_min_version"
+    return
+  fi
+
+  old_ifs=$IFS
+  IFS='
+'
+  set -- $fzf_version_output
+  IFS=$old_ifs
+  fzf_version_line=${1-}
+  set -- $fzf_version_line
+  fzf_version=${1-}
+
+  case $fzf_version in
+    [0-9]*-*)
+      fzf_problem=1
+      printf 'unsupported required: fzf %s is a prerelease (minimum %s)\n' "$fzf_version" "$fzf_min_version"
+      record_missing required "fzf>=$fzf_min_version"
+      return
+      ;;
+    ''|*[!0-9.]*|.*|*.|*..*)
+      fzf_problem=1
+      printf 'unsupported required: fzf has an unparseable version (minimum %s)\n' "$fzf_min_version"
+      record_missing required "fzf>=$fzf_min_version"
+      return
+      ;;
+  esac
+
+  old_ifs=$IFS
+  IFS=.
+  set -- $fzf_version
+  IFS=$old_ifs
+  if [ "$#" -ne 2 ] && [ "$#" -ne 3 ]; then
+    fzf_problem=1
+    printf 'unsupported required: fzf has an unparseable version (minimum %s)\n' "$fzf_min_version"
+    record_missing required "fzf>=$fzf_min_version"
+    return
+  fi
+
+  fzf_major=$1
+  fzf_minor=$2
+  fzf_patch=${3:-0}
+  case "$fzf_major$fzf_minor$fzf_patch" in
+    ''|*[!0-9]*)
+      fzf_problem=1
+      printf 'unsupported required: fzf has an unparseable version (minimum %s)\n' "$fzf_min_version"
+      record_missing required "fzf>=$fzf_min_version"
+      return
+      ;;
+  esac
+  if [ "${#fzf_major}" -gt 9 ] || [ "${#fzf_minor}" -gt 9 ] || [ "${#fzf_patch}" -gt 9 ]; then
+    fzf_problem=1
+    printf 'unsupported required: fzf has an unparseable version (minimum %s)\n' "$fzf_min_version"
+    record_missing required "fzf>=$fzf_min_version"
+    return
+  fi
+
+  if [ "$fzf_major" -gt 0 ] || { [ "$fzf_major" -eq 0 ] && [ "$fzf_minor" -ge 52 ]; }; then
+    printf 'ok: fzf %s (minimum %s)\n' "$fzf_version" "$fzf_min_version"
+    return
+  fi
+
+  printf 'unsupported required: fzf %s (minimum %s)\n' "$fzf_version" "$fzf_min_version"
+  fzf_problem=1
+  record_missing required "fzf>=$fzf_min_version"
+}
+
 detect_manager() {
   for manager in apt dnf pacman brew; do
     if have_cmd "$manager"; then
@@ -67,27 +149,31 @@ print_hints() {
   case "$manager" in
     apt)
       printf '  sudo apt update\n'
-      printf '  sudo apt install zsh git curl iproute2 lsd zoxide fzf bat tree fd-find jq\n'
+      printf '  sudo apt install zsh git curl iproute2 lsd zoxide bat tree fd-find jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     dnf)
-      printf '  sudo dnf install zsh git curl iproute lsd zoxide fzf bat tree fd-find jq\n'
+      printf '  sudo dnf install zsh git curl iproute lsd zoxide bat tree fd-find jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     pacman)
-      printf '  sudo pacman -S zsh git curl iproute2 lsd zoxide fzf bat tree fd jq\n'
+      printf '  sudo pacman -S zsh git curl iproute2 lsd zoxide bat tree fd jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     brew)
-      printf '  brew install zsh git curl lsd zoxide fzf bat tree fd jq\n'
+      printf '  brew install zsh git curl lsd zoxide bat tree fd jq\n'
       printf '  On GNU/Linux, install ss via your distro package for iproute/iproute2.\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     *)
-      printf '  Install these commands manually: zsh git curl ss lsd zoxide fzf bat tree fd/fdfind jq\n'
+      printf '  Install these commands manually: zsh git curl ss lsd zoxide bat tree fd/fdfind jq\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
   esac
+
+  if [ "$fzf_problem" -ne 0 ]; then
+    printf '  Install fzf %s+ from a current supported package or https://github.com/junegunn/fzf#installation\n' "$fzf_min_version"
+  fi
 }
 
 printf 'Checking shared Zsh config dependencies...\n\n'
@@ -98,7 +184,7 @@ check_cmd curl required
 check_cmd ss required
 check_cmd lsd required
 check_cmd zoxide required
-check_cmd fzf required
+check_fzf
 check_cmd bat optional
 check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
