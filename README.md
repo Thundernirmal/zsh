@@ -127,6 +127,8 @@ In rich terminals, every valid `upkg` command path—including help, upgrades, a
 
 `npkg` is defined only when `nix` is available. Interactive `npkg` pickers and `npkg refresh`/`outdated` need `jq`, and the pickers also need `fzf` plus a real terminal.
 
+`npkg outdated` compares the complete installed store-path set with the outputs selected by the current nixpkgs installable. A difference is reported conservatively as `change available`—it may be an upgrade, downgrade, rebuild, input change, or packaging change. Display versions are informational and never determine status. Missing profile data or failed evaluation produces `unknown`, a partial summary, and a nonzero result; only a complete all-current report may say `Everything is up to date.` The `upkg` Nix bridge consumes the stable `current`, `changed`, or `partial` state rather than matching display text.
+
 See [`GUIDE.md`](./GUIDE.md#unified-package-updates-upkg) for the full command reference.
 
 ## Verification

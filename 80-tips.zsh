@@ -82,7 +82,7 @@ fi
 if (( $+commands[nix] && $+commands[jq] )); then
   _zsh_tip_pool+=(
     "Run npkg refresh to rebuild the cached nixpkgs picker index (requires jq)"
-    "Run npkg outdated to preview available package upgrades before running npkg upgrade"
+    "Run npkg outdated to report current, changed, or unknown Nix outputs before upgrading"
   )
 fi
 

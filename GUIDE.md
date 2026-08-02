@@ -647,6 +647,7 @@ Nix bridge details:
 
 - `upkg` only exposes the `nix` backend when `nix` is installed and the `npkg` shell function is defined in the current shell.
 - `upkg outdated --only nix` is blocked when `jq` is missing because `npkg outdated` depends on it.
+- Nix outdated checks propagate a stable `current`, `changed`, or `partial` result into both `upkg outdated` and `upkg plan`. A partial result is reported as failed, keeps the Nix diagnostic rows, and makes the aggregate command return nonzero after other managers finish.
 - `upkg upgrade --only nix` still works without `jq`.
 - `upkg clean --only nix` calls `nix-collect-garbage` directly without generation-deletion flags, so it does not depend on `jq` and preserves rollback history.
 - The dependency checker verifies `nix-collect-garbage` when Nix is installed and reports it as an optional missing capability.
@@ -714,7 +715,7 @@ Defined in `60-functions.zsh`. Only available when `nix` is installed. It is an 
 | `npkg list` / `npkg ls` | List installed packages in the current profile |
 | `npkg remove <pkg>` / `npkg rm <pkg>` / `npkg uninstall <pkg>` / `npkg delete <pkg>` | Remove a package |
 | `npkg remove` / `npkg rm` | Open an fzf picker to choose packages to remove |
-| `npkg outdated` / `npkg check` / `npkg diff` | Show available upgrades before running upgrade |
+| `npkg outdated` / `npkg check` / `npkg diff` | Compare installed and currently evaluated output-path sets |
 | `npkg upgrade` / `npkg up` / `npkg update` | Upgrade all packages |
 | `npkg upgrade <pkg>` | Upgrade a specific package |
 | `npkg refresh` | Rebuild the cached nixpkgs attribute index |
@@ -724,13 +725,15 @@ npkg add bat           # install bat
 npkg find nvim         # fuzzy-pick a neovim variant
 npkg search ripgrep    # search with descriptions
 npkg remove            # interactive removal picker
-npkg outdated          # see what would be upgraded
+npkg outdated          # report current, changed, and unknown outputs
 npkg upgrade           # upgrade everything
 ```
 
 The fzf picker preview shows the package description, version, and homepage from nixpkgs using the shared Catppuccin Mocha palette. The preview stays on the right in wide terminals and moves below the picker in narrower terminals so package names and metadata remain readable. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
 
-`npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints an ASCII-safe table in plain mode, or a responsive Mocha dashboard in rich terminals — run it before `npkg upgrade` to see what will change.
+`npkg outdated` reads every active nixpkgs profile element from either the object- or array-shaped manifest schema, then evaluates the same source, resolved attribute, and selected outputs in parallel. Status comes only from output identity: an equal store-path set is `current`; a different set is `change available`; and incomplete profile data, failed evaluation, or missing usable outputs is `unknown`. The comparison honors explicit multi-output selection and `meta.outputsToInstall` defaults. Version strings come from evaluated package metadata only, are display information, and are never parsed from store-path basenames or used to infer ordering.
+
+A complete report with changes still exits zero because the check itself succeeded. A report containing any `unknown` row is labeled partial and exits nonzero, with separate change and unknown counts; it never prints `Everything is up to date.` This deliberately does not claim that a changed output is newer—it can be an upgrade, downgrade, rebuild, changed input, or packaging change. A profile with no active nixpkgs elements is a complete zero-count result and prints `No nixpkgs packages found in the current profile.`
 
 `npkg refresh` also needs `jq`, because the cache is built from JSON output.
 
@@ -898,7 +901,7 @@ npkg find <query>   → seeded fuzzy install picker
 npkg search <query> → search nixpkgs with descriptions
 npkg list           → list installed packages
 npkg remove         → fuzzy-pick packages to remove
-npkg outdated       → show available upgrades
+npkg outdated       → compare Nix output identities
 npkg upgrade        → upgrade all packages
 npkg refresh        → rebuild nixpkgs attribute cache
 ```

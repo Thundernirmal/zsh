@@ -2609,7 +2609,7 @@ _upkg_run_outdated_flatpak() {
 _upkg_run_outdated_nix() {
   emulate -L zsh
 
-  local output rc
+  local output output_file rc state changed unknown
 
   _upkg_print_section nix
 
@@ -2619,21 +2619,43 @@ _upkg_run_outdated_nix() {
     return 0
   fi
 
-  output=$(npkg outdated 2>&1)
+  output_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-nix-outdated.XXXXXX") || {
+    _upkg_set_last_result 'failed' 'could not create a temp file for npkg outdated'
+    return 1
+  }
+
+  npkg outdated >"$output_file" 2>&1
   rc=$?
+  output=$(<"$output_file")
+  command rm -f -- "$output_file"
 
   [ -n "$output" ] && print -r -- "$output"
 
-  if (( rc != 0 )); then
-    _upkg_set_last_result 'failed' 'npkg outdated failed'
-    return 1
-  fi
+  state=${_NPKG_OUTDATED_STATE:-partial}
+  changed=${_NPKG_OUTDATED_CHANGED:-0}
+  unknown=${_NPKG_OUTDATED_UNKNOWN:-0}
 
-  if [[ $output == *'upgrade(s) available.'* ]]; then
-    _upkg_set_last_result 'updates available' ''
-  else
-    _upkg_set_last_result 'up to date' ''
-  fi
+  case $state in
+    current)
+      if (( rc == 0 )); then
+        _upkg_set_last_result 'up to date' ''
+        return 0
+      fi
+      ;;
+    changed)
+      if (( rc == 0 )); then
+        _upkg_set_last_result 'updates available' "${changed} change(s) available"
+        return 0
+      fi
+      ;;
+    partial)
+      _upkg_set_last_result 'failed' "${changed} change(s), ${unknown} unknown"
+      return 1
+      ;;
+  esac
+
+  _upkg_set_last_result 'failed' 'npkg outdated returned inconsistent state'
+  return 1
 }
 
 _upkg_run_outdated_npm() {
@@ -3672,7 +3694,7 @@ if command -v nix >/dev/null 2>&1; then
     print '  search <query>       Run a plain nixpkgs search with descriptions'
     print '  list                 List packages in the current profile'
     print '  remove [pkg ...]     Remove package(s); with no args opens an fzf picker'
-    print '  outdated             Show available package upgrades before running upgrade'
+    print '  outdated             Compare installed and evaluated Nix output identities'
     print '  refresh              Rebuild the cached nixpkgs attribute index'
     print '  upgrade [pkg ...]    Upgrade all packages or only the named ones'
     print '  help                 Show this help text'
@@ -3969,131 +3991,326 @@ if command -v nix >/dev/null 2>&1; then
     _npkg_nix profile remove "${targets[@]}"
   }
 
+  _npkg_set_outdated_state() {
+    typeset -g _NPKG_OUTDATED_STATE=$1
+    typeset -gi _NPKG_OUTDATED_TOTAL=${2:-0}
+    typeset -gi _NPKG_OUTDATED_CHANGED=${3:-0}
+    typeset -gi _NPKG_OUTDATED_UNKNOWN=${4:-0}
+  }
+
+  _npkg_eval_installable_record() {
+    emulate -L zsh
+
+    local source=$1
+    local attr_path=$2
+    local outputs_json=$3
+    local selection apply_expr output_name
+    local -a output_names
+
+    if [[ $outputs_json == null ]]; then
+      selection='if (package.outputSpecified or false) then [ package.outputName ] else if (package ? meta) && (package.meta ? outputsToInstall) then package.meta.outputsToInstall else [ "out" ]'
+    else
+      print -r -- "$outputs_json" | command jq -e '
+        type == "array"
+        and length > 0
+        and all(.[]; type == "string" and (. == "*" or test("^[A-Za-z0-9+._?=-]+$")))
+        and ((map(select(. == "*")) | length) == 0 or (length == 1 and .[0] == "*"))
+      ' >/dev/null 2>&1 || return 1
+
+      output_names=( "${(@f)$(print -r -- "$outputs_json" | command jq -r '.[]')}" )
+      if (( ${#output_names[@]} == 1 )) && [[ ${output_names[1]} == '*' ]]; then
+        selection='package.outputs or [ "out" ]'
+      else
+        selection='[ '
+        for output_name in "${output_names[@]}"; do
+          selection+='"'"$output_name"'" '
+        done
+        selection+=']'
+      fi
+    fi
+
+    apply_expr="package:
+      let
+        selectedOutputs = ${selection};
+        outputPath = output:
+          if builtins.hasAttr output package
+          then builtins.toString (builtins.getAttr output package)
+          else throw \"selected output is missing from the evaluated package\";
+      in {
+        paths = builtins.sort builtins.lessThan (builtins.map outputPath selectedOutputs);
+        version = if package ? version then builtins.toString package.version else null;
+      }"
+
+    _npkg_nix eval --json "${source}#${attr_path}" --apply "$apply_expr"
+  }
+
   _npkg_outdated() {
     emulate -L zsh
     setopt pipefail localtraps NO_MONITOR NO_NOTIFY
+
+    _npkg_set_outdated_state partial 0 0 0
 
     if ! command -v jq >/dev/null 2>&1; then
       echo "jq is required for npkg outdated"
       return 1
     fi
 
-    local profile_json pkg_count tmp_dir
-    local -a names attrs installed_versions
+    local profile_json profile_error_file profile_error entry_data entry_json name attr_path source locked_uri
+    local store_paths_json outputs_json structural_value
+    local tmp_dir current_record locked_record installed_paths available_paths
+    local installed_version available_version package_state display_state marker role detail error_output
+    local width name_width version_width visible_count more
+    local current_file locked_file pid
+    integer pkg_count=0 changed=0 unknown=0 idx
+    integer max_jobs=8
+    local -a names attrs sources locked_uris installed_path_sets output_specs structurally_valid
+    local -a installed_versions available_versions statuses unknown_details job_pids
 
-    profile_json=$(_npkg_nix profile list --json 2>/dev/null) || {
-      echo "Failed to read profile"
+    profile_error_file=$(command mktemp "${TMPDIR:-/tmp}/npkg-profile-error.XXXXXX") || {
+      echo "Failed to create temporary storage for npkg outdated."
+      return 1
+    }
+    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM; return 130' INT TERM
+
+    profile_json=$(_npkg_nix profile list --json 2>"$profile_error_file") || {
+      profile_error=$(<"$profile_error_file")
+      command rm -f -- "$profile_error_file"
+      trap - INT TERM
+      echo "Failed to read Nix profile."
+      [[ -n $profile_error ]] && print -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
+      return 1
+    }
+    command rm -f -- "$profile_error_file"
+    trap - INT TERM
+
+    print -r -- "$profile_json" | command jq -e '
+      type == "object"
+      and (((.elements | type) == "object") or ((.elements | type) == "array"))
+    ' >/dev/null 2>&1 || {
+      echo "Failed to parse Nix profile JSON."
       return 1
     }
 
-    # Extract the profile name, full flake attrPath, and store-path-derived
-    # version for each nixpkgs-sourced element.
-    # version_from_path strips known Nix multi-output suffixes (man, lib,
-    # dev, doc, info, bin, out, debug, static) so that e.g.
-    # "tree-2.3.1-man" yields "2.3.1" instead of "2.3.1-man".
-    local entry_data
     entry_data=$(
-      print -r -- "$profile_json" | command jq -r '
-        def version_from_path:
-          split("/")[-1]            # basename
-          | split("-")              # split on hyphens
-          # strip known Nix multi-output suffixes from the end
-          | if .[-1] | test("^(out|lib|dev|man|doc|info|bin|static|debug|py)$")
-            then .[:-1] else . end
-          | . as $parts
-          | (length - 1) as $last
-          | reduce range($last; 0; -1) as $i (
-              null;
-              if . == null and ($parts[$i] | test("^[0-9]")) then $i else . end
-            )
-          | if . then [$parts[.:][] ] | join("-") else "??" end;
+      print -r -- "$profile_json" | command jq -c '
+        def text: if type == "string" then . else "" end;
+        def manifest_entries:
+          if (.elements | type) == "object" then
+            .elements
+            | to_entries
+            | sort_by(.key)
+            | .[]
+            | {
+                fallbackName: .key,
+                value: (.value | if type == "object" then . else {} end)
+              }
+          else
+            .elements
+            | to_entries[]
+            | {
+                fallbackName: "element-\(.key + 1)",
+                value: (.value | if type == "object" then . else {} end)
+              }
+          end;
 
-        if (.elements | type) == "object" then
-          .elements | to_entries[]
-          | select((.value.originalUrl // .value.originalUri // .value.url // .value.uri // "") | test("nixpkgs"; "i"))
-          | select(.value.active // true)
-          | .key as $name
-          | (.value.attrPath // "") as $attr
-          | (.value.storePaths[0] // "") as $sp
-          | ($sp | version_from_path) as $ver
-          | [$name, $attr, $ver] | @tsv
-        elif (.elements | type) == "array" then
-          .elements[]
-          | select(.active // true)
-          | select((.originalUrl // .originalUri // .url // .uri // "") | test("nixpkgs"; "i"))
-          | (.attrPath // "") as $attr
-          | ($attr | split(".")[-1]) as $name
-          | (.storePaths[0] // "") as $sp
-          | ($sp | version_from_path) as $ver
-          | [$name, $attr, $ver] | @tsv
-        else
-          empty
-        end
+        manifest_entries
+        | .fallbackName as $fallback
+        | .value as $value
+        | select(($value.active // true) == true)
+        | (($value.attrPath // "") | text) as $attr
+        | (($value.originalUrl // $value.originalUri // "") | text) as $original
+        | (($value.uri // $value.url // "") | text) as $locked
+        | ($value.storePaths // null) as $stores
+        | select((($original + " " + $locked) | ascii_downcase | contains("nixpkgs")))
+        | {
+            displayName: (
+              if (($value.name // "") | text) != "" then (($value.name // "") | text)
+              elif $attr != "" then ($attr | split(".") | last)
+              elif (($stores | type) == "array" and ($stores | length) > 0 and (($stores[0] | type) == "string")) then ($stores[0] | split("/") | last)
+              else $fallback
+              end
+            ),
+            attrPath: $attr,
+            originalUrl: $original,
+            lockedUri: $locked,
+            storePaths: $stores,
+            outputs: ($value.outputs // null)
+          }
       '
-    ) || return 1
+    ) || {
+      echo "Failed to parse Nix profile elements."
+      return 1
+    }
 
-    if [ -z "$entry_data" ]; then
-      echo "No nixpkgs packages found in the current profile"
-      return 0
-    fi
+    while IFS= read -r entry_json; do
+      [[ -n $entry_json ]] || continue
 
-    # Read entries into arrays
-    while IFS=$'\t' read -r name attr ver; do
-      [ -z "$name" ] && continue
-      names+=("$name")
-      attrs+=("$attr")
-      installed_versions+=("$ver")
+      name=$(print -r -- "$entry_json" | command jq -r '.displayName') || return 1
+      attr_path=$(print -r -- "$entry_json" | command jq -r '.attrPath') || return 1
+      source=$(print -r -- "$entry_json" | command jq -r '.originalUrl') || return 1
+      locked_uri=$(print -r -- "$entry_json" | command jq -r '.lockedUri') || return 1
+      store_paths_json=$(print -r -- "$entry_json" | command jq -c '.storePaths') || return 1
+      outputs_json=$(print -r -- "$entry_json" | command jq -c '.outputs') || return 1
+
+      if print -r -- "$entry_json" | command jq -e '
+        (.displayName | type == "string" and length > 0)
+        and (.attrPath | type == "string" and length > 0)
+        and (.originalUrl | type == "string" and length > 0)
+        and (.lockedUri | type == "string")
+        and (.storePaths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0))
+        and (
+          .outputs == null
+          or (
+            (.outputs | type) == "array"
+            and (.outputs | length) > 0
+            and all(.outputs[]; type == "string" and (. == "*" or test("^[A-Za-z0-9+._?=-]+$")))
+            and (([.outputs[] | select(. == "*")] | length) == 0 or ((.outputs | length) == 1 and .outputs[0] == "*"))
+          )
+        )
+      ' >/dev/null 2>&1; then
+        structural_value=1
+      else
+        structural_value=0
+      fi
+
+      names+=("$(_ui_safe_text "$name")")
+      attrs+=("$attr_path")
+      sources+=("$source")
+      locked_uris+=("$locked_uri")
+      installed_path_sets+=("$store_paths_json")
+      output_specs+=("$outputs_json")
+      structurally_valid+=("$structural_value")
     done <<< "$entry_data"
 
     pkg_count=${#names[@]}
     if (( pkg_count == 0 )); then
-      echo "No nixpkgs packages found in the current profile"
+      _npkg_set_outdated_state current 0 0 0
+      echo "No nixpkgs packages found in the current profile."
       return 0
     fi
 
-    echo "Checking $pkg_count package(s) for updates..."
+    echo "Checking $pkg_count package(s) for changes..."
 
-    # Evaluate latest versions in parallel via temp files
-    tmp_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-outdated.XXXXXX") || return 1
-    trap "command rm -rf '$tmp_dir'; trap - EXIT INT TERM; return 1" INT TERM
-    trap "command rm -rf '$tmp_dir'" EXIT
+    tmp_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-outdated.XXXXXX") || {
+      echo "Failed to create temporary storage for npkg outdated."
+      return 1
+    }
+    [[ -n $tmp_dir && -d $tmp_dir ]] || {
+      echo "Failed to create temporary storage for npkg outdated."
+      return 1
+    }
 
-    local max_jobs=8 running=0 idx attr_name
+    trap 'for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done; wait 2>/dev/null; command rm -rf -- "$tmp_dir"; trap - EXIT INT TERM; return 130' INT TERM
+    trap 'command rm -rf -- "$tmp_dir"' EXIT
+
     for (( idx = 1; idx <= pkg_count; idx++ )); do
-      attr_name="${attrs[$idx]}"
+      (( structurally_valid[$idx] )) || continue
+
       (
-        local latest
-        latest=$(_npkg_nix eval --raw "nixpkgs#${attr_name}.version" 2>/dev/null) || latest="??"
-        print -r -- "$latest" > "${tmp_dir}/${idx}"
+        _npkg_eval_installable_record \
+          "${sources[$idx]}" \
+          "${attrs[$idx]}" \
+          "${output_specs[$idx]}" \
+          >"${tmp_dir}/${idx}.current" \
+          2>"${tmp_dir}/${idx}.current.error"
+
+        if [[ -n ${locked_uris[$idx]} ]]; then
+          _npkg_eval_installable_record \
+            "${locked_uris[$idx]}" \
+            "${attrs[$idx]}" \
+            "${output_specs[$idx]}" \
+            >"${tmp_dir}/${idx}.locked" \
+            2>"${tmp_dir}/${idx}.locked.error"
+        fi
+        :
       ) &
-      (( running++ ))
-      if (( running >= max_jobs )); then
-        wait
-        running=0
+      job_pids+=("$!")
+
+      if (( ${#job_pids[@]} >= max_jobs )); then
+        for pid in "${job_pids[@]}"; do
+          wait "$pid" 2>/dev/null
+        done
+        job_pids=()
       fi
     done
-    wait
 
-    # Collect results and build output
-    local -a latest_versions
-    local upgrades=0
-    local latest_version inst
+    for pid in "${job_pids[@]}"; do
+      wait "$pid" 2>/dev/null
+    done
+    job_pids=()
+
     for (( idx = 1; idx <= pkg_count; idx++ )); do
-      if [ -f "${tmp_dir}/${idx}" ]; then
-        latest_version=$(< "${tmp_dir}/${idx}")
-      else
-        latest_version='??'
+      installed_version='?'
+      available_version='?'
+      package_state=unknown
+      detail=''
+      current_file="${tmp_dir}/${idx}.current"
+      locked_file="${tmp_dir}/${idx}.locked"
+
+      if (( ! structurally_valid[$idx] )); then
+        detail='incomplete profile data'
       fi
 
-      latest_versions+=("$latest_version")
-      inst="${installed_versions[$idx]}"
-      if [ "$inst" != '??' ] && [ "$latest_version" != '??' ] && [ "$inst" != "$latest_version" ]; then
-        (( upgrades++ ))
+      if [[ -s $locked_file ]]; then
+        locked_record=$(<"$locked_file")
+        if print -r -- "$locked_record" | command jq -e '
+          type == "object" and (.version == null or (.version | type) == "string")
+        ' >/dev/null 2>&1; then
+          installed_version=$(print -r -- "$locked_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
+          installed_version=$(_ui_safe_text "$installed_version")
+        fi
       fi
+
+      if (( structurally_valid[$idx] )) && [[ -s $current_file ]]; then
+        current_record=$(<"$current_file")
+        if print -r -- "$current_record" | command jq -e '
+          type == "object"
+          and (.paths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0))
+          and (.version == null or (.version | type) == "string")
+        ' >/dev/null 2>&1; then
+          installed_paths=$(print -r -- "${installed_path_sets[$idx]}" | command jq -c 'sort | unique')
+          available_paths=$(print -r -- "$current_record" | command jq -c '.paths | sort | unique')
+          available_version=$(print -r -- "$current_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
+          available_version=$(_ui_safe_text "$available_version")
+
+          if [[ $installed_paths == $available_paths ]]; then
+            package_state=current
+          else
+            package_state=changed
+            (( changed++ ))
+          fi
+        else
+          detail='evaluation returned unusable output-path data'
+        fi
+      elif (( structurally_valid[$idx] )); then
+        if [[ -s "${tmp_dir}/${idx}.current.error" ]]; then
+          error_output=$(<"${tmp_dir}/${idx}.current.error")
+          detail="evaluation failed: $(_ui_safe_text "$error_output")"
+        else
+          detail='evaluation failed without a diagnostic'
+        fi
+      fi
+
+      if [[ $package_state == unknown ]]; then
+        (( unknown++ ))
+      fi
+
+      installed_versions+=("$installed_version")
+      available_versions+=("$available_version")
+      statuses+=("$package_state")
+      unknown_details+=("$detail")
     done
 
-    # Print table
-    local name avail marker role shown more width name_width version_width visible_count
+    command rm -rf -- "$tmp_dir"
+    trap - EXIT INT TERM
+
+    if (( unknown > 0 )); then
+      _npkg_set_outdated_state partial "$pkg_count" "$changed" "$unknown"
+    elif (( changed > 0 )); then
+      _npkg_set_outdated_state changed "$pkg_count" "$changed" 0
+    else
+      _npkg_set_outdated_state current "$pkg_count" 0 0
+    fi
 
     if _ui_plain_mode; then
       printf '\n'
@@ -4101,30 +4318,33 @@ if command -v nix >/dev/null 2>&1; then
       printf '%-25s %-20s %-20s %s\n' '-------' '---------' '---------' '------'
 
       for (( idx = 1; idx <= pkg_count; idx++ )); do
-        name="${names[$idx]}"
-        inst="${installed_versions[$idx]}"
-        avail="${latest_versions[$idx]}"
-
-        if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
-          marker='?'
-        elif [ "$inst" = "$avail" ]; then
-          marker='ok'
-        else
-          marker='upgrade'
-        fi
-
-        printf '%-25s %-20s %-20s %s\n' "$name" "$inst" "$avail" "$marker"
+        case ${statuses[$idx]} in
+          changed) display_state='change available' ;;
+          *) display_state=${statuses[$idx]} ;;
+        esac
+        printf '%-25s %-20s %-20s %s\n' \
+          "${names[$idx]}" \
+          "${installed_versions[$idx]}" \
+          "${available_versions[$idx]}" \
+          "$display_state"
       done
 
+      if (( unknown > 0 )); then
+        for (( idx = 1; idx <= pkg_count; idx++ )); do
+          [[ ${statuses[$idx]} == unknown ]] || continue
+          printf 'Unknown: %s - %s\n' "${names[$idx]}" "${unknown_details[$idx]}"
+        done
+      fi
+
       printf '\n'
-      if (( upgrades > 0 )); then
-        printf '%d upgrade(s) available. Run: npkg upgrade\n' "$upgrades"
+      if (( unknown > 0 )); then
+        printf 'Partial result: %d change(s) available; %d unknown.\n' "$changed" "$unknown"
+        return 1
+      elif (( changed > 0 )); then
+        printf '%d change(s) available. Run: npkg upgrade\n' "$changed"
       else
         printf 'Everything is up to date.\n'
       fi
-
-      command rm -rf "$tmp_dir"
-      trap - EXIT INT TERM
       return 0
     fi
 
@@ -4148,34 +4368,26 @@ if command -v nix >/dev/null 2>&1; then
     _ui_section_break
 
     for (( idx = 1; idx <= visible_count; idx++ )); do
-      name="${names[$idx]}"
-      inst="${installed_versions[$idx]}"
-      avail="${latest_versions[$idx]}"
-
-      if [ "$inst" = "??" ] || [ "$avail" = "??" ]; then
-        marker='unknown'
-        role='muted'
-      elif [ "$inst" = "$avail" ]; then
-        marker='up to date'
-        role='success'
-      else
-        marker='upgrade'
-        role='warning'
-      fi
+      package_state=${statuses[$idx]}
+      case $package_state in
+        current) marker=current; role=success ;;
+        changed) marker='change available'; role=warning ;;
+        *) marker=unknown; role=danger ;;
+      esac
 
       _ui_panel_prefix
       _ui_badge "$marker" "$role"
       print -nr -- ' '
       _ui_color text
-      _ui_pad left "$name_width" "$(_ui_truncate "$name_width" "$name")"
+      _ui_pad left "$name_width" "$(_ui_safe_truncate "$name_width" "${names[$idx]}")"
       _ui_reset
       print -nr -- ' '
       _ui_color muted
-      _ui_pad left "$version_width" "$inst"
+      _ui_pad left "$version_width" "$(_ui_safe_truncate "$version_width" "${installed_versions[$idx]}")"
       _ui_reset
       print -nr -- ' '
       _ui_color info
-      _ui_pad left "$version_width" "$avail"
+      _ui_pad left "$version_width" "$(_ui_safe_truncate "$version_width" "${available_versions[$idx]}")"
       _ui_reset
       print ''
     done
@@ -4184,19 +4396,28 @@ if command -v nix >/dev/null 2>&1; then
       _ui_panel_kv 'More' "+${more} not shown" muted muted
     fi
 
+    if (( unknown > 0 )); then
+      for (( idx = 1; idx <= pkg_count; idx++ )); do
+        [[ ${statuses[$idx]} == unknown ]] || continue
+        _ui_panel_kv 'Unknown' "${names[$idx]} - ${unknown_details[$idx]}" danger text
+      done
+    fi
+
     _ui_section_break
     print -nr -- '  '
-    if (( upgrades > 0 )); then
+    if (( unknown > 0 )); then
+      _ui_color danger
+      print -r -- "Partial result: $changed change(s) available; $unknown unknown."
+      _ui_reset
+      return 1
+    elif (( changed > 0 )); then
       _ui_color warning
-      print -r -- "$upgrades upgrade(s) available. Run npkg upgrade to apply."
+      print -r -- "$changed change(s) available. Run npkg upgrade to apply."
     else
       _ui_color success
       print -r -- 'Everything is up to date.'
     fi
     _ui_reset
-
-    command rm -rf "$tmp_dir"
-    trap - EXIT INT TERM
   }
 
   npkg() {
