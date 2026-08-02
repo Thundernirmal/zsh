@@ -18,15 +18,17 @@ This document defines the required user-visible behavior and acceptance criteria
 
 - Restore conventional, safe glob behavior so an unqualified `*` does not silently include hidden files.
 - Make `npkg outdated` report package drift without guessing versions or hiding evaluation failures.
-- Keep fuzzy-finder features usable on common distribution packages, while degrading quietly when Zsh integration is unavailable.
+- Preserve the complete fuzzy-finder feature set and require a version that supports it without compatibility downgrades.
 - Prevent filenames and other path data from injecting terminal control sequences into rich or plain output.
 - Preserve clean, fast startup and the existing guarded-integration conventions.
+- Preserve every existing user-facing function, alias, picker, keybinding, preview, and workflow while correcting the audited behavior.
 
 ## Non-goals
 
 - Fix Medium- or Low-priority audit findings in the same implementation change.
 - Implement semantic version ordering for arbitrary Nix package versions.
 - Redesign the package-manager commands, fuzzy-finder theme, or terminal dashboard system.
+- Remove or reduce a feature to accommodate an outdated external dependency.
 - Change the intentionally interactive aliases for `cp`, `mv`, or `rm`, except where tests must verify their interaction with glob expansion.
 - Modify user-owned `~/.zshrc`, Oh My Zsh, Starship, or machine-local completion wiring.
 
@@ -36,10 +38,11 @@ The implementation must meet all of these constraints:
 
 1. Startup-time command guards continue to use `(( $+commands[tool] ))`; they must not use top-level `command -v` checks.
 2. `zsh -i -c ...` and non-interactive sourcing remain free of ZLE warnings, prompts, and unexpected output.
-3. External integrations fail closed: an unsupported or broken optional capability is skipped without partially evaluating generated shell code.
+3. External integrations fail closed: generated shell code is evaluated only after all required capability checks succeed. An unsupported required `fzf` version is hard-blocked as defined in HC-03.
 4. Plain output remains suitable for pipes and logs. Rich output may contain only control sequences intentionally emitted by the UI layer, never sequences originating in data.
 5. User-facing behavior changes are reflected together in `80-tips.zsh`, `README.md`, and `GUIDE.md`.
 6. New behavior is covered by deterministic tests using temporary directories and stubbed commands; tests must not depend on the host's installed Nix or `fzf` version.
+7. No existing user-facing function, alias, picker, keybinding, preview, theme option, or workflow may be deleted as a compatibility fix. Unsupported dependencies are rejected with an actionable diagnostic instead.
 
 ## HC-01: Hidden files are included in ordinary globs
 
@@ -140,48 +143,82 @@ Automated fixtures must cover at least:
 
 No failure fixture may emit `Everything is up to date.` or return success.
 
-## HC-03: Common `fzf` packages are incompatible with startup configuration
+## HC-03: `fzf` must meet the complete feature set's minimum version
 
 ### Problem
 
 The global options use `selected-bg`, introduced in `fzf` 0.52, and startup invokes `fzf --zsh`, introduced in 0.48. The dependency checker currently validates only command presence and recommends distribution packages that may be older. A user can follow the documented install command and receive broken fuzzy-finder commands or noisy shell startup.
 
-### Compatibility policy
+### Decision
 
-The shared config must support two integration tiers:
+The minimum supported version is **`fzf` 0.52.0**. This is the first release line that supports both the current `fzf --zsh` integration and the current `selected-bg` theme option.
 
-| Tier | Capability | Required behavior |
-| --- | --- | --- |
-| Embedded | `fzf --zsh` is supported | Evaluate generated Zsh integration only after the command succeeds |
-| Legacy | The installed package provides readable Zsh completion and/or key-binding scripts | Source the available scripts directly |
+The implementation must retain the complete current theme, previews, bindings, generated Zsh integration, and every user-facing function that depends on `fzf`. It must not remove `selected-bg`, source legacy integration scripts, or offer a reduced-function compatibility mode for older versions.
 
-An installed binary with neither capability is usable only as a standalone command and is **degraded** for this repository. Shell startup must remain clean; `scripts/check-deps.sh` must explain the missing integration and give an actionable upgrade or installation hint.
+Consequently, distribution packages below 0.52.0 are intentionally unsupported even when the `fzf` command exists. The dependency checker must reject them rather than modifying the configuration to fit them.
+
+The preservation baseline includes Ctrl+R, Ctrl+T, and Alt+C; `fkill`; `fbr`; the `zhelp` palette and its existing plain mode; zoxide's `zi` workflow; all interactive `npkg` add, find, and remove paths; the `npkg fzf` command alias; and all current previews and theme options.
+
+### Hard-block semantics
+
+The hard block applies to the `fzf` subsystem, not to unrelated shell configuration. The rest of the modules must continue loading so the user retains a usable shell.
+
+When `fzf` is missing, reports an unparseable version, is older than 0.52.0, or fails to generate valid Zsh integration:
+
+- do not evaluate output from `fzf --zsh`;
+- do not initialize any `fzf` keybindings or partially configure a reduced feature set;
+- retain all repository-defined functions and aliases;
+- make every code path that would invoke `fzf` consult the shared version guard first;
+- make an `fzf`-required command return nonzero before attempting its picker and print a concise upgrade diagnostic;
+- preserve existing explicitly or automatically selected non-`fzf` modes, including `zhelp --plain` and `zhelp`'s documented plain table when fuzzy interaction is unavailable, while ensuring they never invoke the blocked binary;
+- cache the blocked state for the session so each command does not repeat external version probes;
+- during a normal interactive prompt startup, print one actionable diagnostic to stderr; do not repeat it for every module or binding;
+- keep non-interactive sourcing and `zsh -i -c ...` silent and free of ZLE initialization.
+
+The required diagnostic format is:
+
+```text
+zsh config: fzf 0.52.0 or newer is required (found: <version-or-reason>). Upgrade fzf and restart the shell.
+```
+
+An invocation of an `fzf`-required function may reuse this message when the subsystem is blocked. It must not introduce a new compatibility fallback; an already-supported non-`fzf` mode remains part of the function's existing contract.
 
 ### Required behavior
 
-- Remove `selected-bg` from the shared `FZF_DEFAULT_OPTS` baseline. The baseline must be accepted by the oldest supported legacy tier; enhanced colors must not be required for correct operation.
-- During a normal interactive prompt startup, detect the embedded capability and use `fzf --zsh` when supported.
-- If embedded integration is unavailable, look for packaged Zsh integration scripts in deterministic, documented locations. The implementation must cover the common `/usr/share/doc/fzf/examples/` and `/usr/share/fzf/shell/` layouts and may also honor an existing `FZF_BASE` shell directory.
-- Source only readable regular files. Completion and key-binding scripts are independent capabilities: use whichever are present and do not source a path twice.
-- Capture expected probe errors. Never pass empty, partial, or failed command output to `eval`.
+- Keep the complete existing `FZF_DEFAULT_OPTS`, including `selected-bg`, and preserve `FZF_CTRL_T_OPTS`, `FZF_ALT_C_OPTS`, and `FZF_CTRL_R_OPTS` behavior.
+- Use `(( $+commands[fzf] ))` for the startup-time presence guard. Version inspection may invoke the resolved command only inside the normal interactive-startup path or an explicit `fzf`-dependent command.
+- Parse the leading stable numeric version from `fzf --version` and compare integer major, minor, and patch components. Do not use lexicographic string comparison. An omitted patch component is zero; unparseable and prerelease versions are blocked.
+- Treat 0.52.0 as the inclusive boundary: 0.51.x is blocked and 0.52.0 or newer is accepted.
+- Invoke `fzf --zsh` only after the version check succeeds. Capture stdout and stderr separately, require a zero status and non-empty generated code, and call `eval` only on that validated stdout.
+- Export the repository's `FZF_*` configuration only after validation succeeds. A blocked setup must not inject options that the installed binary cannot parse.
+- Record a session-level ready or blocked state that all repository-defined `fzf` entry points can query through one shared guard.
+- Inside function bodies, resolve `fzf` with `command -v` and key the cached version result by the resolved executable path. If `PATH` selects a different binary mid-session, validate the new binary before use.
 - Keep the existing `[[ -o interactive ]]` and `[[ -z "$ZSH_EXECUTION_STRING" ]]` protections so command-mode interactive shells do not initialize ZLE bindings.
-- A missing or degraded integration must not print a warning during shell startup. Diagnostics belong in `scripts/check-deps.sh` and documentation.
-- The dependency checker must report the detected `fzf` version and one of `embedded integration`, `legacy integration`, or `degraded: no Zsh integration`. A degraded required dependency makes the checker fail.
-- `apt` hints on distributions whose repository version lacks embedded integration must mention that the packaged legacy scripts are used. If those scripts are absent, the hint must direct the user to a current upstream installation instead of implying that command presence is sufficient.
+- `scripts/check-deps.sh` must remain POSIX `sh` and report the installed and minimum versions. Missing, unparseable, prerelease, and older versions are required-dependency failures and make the script exit nonzero.
+- Installation hints must not claim an older distribution package is sufficient. If the detected package source cannot provide 0.52.0 or newer, direct the user to a current supported package or the official upstream installation instructions.
 
 ### Acceptance criteria
 
-Tests use a stubbed `fzf` and temporary integration scripts to cover:
+Tests use a stubbed `fzf` to cover:
 
-- 0.38 and 0.44-style installations with legacy scripts;
-- 0.48 through 0.51 with embedded integration and no `selected-bg` option;
-- 0.52 or newer with embedded integration;
-- a binary whose `--zsh` probe exits nonzero;
-- a present binary with no usable Zsh integration;
-- a missing binary;
-- `zsh -i -c ...` and non-interactive sourcing.
+- missing `fzf`;
+- version-command failure and malformed output;
+- a prerelease version;
+- 0.51.1 as an explicit below-boundary failure;
+- 0.52.0 as an explicit boundary success;
+- representative newer minor and major versions;
+- a supported version whose `--zsh` call exits nonzero or returns empty output;
+- normal interactive startup, `zsh -i -c ...`, and non-interactive sourcing.
 
-Every supported case starts without stderr output. Invoking a fuzzy picker with the stubbed pre-0.52 binary must not fail because of an unsupported color option. The degraded case is silent at startup but is reported as a failure by `scripts/check-deps.sh`.
+The tests must also prove that:
+
+- every blocked case prevents `eval` and returns nonzero from an `fzf`-required function;
+- existing non-`fzf` modes, including explicit and automatically selected `zhelp` plain output, still work without invoking the blocked binary;
+- a normal interactive shell prints exactly one actionable block diagnostic, while command-mode and non-interactive startup remain silent;
+- version detection is cached and not repeated by every picker;
+- all existing repository-defined functions and aliases remain defined in both ready and blocked states;
+- supported versions retain `selected-bg`, all three specialized option variables, previews, generated completion, and keybindings;
+- `scripts/check-deps.sh` returns nonzero for every blocked version case and zero at the 0.52.0 boundary.
 
 ## HC-04: Filesystem text can inject terminal control sequences
 
@@ -230,7 +267,7 @@ If the implementation discovers another dashboard that renders raw path data thr
 The implementation change must update all three user-facing documentation surfaces:
 
 - `80-tips.zsh`: replace the `GLOB_DOTS` tip, describe explicit `(D)` usage, and describe Nix results as changes rather than guaranteed upgrades.
-- `README.md`: document the `fzf` embedded/legacy fallback, dependency-checker diagnostics, safe path rendering, and conservative Nix status semantics.
+- `README.md`: document the `fzf` 0.52.0 minimum, hard-block behavior, dependency-checker diagnostics, safe path rendering, and conservative Nix status semantics.
 - `GUIDE.md`: update the shell-options section, `npkg outdated` workflow, `fzf` setup guidance, and terminal-output safety guarantee with concrete examples.
 
 Documentation must not promise that `npkg outdated` determines version ordering. It must explain that `unknown` makes the check incomplete and unsuccessful.
@@ -241,7 +278,7 @@ Documentation must not promise that `npkg outdated` determines version ordering.
 2. Disable implicit dotfile globbing and update its user guidance.
 3. Introduce the safe-text contract and migrate path-rendering callers.
 4. Replace Nix version-string comparison with output-identity comparison and add the stable `upkg` state contract.
-5. Add `fzf` capability tiers and dependency diagnostics.
+5. Add the `fzf` 0.52.0 version gate, shared runtime guard, hard-block diagnostic, and dependency-checker enforcement without removing any feature.
 6. Synchronize `80-tips.zsh`, `README.md`, and `GUIDE.md`.
 7. Run the complete automated verification sequence.
 8. Perform interactive QA for prompt startup, fuzzy bindings, hostile filenames, and Nix partial results.
@@ -259,7 +296,7 @@ zsh scripts/test-help.zsh
 zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
 ```
 
-Because this is a stable-release QA pass, create a local-only `qa-features.csv` using the repository's required columns and add it to `.gitignore`. The manual checklist must include the new glob behavior, embedded and legacy `fzf` startup, degraded `fzf` diagnostics, rich and plain hostile-path rendering, and all three Nix result states.
+Because this is a stable-release QA pass, create a local-only `qa-features.csv` using the repository's required columns and add it to `.gitignore`. The manual checklist must include the new glob behavior, supported-boundary `fzf` startup, below-minimum `fzf` hard blocking, preservation of every fuzzy feature on a supported version, rich and plain hostile-path rendering, and all three Nix result states.
 
 ## Release gates
 
@@ -267,7 +304,8 @@ The remediation is complete only when:
 
 - every acceptance criterion in HC-01 through HC-04 has an automated test or an explicitly identified manual QA row;
 - all repository verification commands pass;
-- interactive startup is clean with modern, legacy, missing, and broken `fzf` fixtures;
+- supported `fzf` startup retains every existing fuzzy feature, and missing, below-minimum, malformed, and broken versions are hard-blocked with the specified mode-appropriate diagnostic;
+- no user-facing function, alias, picker, keybinding, preview, theme option, or workflow is removed by the remediation;
 - no `npkg` failure path can print an all-current summary;
 - byte-level hostile-path tests pass in rich and plain modes;
 - documentation and tips describe the shipped behavior accurately;
@@ -280,7 +318,7 @@ Each remediation should remain independently revertible. If a compatibility prob
 - keep `GLOB_DOTS` disabled; do not restore implicit hidden-file expansion as a rollback;
 - keep control-character sanitization active and simplify presentation instead of emitting raw data;
 - make Nix results `unknown` rather than restoring version guessing;
-- disable only the failing `fzf` integration tier while preserving silent startup and dependency diagnostics.
+- keep the `fzf` minimum at 0.52.0 and hard-block the subsystem rather than deleting features or adding a reduced compatibility path.
 
 These boundaries preserve the safety guarantees even during a partial rollback.
 
