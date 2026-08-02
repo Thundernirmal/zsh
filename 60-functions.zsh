@@ -1284,29 +1284,33 @@ _upkg_summary_managers_by_state() {
 _upkg_print_summary() {
   emulate -L zsh
 
-  local manager detail state role title
-  local ok_count=0 updates_count=0 matches_count=0 empty_count=0 cleaned_count=0 planned_count=0 partial_count=0
-  local blocked_count=0 failed_count=0 skipped_count=0 cleanup_summary=0
+  local manager detail state role title metadata bucket family glyph fallback
+  local cleanup_summary=0
+  local -A status_counts=(
+    ok 0
+    updates 0
+    matches 0
+    empty 0
+    cleaned 0
+    planned 0
+    partial 0
+    blocked 0
+    failed 0
+    skipped 0
+    other 0
+  )
 
   [ "${_UPKG_OPERATION:-}" = 'clean' ] && cleanup_summary=1
 
-  for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-    state=${_UPKG_SUMMARY_STATE[$manager]}
-    case $state in
-      'up to date'|upgraded) (( ok_count++ )) ;;
-      'updates available')   (( updates_count++ )) ;;
-      'matches found')       (( matches_count++ )) ;;
-      'no matches')          (( empty_count++ )) ;;
-      cleaned)               (( cleaned_count++ )); cleanup_summary=1 ;;
-      planned)               (( planned_count++ )); cleanup_summary=1 ;;
-      partial)               (( partial_count++ )); cleanup_summary=1 ;;
-      blocked)               (( blocked_count++ )) ;;
-      failed)                (( failed_count++ )) ;;
-      skipped)               (( skipped_count++ )) ;;
-    esac
-  done
-
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
+    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+      state=${_UPKG_SUMMARY_STATE[$manager]}
+      metadata=$(_ui_status_metadata "$state")
+      IFS=$'\t' read -r role bucket family glyph fallback <<< "$metadata"
+      (( status_counts[$bucket]++ ))
+      [ "$family" = 'cleanup' ] && cleanup_summary=1
+    done
+
     _ui_section_break
     _ui_color muted
     _ui_icon '󰍹' '>'
@@ -1317,39 +1321,39 @@ _upkg_print_summary() {
     _ui_reset
     print -nr -- ' '
     if (( cleanup_summary )); then
-      _ui_badge "$cleaned_count cleaned" success
-      if (( planned_count > 0 )); then
+      _ui_badge "${status_counts[cleaned]} cleaned" success
+      if (( status_counts[planned] > 0 )); then
         print -nr -- ' '
-        _ui_badge "$planned_count planned" info
+        _ui_badge "${status_counts[planned]} planned" info
       fi
-      if (( partial_count > 0 )); then
+      if (( status_counts[partial] > 0 )); then
         print -nr -- ' '
-        _ui_badge "$partial_count partial" danger
+        _ui_badge "${status_counts[partial]} partial" danger
       fi
     else
-      _ui_badge "$ok_count ok" success
+      _ui_badge "${status_counts[ok]} ok" success
       print -nr -- ' '
-      _ui_badge "$updates_count updates" warning
-      if (( matches_count > 0 )); then
+      _ui_badge "${status_counts[updates]} updates" warning
+      if (( status_counts[matches] > 0 )); then
         print -nr -- ' '
-        _ui_badge "$matches_count matches" info
+        _ui_badge "${status_counts[matches]} matches" info
       fi
-      if (( empty_count > 0 )); then
+      if (( status_counts[empty] > 0 )); then
         print -nr -- ' '
-        _ui_badge "$empty_count empty" muted
+        _ui_badge "${status_counts[empty]} empty" muted
       fi
     fi
-    if (( blocked_count > 0 )); then
+    if (( status_counts[blocked] > 0 )); then
       print -nr -- ' '
-      _ui_badge "$blocked_count blocked" warning
+      _ui_badge "${status_counts[blocked]} blocked" warning
     fi
-    if (( failed_count > 0 )); then
+    if (( status_counts[failed] > 0 )); then
       print -nr -- ' '
-      _ui_badge "$failed_count failed" danger
+      _ui_badge "${status_counts[failed]} failed" danger
     fi
-    if (( skipped_count > 0 )); then
+    if (( status_counts[skipped] > 0 )); then
       print -nr -- ' '
-      _ui_badge "$skipped_count skipped" muted
+      _ui_badge "${status_counts[skipped]} skipped" muted
     fi
     print ''
 
@@ -1357,18 +1361,8 @@ _upkg_print_summary() {
       detail=${_UPKG_SUMMARY_DETAIL[$manager]}
       state=${_UPKG_SUMMARY_STATE[$manager]}
       title=$(_upkg_manager_title "$manager")
-      case $state in
-        'up to date'|upgraded|cleaned) role='success' ;;
-        'updates available')      role='warning' ;;
-        'matches found')          role='info'    ;;
-        'no matches')             role='muted'   ;;
-        planned)                  role='info'    ;;
-        partial)                  role='danger'  ;;
-        blocked)                  role='warning' ;;
-        failed)                   role='danger'  ;;
-        skipped)                  role='muted'   ;;
-        *)                        role='accent'  ;;
-      esac
+      metadata=$(_ui_status_metadata "$state")
+      IFS=$'\t' read -r role bucket family glyph fallback <<< "$metadata"
 
       print -nr -- '  '
       _ui_color "$role"
@@ -1422,6 +1416,35 @@ _upkg_finish_upgrade_result() {
 _upkg_print_cleanup_phase() {
   print ''
   print "$1:"
+}
+
+_upkg_record_cleanup_result() {
+  emulate -L zsh
+
+  local rc=$1
+  local failure_detail=$2
+
+  # Cleanup handlers provide these caller-local counters and failure details.
+  if (( rc == 0 )); then
+    (( succeeded++ ))
+  else
+    (( failed++ ))
+    failures+=("$failure_detail")
+  fi
+
+  return 0
+}
+
+_upkg_run_cleanup_step() {
+  emulate -L zsh
+
+  local failure_detail=$1
+  local rc
+  shift
+
+  command "$@"
+  rc=$?
+  _upkg_record_cleanup_result "$rc" "$failure_detail"
 }
 
 _upkg_cleanup_privilege_prefix() {
@@ -2734,7 +2757,7 @@ _upkg_run_upgrade_npm() {
 _upkg_run_clean_apt() {
   emulate -L zsh
 
-  local rc prefix
+  local prefix
   local succeeded=0 failed=0
   local -a failures
 
@@ -2744,14 +2767,7 @@ _upkg_run_clean_apt() {
     prefix=$(_upkg_cleanup_privilege_prefix)
     _upkg_print_cleanup_phase 'Unused packages'
     print -r -- "preview: ${prefix}apt --simulate autoremove"
-    command apt --simulate autoremove
-    rc=$?
-    if (( rc == 0 )); then
-      (( succeeded++ ))
-    else
-      (( failed++ ))
-      failures+=('apt autoremove preview failed')
-    fi
+    _upkg_run_cleanup_step 'apt autoremove preview failed' apt --simulate autoremove
 
     _upkg_print_cleanup_phase 'Package cache'
     print -r -- "would run: ${prefix}apt autoclean"
@@ -2771,30 +2787,16 @@ _upkg_run_clean_apt() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if (( EUID == 0 )); then
-    command apt autoremove
+    _upkg_run_cleanup_step 'apt autoremove failed' apt autoremove
   else
-    command sudo apt autoremove
-  fi
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('apt autoremove failed')
+    _upkg_run_cleanup_step 'apt autoremove failed' sudo apt autoremove
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if (( EUID == 0 )); then
-    command apt autoclean
+    _upkg_run_cleanup_step 'apt autoclean failed' apt autoclean
   else
-    command sudo apt autoclean
-  fi
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('apt autoclean failed')
+    _upkg_run_cleanup_step 'apt autoclean failed' sudo apt autoclean
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -2803,7 +2805,7 @@ _upkg_run_clean_apt() {
 _upkg_run_clean_dnf() {
   emulate -L zsh
 
-  local rc prefix
+  local prefix
   local succeeded=0 failed=0
   local -a failures
 
@@ -2813,14 +2815,7 @@ _upkg_run_clean_dnf() {
     prefix=$(_upkg_cleanup_privilege_prefix)
     _upkg_print_cleanup_phase 'Unused packages'
     print 'preview: dnf --cacheonly repoquery --unneeded'
-    command dnf --cacheonly repoquery --unneeded
-    rc=$?
-    if (( rc == 0 )); then
-      (( succeeded++ ))
-    else
-      (( failed++ ))
-      failures+=('dnf cache-only unneeded-package preview failed')
-    fi
+    _upkg_run_cleanup_step 'dnf cache-only unneeded-package preview failed' dnf --cacheonly repoquery --unneeded
 
     _upkg_print_cleanup_phase 'Package cache'
     print -r -- "would run: ${prefix}dnf clean all"
@@ -2840,30 +2835,16 @@ _upkg_run_clean_dnf() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if (( EUID == 0 )); then
-    command dnf autoremove
+    _upkg_run_cleanup_step 'dnf autoremove failed' dnf autoremove
   else
-    command sudo dnf autoremove
-  fi
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('dnf autoremove failed')
+    _upkg_run_cleanup_step 'dnf autoremove failed' sudo dnf autoremove
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if (( EUID == 0 )); then
-    command dnf clean all
+    _upkg_run_cleanup_step 'dnf clean all failed' dnf clean all
   else
-    command sudo dnf clean all
-  fi
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('dnf clean all failed')
+    _upkg_run_cleanup_step 'dnf clean all failed' sudo dnf clean all
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -2890,7 +2871,7 @@ _upkg_run_clean_pacman() {
 
   prefix=$(_upkg_cleanup_privilege_prefix)
   _upkg_print_cleanup_phase 'Unused packages'
-  orphan_output=$(command pacman -Qtdq 2>&1)
+  orphan_output=$(command pacman -Qtdq)
   rc=$?
   if (( rc == 0 )); then
     orphans=( ${(f)orphan_output} )
@@ -2903,16 +2884,9 @@ _upkg_run_clean_pacman() {
       (( succeeded++ ))
     else
       if (( EUID == 0 )); then
-        command pacman -Rs -- "${orphans[@]}"
+        _upkg_run_cleanup_step 'pacman orphan removal failed' pacman -Rs -- "${orphans[@]}"
       else
-        command sudo pacman -Rs -- "${orphans[@]}"
-      fi
-      rc=$?
-      if (( rc == 0 )); then
-        (( succeeded++ ))
-      else
-        (( failed++ ))
-        failures+=('pacman orphan removal failed')
+        _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}"
       fi
     fi
   elif (( rc == 1 )) && [ -z "$orphan_output" ]; then
@@ -2930,16 +2904,9 @@ _upkg_run_clean_pacman() {
     (( succeeded++ ))
   else
     if (( EUID == 0 )); then
-      command pacman -Sc
+      _upkg_run_cleanup_step 'pacman -Sc failed' pacman -Sc
     else
-      command sudo pacman -Sc
-    fi
-    rc=$?
-    if (( rc == 0 )); then
-      (( succeeded++ ))
-    else
-      (( failed++ ))
-      failures+=('pacman -Sc failed')
+      _upkg_run_cleanup_step 'pacman -Sc failed' sudo pacman -Sc
     fi
   fi
 
@@ -2949,7 +2916,6 @@ _upkg_run_clean_pacman() {
 _upkg_run_clean_paru() {
   emulate -L zsh
 
-  local rc
   local succeeded=0 failed=0
   local -a failures
 
@@ -2973,24 +2939,10 @@ _upkg_run_clean_paru() {
   fi
 
   _upkg_print_cleanup_phase 'Unused packages'
-  command paru -c
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('paru -c failed')
-  fi
+  _upkg_run_cleanup_step 'paru -c failed' paru -c
 
   _upkg_print_cleanup_phase 'Package cache'
-  command paru -Sc
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('paru -Sc failed')
-  fi
+  _upkg_run_cleanup_step 'paru -Sc failed' paru -Sc
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
 }
@@ -2998,7 +2950,6 @@ _upkg_run_clean_paru() {
 _upkg_run_clean_brew() {
   emulate -L zsh
 
-  local rc
   local succeeded=0 failed=0
   local -a failures
 
@@ -3006,38 +2957,16 @@ _upkg_run_clean_brew() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if (( _UPKG_DRY_RUN )); then
-    command brew autoremove --dry-run
+    _upkg_run_cleanup_step 'brew autoremove preview failed' brew autoremove --dry-run
   else
-    command brew autoremove
-  fi
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    if (( _UPKG_DRY_RUN )); then
-      failures+=('brew autoremove preview failed')
-    else
-      failures+=('brew autoremove failed')
-    fi
+    _upkg_run_cleanup_step 'brew autoremove failed' brew autoremove
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if (( _UPKG_DRY_RUN )); then
-    command brew cleanup --dry-run
+    _upkg_run_cleanup_step 'brew cleanup preview failed' brew cleanup --dry-run
   else
-    command brew cleanup
-  fi
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    if (( _UPKG_DRY_RUN )); then
-      failures+=('brew cleanup preview failed')
-    else
-      failures+=('brew cleanup failed')
-    fi
+    _upkg_run_cleanup_step 'brew cleanup failed' brew cleanup
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -3046,7 +2975,6 @@ _upkg_run_clean_brew() {
 _upkg_run_clean_flatpak() {
   emulate -L zsh
 
-  local rc
   local succeeded=0 failed=0
   local -a failures
 
@@ -3064,24 +2992,10 @@ _upkg_run_clean_flatpak() {
   fi
 
   _upkg_print_cleanup_phase 'Unused user refs'
-  command flatpak uninstall --unused --user
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('flatpak user cleanup failed')
-  fi
+  _upkg_run_cleanup_step 'flatpak user cleanup failed' flatpak uninstall --unused --user
 
   _upkg_print_cleanup_phase 'Unused system refs'
-  command flatpak uninstall --unused --system
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    failures+=('flatpak system cleanup failed')
-  fi
+  _upkg_run_cleanup_step 'flatpak system cleanup failed' flatpak uninstall --unused --system
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
 }
@@ -3089,7 +3003,8 @@ _upkg_run_clean_flatpak() {
 _upkg_run_clean_nix() {
   emulate -L zsh
 
-  local rc
+  local succeeded=0 failed=0
+  local -a failures
 
   _upkg_print_section nix
 
@@ -3101,17 +3016,59 @@ _upkg_run_clean_nix() {
 
   _upkg_print_cleanup_phase 'Unreachable store objects'
   if (( _UPKG_DRY_RUN )); then
-    command nix-collect-garbage --dry-run
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage --dry-run
   else
-    command nix-collect-garbage
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage
   fi
+
+  _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
+}
+
+_upkg_run_npm_npx_cache_command() {
+  emulate -L zsh
+  setopt multios
+
+  local action=$1
+  local stdout_file='' stderr_file='' stdout_output='' stderr_output=''
+  local rc
+  integer stdout_fd stderr_fd
+
+  typeset -g _UPKG_NPM_NPX_DIAGNOSTIC=''
+
+  stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm-npx.stdout.XXXXXX") || {
+    print -u2 -- 'Could not create temporary output capture for npm npx cache cleanup.'
+    return 1
+  }
+  stderr_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm-npx.stderr.XXXXXX") || {
+    command rm -f -- "$stdout_file"
+    print -u2 -- 'Could not create temporary error capture for npm npx cache cleanup.'
+    return 1
+  }
+
+  exec {stdout_fd}>&1 || {
+    command rm -f -- "$stdout_file" "$stderr_file"
+    return 1
+  }
+  exec {stderr_fd}>&2 || {
+    exec {stdout_fd}>&-
+    command rm -f -- "$stdout_file" "$stderr_file"
+    return 1
+  }
+
+  # Zsh multios duplicate each native stream to its original descriptor and a
+  # private diagnostic file, preserving output while allowing capability checks.
+  command npm cache npx "$action" >&$stdout_fd >"$stdout_file" 2>&$stderr_fd 2>"$stderr_file"
   rc=$?
 
-  if (( rc == 0 )); then
-    _upkg_finish_cleanup_result 1 0 ''
-  else
-    _upkg_finish_cleanup_result 0 1 'nix-collect-garbage failed'
-  fi
+  exec {stdout_fd}>&-
+  exec {stderr_fd}>&-
+
+  stdout_output=$(<"$stdout_file")
+  stderr_output=$(<"$stderr_file")
+  _UPKG_NPM_NPX_DIAGNOSTIC="${stdout_output}"$'\n'"${stderr_output}"
+  command rm -f -- "$stdout_file" "$stderr_file"
+
+  return $rc
 }
 
 _upkg_npm_npx_cache_unsupported() {
@@ -3129,7 +3086,7 @@ _upkg_npm_npx_cache_unsupported() {
 _upkg_run_clean_npm() {
   emulate -L zsh
 
-  local output rc npx_unsupported=0
+  local output rc npx_failure_detail npx_unsupported=0 verify_failures_before=0
   local succeeded=0 failed=0
   local -a failures
 
@@ -3137,17 +3094,13 @@ _upkg_run_clean_npm() {
 
   _upkg_print_cleanup_phase 'npx cache'
   if (( _UPKG_DRY_RUN )); then
-    output=$(command npm cache npx ls 2>&1)
+    _upkg_run_npm_npx_cache_command ls
     rc=$?
-    [ -n "$output" ] && print -r -- "$output"
-    if (( rc == 0 )); then
-      (( succeeded++ ))
-    else
-      (( failed++ ))
-      failures+=('npx cache preview failed')
-      if _upkg_npm_npx_cache_unsupported "$output"; then
-        print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
-      fi
+    output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
+    unset _UPKG_NPM_NPX_DIAGNOSTIC
+    _upkg_record_cleanup_result "$rc" 'npx cache preview failed'
+    if (( rc != 0 )) && _upkg_npm_npx_cache_unsupported "$output"; then
+      print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
     fi
 
     _upkg_print_cleanup_phase 'npm cache'
@@ -3157,33 +3110,23 @@ _upkg_run_clean_npm() {
     return $?
   fi
 
-  output=$(command npm cache npx rm 2>&1)
+  _upkg_run_npm_npx_cache_command rm
   rc=$?
-  [ -n "$output" ] && print -r -- "$output"
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-  else
-    (( failed++ ))
-    if _upkg_npm_npx_cache_unsupported "$output"; then
-      npx_unsupported=1
-      failures+=('npx cache cleanup is unsupported')
-      print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
-    else
-      failures+=('npx cache cleanup failed')
-    fi
+  output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
+  unset _UPKG_NPM_NPX_DIAGNOSTIC
+  npx_failure_detail='npx cache cleanup failed'
+  if (( rc != 0 )) && _upkg_npm_npx_cache_unsupported "$output"; then
+    npx_unsupported=1
+    npx_failure_detail='npx cache cleanup is unsupported'
+    print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
   fi
+  _upkg_record_cleanup_result "$rc" "$npx_failure_detail"
 
   _upkg_print_cleanup_phase 'npm cache'
-  command npm cache verify
-  rc=$?
-  if (( rc == 0 )); then
-    (( succeeded++ ))
-    if (( npx_unsupported )); then
-      failures[-1]='npx cache cleanup is unsupported; npm cache verified'
-    fi
-  else
-    (( failed++ ))
-    failures+=('npm cache verify failed')
+  verify_failures_before=$failed
+  _upkg_run_cleanup_step 'npm cache verify failed' npm cache verify
+  if (( npx_unsupported && failed == verify_failures_before )); then
+    failures[-1]='npx cache cleanup is unsupported; npm cache verified'
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"

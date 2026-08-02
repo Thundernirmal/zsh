@@ -80,7 +80,7 @@ No backend receives an automatic yes flag (`-y`, `--assumeyes`, `--noconfirm`, o
 | `nix` | None | `nix-collect-garbage` | Delete unreachable store objects only. Never pass `-d`, `--delete-old`, or `--delete-older-than`, because those remove profile generations and rollback history. Do not delete the wrapper-owned `npkg` attribute cache. |
 | `npm` | None | `npm cache npx rm`, then `npm cache verify` | Remove all npm-managed npx execution-cache entries, then verify the content-addressable npm cache and let npm garbage-collect unneeded data. Run in user space without checking the global install prefix and never suggest `sudo npm`. Do not fall back to raw directory deletion or `npm cache clean --force`. |
 
-No new shared dependency is introduced. In particular, `paccache` is not required; pacman cleanup uses pacman's own `-Sc` operation.
+No new independently installed shared dependency is introduced. In particular, `paccache` is not required; pacman cleanup uses pacman's own `-Sc` operation. The dependency checker conditionally verifies the `nix-collect-garbage` companion executable when Nix is installed.
 
 ### Compatibility behavior
 
@@ -155,7 +155,7 @@ Implementation must update all user-facing surfaces in the same change:
 - `README.md` and `GUIDE.md`: document the mutating nature of `clean`, the safety boundary, flags, backend matrix, examples, and npm/npx behavior.
 - `scripts/test-upkg.zsh`, `scripts/test-completions.zsh`, and `scripts/test-help.zsh`: cover the behavior below.
 
-Because this changes user-facing workflow, the documentation and tips updates are required by the repository rules. `scripts/check-deps.sh` does not change because the feature introduces no shared dependency.
+Because this changes user-facing workflow, the documentation and tips updates are required by the repository rules. `scripts/check-deps.sh` conditionally checks `nix-collect-garbage` for detected Nix installations; the feature introduces no independently installed package dependency.
 
 ## Required automated coverage
 

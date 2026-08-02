@@ -74,6 +74,7 @@ if (( $+commands[nix] )); then
     "Run npkg add bat for a short nix profile add command"
     "Run npkg search ripgrep to search nixpkgs with package descriptions"
     "Press Tab after npkg to browse its commands; cached package attributes are offered without running Nix"
+    "Nix cleanup uses nix-collect-garbage; the dependency checker reports when a Nix install is missing it"
   )
 fi
 

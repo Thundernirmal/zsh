@@ -167,7 +167,7 @@ run_upkg_rich_with_managers() {
 }
 
 main() {
-  local output cmd_status route
+  local output cmd_status route state_role npm_stdout npm_stderr
 
   local default_brew_script='
 case "$*" in
@@ -379,7 +379,7 @@ EOF
       functions[_ui_color]=':'
       functions[_ui_reset]=':'
       functions[_ui_icon]='print -nr -- "*"'
-      functions[_ui_badge]='print -nr -- "[$1]"'
+      functions[_ui_badge]='print -nr -- "[$1:$2]"'
       functions[_ui_section_break]=':'
       _UPKG_THEME_MODE=1
       _UPKG_OPERATION=clean
@@ -391,8 +391,8 @@ EOF
       _upkg_print_summary
     )
   )
-  for state in blocked cleaned partial failed planned skipped; do
-    assert_contains "$output" "[$state]" "rich cleanup summary renders $state" || return 1
+  for state_role in blocked:warning cleaned:success partial:danger failed:danger planned:info skipped:muted; do
+    assert_contains "$output" "[$state_role]" "rich cleanup summary renders $state_role" || return 1
   done
 
   output=$(upkg managers)
@@ -919,6 +919,26 @@ esac
   assert_not_contains "$output" '-Scc' 'pacman cleanup avoids aggressive cache deletion' || return 1
   assert_not_contains "$output" '-Rn' 'pacman cleanup preserves backup configuration' || return 1
 
+  write_fake pacman '
+printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "-Qtdq")
+    printf "%s\n" "warning: optional package database is unavailable" >&2
+    printf "%s\n" "orphan-one" "orphan-two"
+    ;;
+  "-Rs -- orphan-one orphan-two") printf "%s\n" "MUTATING pacman orphan removal" >> "$UPKG_TEST_CLEAN_LOG" ;;
+  "-Sc") printf "%s\n" "MUTATING pacman cache" >> "$UPKG_TEST_CLEAN_LOG" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'pacman' clean --sudo --only=pacman 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'pacman warnings do not contaminate the orphan array' || return 1
+  assert_contains "$output" 'warning: optional package database is unavailable' 'pacman orphan-query stderr passes through' || return 1
+  assert_contains "$(<"$clean_log")" 'sudo pacman -Rs -- orphan-one orphan-two' 'pacman removes only package names from query stdout' || return 1
+  assert_not_contains "$(<"$clean_log")" 'sudo pacman -Rs -- warning:' 'pacman never treats query stderr as a package name' || return 1
+
   : > "$clean_log"
   output=$(run_upkg_with_managers 'paru' clean --only=paru 2>&1)
   cmd_status=$?
@@ -964,15 +984,16 @@ esac
   write_fake pacman '
 printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
 case "$*" in
-  "-Qtdq") exit 1 ;;
+  "-Qtdq") printf "%s\n" "warning: no optional sync database" >&2 ; exit 1 ;;
   "-Sc") printf "%s\n" "MUTATING pacman cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "Pacman cache cleanup" ;;
   *) exit 2 ;;
 esac
 '
   : > "$clean_log"
-  output=$(run_upkg_with_managers 'pacman' clean --sudo --only=pacman)
+  output=$(run_upkg_with_managers 'pacman' clean --sudo --only=pacman 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 0 'empty pacman orphan query exit 1 is normal' || return 1
+  assert_contains "$output" 'warning: no optional sync database' 'empty pacman query preserves stderr without treating it as output' || return 1
   assert_contains "$output" 'No orphaned packages found.' 'empty pacman orphan query is explained' || return 1
   assert_contains "$(<"$clean_log")" 'sudo pacman -Sc' 'pacman still cleans its cache after an empty orphan query' || return 1
 
@@ -1001,6 +1022,15 @@ esac
   assert_contains "$output" 'upgrade npm to enable npx cache cleanup' 'unsupported npx cleanup recommends upgrading npm' || return 1
   assert_order "$(<"$clean_log")" 'brew autoremove' 'brew cleanup' 'failed Homebrew first phase does not suppress cache cleanup' || return 1
   assert_order "$(<"$clean_log")" 'brew cleanup' 'npm cache npx rm' 'partial Homebrew cleanup does not stop the next manager' || return 1
+
+  npm_stdout="$tmp_prefix/npm-clean.stdout"
+  npm_stderr="$tmp_prefix/npm-clean.stderr"
+  run_upkg_with_managers 'npm' clean --only=npm >"$npm_stdout" 2>"$npm_stderr"
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'unsupported npx cleanup remains partial with split output streams' || return 1
+  assert_contains "$(<"$npm_stderr")" 'npm cache usage: unsupported npx subcommand' 'npm npx stderr passes through on stderr' || return 1
+  assert_not_contains "$(<"$npm_stdout")" 'npm cache usage: unsupported npx subcommand' 'npm npx stderr is not replayed on stdout' || return 1
+  assert_contains "$(<"$npm_stdout")" 'npm cache verified' 'npm cache verification stdout passes through on stdout' || return 1
 
   : > "$clean_log"
   output=$(run_upkg_with_managers 'npm' clean --dry-run --only=npm 2>&1)

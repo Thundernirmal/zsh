@@ -104,6 +104,9 @@ check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
 check_cmd jq optional
 check_cmd nix optional
+if have_cmd nix; then
+  check_cmd nix-collect-garbage optional
+fi
 
 if [ -n "$missing_required" ] || [ -n "$missing_optional" ]; then
   print_hints

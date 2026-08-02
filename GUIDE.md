@@ -646,6 +646,7 @@ Nix bridge details:
 - `upkg outdated --only nix` is blocked when `jq` is missing because `npkg outdated` depends on it.
 - `upkg upgrade --only nix` still works without `jq`.
 - `upkg clean --only nix` calls `nix-collect-garbage` directly without generation-deletion flags, so it does not depend on `jq` and preserves rollback history.
+- The dependency checker verifies `nix-collect-garbage` when Nix is installed and reports it as an optional missing capability.
 
 npm note:
 

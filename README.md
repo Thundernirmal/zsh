@@ -57,6 +57,7 @@ Optional extras:
 - `fd` / `fdfind`
 - `jq`
 - `nix`
+- `nix-collect-garbage` for Nix cleanup (checked when `nix` is installed)
 
 Missing optional tools keep the shell usable. The config uses runtime checks and either skips the integration or falls back to a simpler command where possible.
 
