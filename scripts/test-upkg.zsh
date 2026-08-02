@@ -99,6 +99,21 @@ assert_status() {
   print -- "ok: $label"
 }
 
+assert_equals() {
+  local actual=$1
+  local expected=$2
+  local label=$3
+
+  if [[ $actual != "$expected" ]]; then
+    print -u2 -- "not ok: $label"
+    print -u2 -- "expected: $expected"
+    print -u2 -- "actual: $actual"
+    return 1
+  fi
+
+  print -- "ok: $label"
+}
+
 assert_order() {
   local haystack=$1
   local first=$2
@@ -181,8 +196,121 @@ run_upkg_rich_with_managers() {
   )
 }
 
+set_npkg_fixture() {
+  print -r -- "$1" >"$NPKG_TEST_PROFILE_FILE"
+  print -r -- "$2" >"$NPKG_TEST_EVAL_FILE"
+  : >"$NPKG_TEST_EVAL_LOG"
+}
+
+run_npkg_outdated_capture() {
+  local output_file rc
+
+  output_file=$(mktemp "${TMPDIR:-/tmp}/test-npkg-outdated.XXXXXX") || return 1
+  npkg outdated >"$output_file" 2>&1
+  rc=$?
+  typeset -g NPKG_TEST_OUTPUT="$(<"$output_file")"
+  command rm -f -- "$output_file"
+  return $rc
+}
+
+run_npkg_interrupt_capture() {
+  local npkg_tmp_dir=$1
+  local worker_started="$tmp_prefix/npkg-interrupt-started"
+  local unrelated_stop="$tmp_prefix/npkg-interrupt-stop"
+  local output_file="$tmp_prefix/npkg-interrupt-output"
+  local harness_pid signaler_pid rc
+
+  command rm -f -- "$worker_started" "$unrelated_stop" "$output_file"
+  zmodload zsh/zselect || return 1
+
+  (
+    emulate -L zsh
+    setopt localtraps NO_UNSET
+
+    local unrelated_pid=''
+    integer npkg_status unrelated_alive=0
+    local -a leftover_tmp
+
+    export TMPDIR=$npkg_tmp_dir
+    functions[_ui_is_rich_terminal]='return 1'
+    functions[_ui_plain_mode]='return 0'
+
+    _npkg_nix() {
+      if [[ "$*" == 'profile list --json' ]]; then
+        print -r -- '{"elements":{"interrupt":{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/locked-interrupt","attrPath":"packages.test.interrupt","storePaths":["/nix/store/interrupt-installed"],"outputs":null}}}'
+        return 0
+      fi
+      return 2
+    }
+
+    _npkg_eval_installable_record() {
+      integer worker_ticks=0
+
+      : >"$worker_started"
+      while (( worker_ticks < 600 )); do
+        zselect -t 1
+        (( worker_ticks++ ))
+      done
+      return 1
+    }
+
+    _npkg_interrupt_harness_cleanup() {
+      [[ -n $unrelated_pid ]] || return 0
+      : >"$unrelated_stop"
+      wait "$unrelated_pid" 2>/dev/null
+    }
+    trap _npkg_interrupt_harness_cleanup EXIT
+
+    (
+      integer unrelated_ticks=0
+
+      while [[ ! -e $unrelated_stop ]] && (( unrelated_ticks < 500 )); do
+        zselect -t 1
+        (( unrelated_ticks++ ))
+      done
+    ) &
+    unrelated_pid=$!
+
+    npkg outdated >/dev/null 2>&1
+    npkg_status=$?
+
+    kill -0 "$unrelated_pid" 2>/dev/null && unrelated_alive=1
+    leftover_tmp=( "$npkg_tmp_dir"/npkg-outdated.*(N) )
+
+    print -r -- "status=$npkg_status"
+    print -r -- "unrelated_alive=$unrelated_alive"
+    print -r -- "leftovers=${#leftover_tmp[@]}"
+
+    : >"$unrelated_stop"
+    wait "$unrelated_pid" 2>/dev/null
+    unrelated_pid=''
+  ) >"$output_file" 2>&1 &
+  harness_pid=$!
+
+  (
+    integer signal_ticks=0
+
+    while [[ ! -e $worker_started ]] && (( signal_ticks < 100 )); do
+      zselect -t 1
+      (( signal_ticks++ ))
+    done
+    [[ -e $worker_started ]] && kill -INT "$harness_pid" 2>/dev/null
+  ) &
+  signaler_pid=$!
+
+  wait "$harness_pid" 2>/dev/null
+  rc=$?
+  wait "$signaler_pid" 2>/dev/null
+  typeset -g NPKG_INTERRUPT_OUTPUT="$(<"$output_file")"
+  command rm -f -- "$worker_started" "$unrelated_stop" "$output_file"
+  return $rc
+}
+
 main() {
   local output cmd_status route state_role npm_stdout npm_stderr
+  local npkg_profile_file="$tmp_prefix/npkg-profile.json"
+  local npkg_eval_file="$tmp_prefix/npkg-evaluations.json"
+  local npkg_eval_log="$tmp_prefix/npkg-evaluations.log"
 
   local default_brew_script='
 case "$*" in
@@ -278,26 +406,45 @@ tcp LISTEN 0 128 0.0.0.0:3000 0.0.0.0:* users:(("node",pid=111,fd=20),("node",pi
 EOF
 '
 
+  export NPKG_TEST_PROFILE_FILE=$npkg_profile_file
+  export NPKG_TEST_EVAL_FILE=$npkg_eval_file
+  export NPKG_TEST_EVAL_LOG=$npkg_eval_log
+  set_npkg_fixture \
+    '{"elements":{"default":{"active":true,"originalUrl":"nixpkgs","url":"github:NixOS/nixpkgs/default","attrPath":"packages.test.default","storePaths":["/nix/store/default-current"],"outputs":null}}}' \
+    '{"nixpkgs#packages.test.default":{"paths":["/nix/store/default-current"],"version":"1.0"},"github:NixOS/nixpkgs/default#packages.test.default":{"paths":["/nix/store/default-current"],"version":"1.0"}}'
+
 write_fake nix '
 while [ "$1" = "--extra-experimental-features" ]; do
   shift 2
 done
 
+  if [ "$*" = "profile list --json" ]; then
+    if [ "$(sed -n "1p" "$NPKG_TEST_PROFILE_FILE")" = "__FAIL__" ]; then
+      printf "%s\n" "simulated profile read failure" >&2
+      exit 1
+    fi
+    cat "$NPKG_TEST_PROFILE_FILE"
+    exit $?
+  fi
+
+  if [ "$1" = "eval" ] && [ "$2" = "--json" ]; then
+    installable=$3
+    printf "%s|%s\n" "$installable" "$5" >> "$NPKG_TEST_EVAL_LOG"
+    record=$(jq -c --arg installable "$installable" '"'"'.[$installable] // empty'"'"' "$NPKG_TEST_EVAL_FILE") || exit 2
+    [ -n "$record" ] || {
+      printf "missing evaluation fixture for %s\n" "$installable" >&2
+      exit 2
+    }
+    error=$(printf "%s\n" "$record" | jq -r ".error // empty") || exit 2
+    if [ -n "$error" ]; then
+      printf "%s\n" "$error" >&2
+      exit 1
+    fi
+    printf "%s\n" "$record"
+    exit 0
+  fi
+
   case "$*" in
-    "profile list --json")
-    cat <<'"'"'EOF'"'"'
-{"elements":[
-  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.one","storePaths":["/nix/store/hash-pkg-one-1.0"]},
-  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.two","storePaths":["/nix/store/hash-pkg-two-1.0"]},
-  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.three","storePaths":["/nix/store/hash-pkg-three-1.0"]},
-  {"active":true,"originalUrl":"nixpkgs","attrPath":"pkg.four","storePaths":["/nix/store/hash-pkg-four-1.0"]}
-]}
-EOF
-    ;;
-    "eval --raw nixpkgs#pkg.one.version") printf "%s\n" "1.0" ;;
-    "eval --raw nixpkgs#pkg.two.version") printf "%s\n" "2.0" ;;
-    "eval --raw nixpkgs#pkg.three.version") printf "%s\n" "1.0" ;;
-    "eval --raw nixpkgs#pkg.four.version") printf "%s\n" "3.0" ;;
     "search nixpkgs ripgrep")
       printf "%s\n" "* legacyPackages.x86_64-linux.ripgrep (14.1.1)"
       printf "%s\n" "  recursively search directories"
@@ -1197,17 +1344,193 @@ esac
   assert_contains "$output" 'pid=111,112,113' 'ports preserves all socket pids' || return 1
 
   if command -v jq >/dev/null 2>&1; then
-    output=$(npkg outdated)
-    cmd_status=$?
-    assert_status "$cmd_status" 0 'npkg outdated rich mode succeeds with fake nix data' || return 1
-    assert_contains "$output" '2 upgrade(s) available. Run npkg upgrade to apply.' 'npkg rich summary counts hidden upgrades' || return 1
+    local profile_fixture eval_fixture old_tmpdir=${TMPDIR-}
+    local npkg_tmp_dir="$tmp_prefix/npkg-tmp"
+    integer had_tmpdir=${+TMPDIR}
+    local -a leftover_tmp
 
+    command mkdir -p -- "$npkg_tmp_dir"
+    TMPDIR=$npkg_tmp_dir
     functions[_ui_is_rich_terminal]='return 1'
     functions[_ui_plain_mode]='return 0'
-    output=$(npkg outdated)
+
+    set_npkg_fixture \
+      '{"elements":{"multi":{"active":true,"originalUrl":"nixpkgs","url":"github:NixOS/nixpkgs/locked-multi","attrPath":"packages.test.multi","storePaths":["/nix/store/multi-man","/nix/store/multi-out"],"outputs":["out","man"]}}}' \
+      '{"nixpkgs#packages.test.multi":{"paths":["/nix/store/multi-out","/nix/store/multi-man"],"version":"unstable-2026-08-01"},"github:NixOS/nixpkgs/locked-multi#packages.test.multi":{"paths":["/nix/store/multi-man","/nix/store/multi-out"],"version":"unstable-2026-08-01"}}'
+    run_npkg_outdated_capture
     cmd_status=$?
-    assert_status "$cmd_status" 0 'npkg outdated plain mode succeeds with full-width formatting' || return 1
-    assert_contains "$output" 'Package                   Installed            Available            Status' 'npkg plain output restores wide columns' || return 1
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 0 'matching multi-output identity is a complete npkg report' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" current 'matching output sets expose current state' || return 1
+    assert_equals "$_NPKG_OUTDATED_TOTAL" 1 'object-shaped profile contributes one checked element' || return 1
+    assert_equals "$_NPKG_OUTDATED_CHANGED" 0 'matching output sets have no changes' || return 1
+    assert_equals "$_NPKG_OUTDATED_UNKNOWN" 0 'matching output sets have no unknown rows' || return 1
+    assert_contains "$output" 'unstable-2026-08-01' 'hyphenated date versions remain intact for display' || return 1
+    assert_contains "$output" 'current' 'matching multi-output package is labeled current' || return 1
+    assert_contains "$output" 'Everything is up to date.' 'all-current complete report prints the success summary' || return 1
+    output=$(<"$NPKG_TEST_EVAL_LOG")
+    assert_contains "$output" 'selectedOutputs = [ "out" "man" ];' 'multi-output evaluation preserves the manifest output selection' || return 1
+
+    output=$(run_upkg_with_managers 'nix' outdated --only=nix)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 'upkg accepts a complete current Nix report' || return 1
+    assert_contains "$output" 'nix: up to date' 'upkg maps current Nix state without matching prose' || return 1
+
+    set_npkg_fixture \
+      '{"elements":[{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/locked-equal","attrPath":"packages.test.equal","storePaths":["/nix/store/equal-old"],"outputs":null},{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/locked-newer","attrPath":"packages.test.newer","storePaths":["/nix/store/newer-installed"],"outputs":null}]}' \
+      '{"nixpkgs#packages.test.equal":{"paths":["/nix/store/equal-new"],"version":"1.0"},"github:NixOS/nixpkgs/locked-equal#packages.test.equal":{"paths":["/nix/store/equal-old"],"version":"1.0"},"nixpkgs#packages.test.newer":{"paths":["/nix/store/newer-available"],"version":"2.0"},"github:NixOS/nixpkgs/locked-newer#packages.test.newer":{"paths":["/nix/store/newer-installed"],"version":"9.0"}}'
+    run_npkg_outdated_capture
+    cmd_status=$?
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 0 'changed array-shaped profile is a complete npkg report' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" changed 'different output sets expose changed state' || return 1
+    assert_equals "$_NPKG_OUTDATED_TOTAL" 2 'array-shaped profile contributes every active nixpkgs element' || return 1
+    assert_equals "$_NPKG_OUTDATED_CHANGED" 2 'different output paths count as changes despite display versions' || return 1
+    assert_contains "$output" '1.0' 'equal installed and available versions remain display-only data' || return 1
+    assert_contains "$output" '9.0' 'installed version that appears newer remains intact' || return 1
+    assert_contains "$output" '2.0' 'available version that appears older remains intact' || return 1
+    assert_contains "$output" 'change available' 'changed rows use the conservative user label' || return 1
+    assert_contains "$output" '2 change(s) available.' 'complete changed report uses conservative change wording' || return 1
+    assert_not_contains "$output" 'upgrade(s) available' 'npkg never infers version ordering from display strings' || return 1
+    assert_contains "$(<"$NPKG_TEST_EVAL_LOG")" 'outputsToInstall' 'default output evaluation consults Nix output-selection metadata' || return 1
+
+    output=$(run_upkg_with_managers 'nix' outdated --only=nix)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 'upkg accepts a complete changed Nix report' || return 1
+    assert_contains "$output" 'nix: updates available' 'upkg maps changed Nix state to updates available' || return 1
+    output=$(run_upkg_with_managers 'nix' plan --only=nix)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 'upkg plan accepts a complete changed Nix report' || return 1
+    assert_contains "$output" 'nix: updates available' 'upkg plan preserves changed Nix state' || return 1
+
+    set_npkg_fixture \
+      '{"elements":{"current":{"active":true,"originalUrl":"nixpkgs","url":"github:NixOS/nixpkgs/locked-current","attrPath":"packages.test.current","storePaths":["/nix/store/current"],"outputs":null},"changed":{"active":true,"originalUrl":"nixpkgs","url":"github:NixOS/nixpkgs/locked-changed","attrPath":"packages.test.changed","storePaths":["/nix/store/changed-old"],"outputs":null},"broken":{"active":true,"originalUrl":"nixpkgs","url":"github:NixOS/nixpkgs/locked-broken","attrPath":"packages.test.broken","storePaths":["/nix/store/broken"],"outputs":null}}}' \
+      '{"nixpkgs#packages.test.current":{"paths":["/nix/store/current"],"version":"1.0"},"github:NixOS/nixpkgs/locked-current#packages.test.current":{"paths":["/nix/store/current"],"version":"1.0"},"nixpkgs#packages.test.changed":{"paths":["/nix/store/changed-new"],"version":"1.0"},"github:NixOS/nixpkgs/locked-changed#packages.test.changed":{"paths":["/nix/store/changed-old"],"version":"1.0"},"nixpkgs#packages.test.broken":{"error":"simulated nix eval failure"},"github:NixOS/nixpkgs/locked-broken#packages.test.broken":{"paths":["/nix/store/broken"],"version":"1.0"}}'
+    run_npkg_outdated_capture
+    cmd_status=$?
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 1 'one failed evaluation makes the npkg report incomplete' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" partial 'failed evaluation exposes partial state' || return 1
+    assert_equals "$_NPKG_OUTDATED_CHANGED" 1 'partial report keeps its known change count' || return 1
+    assert_equals "$_NPKG_OUTDATED_UNKNOWN" 1 'partial report counts the failed evaluation as unknown' || return 1
+    assert_contains "$output" 'Partial result: 1 change(s) available; 1 unknown.' 'partial summary keeps separate change and unknown counts' || return 1
+    assert_contains "$output" 'simulated nix eval failure' 'partial report preserves the evaluation diagnostic' || return 1
+    assert_not_contains "$output" 'Everything is up to date.' 'partial report never prints an all-current summary' || return 1
+
+    output=$(run_upkg_with_managers 'nix' outdated --only=nix 2>&1)
+    cmd_status=$?
+    assert_status "$cmd_status" 1 'upkg outdated fails for partial Nix state' || return 1
+    assert_contains "$output" 'simulated nix eval failure' 'upkg outdated preserves partial Nix diagnostics' || return 1
+    assert_contains "$output" 'nix: failed' 'upkg outdated maps partial Nix state to failed' || return 1
+    output=$(run_upkg_with_managers 'nix' plan --only=nix 2>&1)
+    cmd_status=$?
+    assert_status "$cmd_status" 1 'upkg plan fails for partial Nix state' || return 1
+    assert_contains "$output" 'nix: failed' 'upkg plan maps partial Nix state to failed' || return 1
+
+    set_npkg_fixture \
+      '{"elements":[{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/missing-attr","storePaths":["/nix/store/missing-attr"],"outputs":null},{"active":true,"uri":"github:NixOS/nixpkgs/missing-source","attrPath":"packages.test.missingSource","storePaths":["/nix/store/missing-source"],"outputs":null},{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/missing-paths","attrPath":"packages.test.missingPaths","outputs":null},{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/no-eval-paths","attrPath":"packages.test.noEvalPaths","storePaths":["/nix/store/no-eval-paths"],"outputs":null}]}' \
+      '{"nixpkgs#packages.test.noEvalPaths":{"paths":[],"version":"1.0"},"github:NixOS/nixpkgs/no-eval-paths#packages.test.noEvalPaths":{"paths":["/nix/store/no-eval-paths"],"version":"1.0"}}'
+    run_npkg_outdated_capture
+    cmd_status=$?
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 1 'missing structural or evaluated output data makes npkg incomplete' || return 1
+    assert_equals "$_NPKG_OUTDATED_TOTAL" 4 'incomplete nixpkgs elements remain visible in the report' || return 1
+    assert_equals "$_NPKG_OUTDATED_UNKNOWN" 4 'missing attr source and path data are all unknown' || return 1
+    assert_matching_lines "$output" 'unknown' 5 'four unknown rows plus the partial summary are visible' || return 1
+    assert_contains "$output" 'incomplete profile data' 'structural unknown rows explain their cause' || return 1
+    assert_contains "$output" 'evaluation returned unusable output-path data' 'empty evaluated output set is unknown' || return 1
+    assert_not_contains "$output" 'Everything is up to date.' 'missing-data report never prints success' || return 1
+
+    set_npkg_fixture \
+      '{"elements":[{"active":true,"originalUrl":"github:example/tools","uri":"github:example/tools/locked","attrPath":"packages.test.tool","storePaths":["/nix/store/tool"]}]}' \
+      '{}'
+    run_npkg_outdated_capture
+    cmd_status=$?
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 0 'profile without active nixpkgs elements is complete' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" current 'zero-count nixpkgs profile exposes current state' || return 1
+    assert_equals "$_NPKG_OUTDATED_TOTAL" 0 'zero-count nixpkgs profile checks no elements' || return 1
+    assert_contains "$output" 'No nixpkgs packages found in the current profile.' 'zero-count profile keeps its dedicated message' || return 1
+    assert_equals "$(<"$NPKG_TEST_EVAL_LOG")" '' 'zero-count profile performs no evaluation' || return 1
+
+    set_npkg_fixture '__FAIL__' '{}'
+    run_npkg_outdated_capture
+    cmd_status=$?
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 1 'total profile read failure returns nonzero' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" partial 'profile read failure exposes partial state' || return 1
+    assert_contains "$output" 'simulated profile read failure' 'profile read failure preserves its diagnostic' || return 1
+    assert_not_contains "$output" 'Everything is up to date.' 'profile read failure never prints success' || return 1
+
+    set_npkg_fixture '{"elements":' '{}'
+    run_npkg_outdated_capture
+    cmd_status=$?
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 1 'profile JSON parse failure returns nonzero' || return 1
+    assert_contains "$output" 'Failed to parse Nix profile JSON.' 'profile JSON parse failure is explicit' || return 1
+    assert_not_contains "$output" 'Everything is up to date.' 'profile JSON parse failure never prints success' || return 1
+
+    profile_fixture=$(command jq -nc '
+      {
+        elements: [
+          range(1; 13) as $index
+          | {
+              active: true,
+              originalUrl: "nixpkgs",
+              uri: ("github:NixOS/nixpkgs/locked-" + ($index | tostring)),
+              attrPath: ("packages.test.pkg" + ($index | tostring)),
+              storePaths: [("/nix/store/pkg" + ($index | tostring) + "-installed")],
+              outputs: null
+            }
+        ]
+      }
+    ')
+    eval_fixture=$(command jq -nc '
+      reduce range(1; 13) as $index ({};
+        .[("nixpkgs#packages.test.pkg" + ($index | tostring))] = {
+          paths: [(
+            if $index == 12
+            then "/nix/store/pkg12-changed"
+            else ("/nix/store/pkg" + ($index | tostring) + "-installed")
+            end
+          )],
+          version: "1.0"
+        }
+        | .[("github:NixOS/nixpkgs/locked-" + ($index | tostring) + "#packages.test.pkg" + ($index | tostring))] = {
+            paths: [("/nix/store/pkg" + ($index | tostring) + "-installed")],
+            version: "1.0"
+          }
+      )
+    ')
+    set_npkg_fixture "$profile_fixture" "$eval_fixture"
+    functions[_ui_is_rich_terminal]='return 0'
+    functions[_ui_plain_mode]='return 1'
+    functions[_ui_term_height]='print -r -- 12'
+    run_npkg_outdated_capture
+    cmd_status=$?
+    output=$NPKG_TEST_OUTPUT
+    assert_status "$cmd_status" 0 'rich report with hidden rows remains complete' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" changed 'hidden changed row still exposes changed state' || return 1
+    assert_equals "$_NPKG_OUTDATED_CHANGED" 1 'hidden changed row contributes to the change total' || return 1
+    assert_contains "$output" '+9 not shown' 'rich dashboard reports rows hidden by terminal height' || return 1
+    assert_contains "$output" '1 change(s) available. Run npkg upgrade to apply.' 'rich summary counts a hidden changed row' || return 1
+
+    run_npkg_interrupt_capture "$npkg_tmp_dir"
+    cmd_status=$?
+    output=$NPKG_INTERRUPT_OUTPUT
+    assert_status "$cmd_status" 0 'npkg interrupt regression harness completes' || return 1
+    assert_contains "$output" 'status=130' 'npkg outdated returns 130 from its main function after Ctrl+C' || return 1
+    assert_contains "$output" 'unrelated_alive=1' 'npkg outdated does not wait for or terminate unrelated background jobs' || return 1
+    assert_contains "$output" 'leftovers=0' 'npkg outdated removes temporary files after Ctrl+C' || return 1
+
+    leftover_tmp=( "$npkg_tmp_dir"/*(N) )
+    assert_equals "${#leftover_tmp[@]}" 0 'npkg outdated removes temporary files after every normal result' || return 1
+
+    if (( had_tmpdir )); then
+      TMPDIR=$old_tmpdir
+    else
+      unset TMPDIR
+    fi
   fi
 
   command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"

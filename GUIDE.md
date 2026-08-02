@@ -70,11 +70,14 @@ ls *(.m-1)              # files modified in last day
 ls *(Lk+100)            # files larger than 100KB
 ```
 
-### GLOB_DOTS
-Include hidden files (dotfiles) in glob patterns.
+### GLOB_DOTS is disabled
+Ordinary globs keep zsh's conventional safety boundary: `*` and `**/*` exclude leading-dot entries. `init.zsh` explicitly disables `GLOB_DOTS`, so this remains true even if a framework enabled it earlier. Opt in only where hidden matches are intentional with the `(D)` qualifier or a command whose contract includes hidden files.
 
 ```zsh
-ls *     # now includes .gitignore, .env, etc.
+print -rl -- *        # visible entries only
+print -rl -- *(D)     # visible and hidden entries
+print -rl -- **/*(D)  # recursive, including hidden entries
+ls -A                 # ls explicitly includes hidden entries
 ```
 
 ### NUMERIC_GLOB_SORT
@@ -251,11 +254,25 @@ z -t foo        # jump by recency (most recent)
 zi              # interactive picker with fzf
 ```
 
+The interactive `zi` path uses the same stable `fzf` 0.52.0+ gate as the repository's other pickers. If fuzzy integration is blocked, ordinary `z` navigation remains available and `zi` returns before asking zoxide to launch a picker.
+
 ---
 
 ## FZF — Fuzzy Finder
 
-The shared `fzf` layer is guarded carefully: the bindings only initialize when `fzf` exists, the shell is interactive, and `ZSH_EXECUTION_STRING` is empty. That keeps `zsh -i -c ...` startup paths from tripping `zle` warnings.
+The complete shared fuzzy layer requires a stable `fzf` 0.52.0 or newer. This retains the Catppuccin theme—including `selected-bg`—the generated completion and keybindings, every preview, and all three specialized option variables. There is no reduced compatibility mode for older releases.
+
+The first normal interactive startup for a new fzf binary resolves the executable, parses its numeric version components, then captures and syntax-checks non-empty `fzf --zsh` output. It writes the validated integration atomically with private permissions under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` before loading it. Later prompts match the cache against the resolved path, executable device/inode/size/timestamps, Zsh version, and cache schema using Zsh builtins; they also require the cache file and its directory to be owned by the current user and not group- or world-writable. A matching warm cache is sourced without running `fzf --version`, `fzf --zsh`, `mktemp`, or a child `zsh -fn` validation process again. If persistent cache setup is unavailable, the same validation still runs through a temporary file so fuzzy workflows remain portable.
+
+Only after a cold validation or safe cache load succeeds does the config export `FZF_DEFAULT_OPTS`, `FZF_CTRL_T_OPTS`, `FZF_ALT_C_OPTS`, and `FZF_CTRL_R_OPTS`. Missing, malformed, prerelease, older, empty-output, or failing installations block only fuzzy workflows and print this once on stderr:
+
+```text
+zsh config: fzf 0.52.0 or newer is required (found: <version-or-reason>). Upgrade fzf and restart the shell.
+```
+
+Within the running shell, the ready or blocked result is cached by resolved executable path. Ctrl+R, Ctrl+T, Alt+C, `fkill`, `fbr`, `zi`, the `zhelp` palette, and every interactive `npkg` path recheck the shared gate before invoking a picker; changing `PATH` to a different `fzf` causes that binary to be validated first. Across shell launches, a changed fzf identity, Zsh version, or cache schema selects a fresh cache and repeats validation once. Removing the `zsh/fzf` directory below the active cache home also forces a clean rebuild. Normal non-interactive sourcing and `zsh -i -c ...` do not inspect the version, initialize ZLE bindings, or print the diagnostic.
+
+Run `~/.config/zsh/scripts/check-deps.sh` after installation. It reports the installed and minimum `fzf` versions and exits nonzero for every blocked case. Its hint directs you to a current package or the official upstream installation instructions rather than promising that an older distribution package is compatible.
 
 ### Ctrl+T — Insert file/directory
 
@@ -293,7 +310,7 @@ Press `Alt+C` to fuzzy search directories and cd into one.
 
 ### fkill function
 
-Fuzzy select one or more processes and send a signal. This helper requires both `fzf` and an interactive terminal.
+Fuzzy select one or more processes and send a signal. This helper requires supported `fzf` 0.52.0+ and an interactive terminal.
 
 ```zsh
 fkill           # opens process picker
@@ -364,9 +381,9 @@ zhelp --plain file     # force deterministic plain text
 zhelp --help           # show zhelp usage
 ```
 
-In a real terminal with fzf available, the palette shows command, category, and summary rows with a detail preview. Enter closes the picker and places the selected example in the editable command buffer; it never runs the example. Escape cancels successfully without changing the buffer. `NO_COLOR=1` keeps the picker interactive but removes colour, while `NO_NERD_FONT=1` uses ASCII markers.
+In a real terminal with supported fzf available, the palette shows command, category, and summary rows with a detail preview. Enter closes the picker and places the selected example in the editable command buffer; it never runs the example. Escape cancels successfully without changing the buffer. `NO_COLOR=1` keeps the picker interactive but removes colour, while `NO_NERD_FONT=1` uses ASCII markers.
 
-When fzf is missing, stdin or stdout is redirected, `TERM=dumb`, or `--plain` is passed, `zhelp` prints a stable uncoloured table instead. Exact command records remain detailed in either mode. Commands unavailable in the live shell are hidden by default and included with `--all`.
+When fzf is blocked, stdin or stdout is redirected, `TERM=dumb`, or `--plain` is passed, `zhelp` prints a stable uncoloured table instead and never launches the blocked picker. Exact command records remain detailed in either mode. Commands unavailable in the live shell are hidden by default and included with `--all`.
 
 Module sourcing registers data only. Availability checks and fzf launch only after `zhelp` is called, so the catalogue adds no startup subprocesses.
 
@@ -450,7 +467,7 @@ headers https://example.com  # follows redirects and prints response headers
 
 Shows the largest immediate children of a directory, including dotfiles, sorted by size.
 
-In rich terminals it renders a responsive dashboard with icons, sizes, and proportional bars. In pipes or narrow terminals it prints a sorted size-and-path list. If one child is unreadable, `dusage` still shows the readable entries instead of failing the whole listing. Control characters in valid filenames are escaped so each entry stays on one output line.
+In rich terminals it renders a responsive dashboard with icons, sizes, and proportional bars. In pipes or narrow terminals it prints a sorted size-and-path list. If one child is unreadable, `dusage` still shows the readable entries instead of failing the whole listing. Requested targets and entry paths are sanitized before measurement or styling: controls appear as visible escapes such as `\e`, `\n`, and `\x7f`, so a hostile filename cannot inject terminal behavior or create a second output row. Printable Unicode is preserved.
 
 ```zsh
 dusage           # top 20 largest items, human-readable
@@ -459,7 +476,7 @@ dusage /var 10   # top 10 items in /var
 
 ### bigfiles — Largest files in tree
 
-In rich terminals it renders a responsive dashboard with truncated paths and proportional bars. In pipes or narrow terminals it prints a recursive size-and-path list. If one subtree is unreadable, `bigfiles` still reports the readable files it can inspect. Its scan is NUL-delimited, and control characters in filenames are escaped for unambiguous one-line display.
+In rich terminals it renders a responsive dashboard with truncated paths and proportional bars. In pipes or narrow terminals it prints a recursive size-and-path list. If one subtree is unreadable, `bigfiles` still reports the readable files it can inspect. Its scan is NUL-delimited, and requested targets plus file paths use the same safe-text contract as `dusage`. Truncation is calculated after escaping and never splits a visible escape token.
 
 ```zsh
 bigfiles         # top 20 largest files recursively
@@ -479,11 +496,11 @@ croot            # jumps to ~/projects/myapp
 path    # shows each PATH entry
 ```
 
-In rich terminals it renders a compact dashboard with indexed entries. In pipes, redirects, `TERM=dumb`, `NO_COLOR=1`, or narrow terminals, it prints one PATH entry per line. Empty components, which make the current directory part of command lookup, are preserved; rich output labels them as `.`, while plain output represents them as empty lines.
+In rich terminals it renders a compact dashboard with indexed entries. In pipes, redirects, `TERM=dumb`, `NO_COLOR=1`, or narrow terminals, it prints one PATH entry per line. Empty components, which make the current directory part of command lookup, are preserved; rich output labels them as `.`, while plain output represents them as empty lines. Every environment-controlled entry is sanitized before rendering, so C0, DEL, and C1 controls are visible text rather than active terminal bytes.
 
 ### fbr — Fuzzy-pick and checkout a git branch
 
-Requires `fzf` and an interactive terminal. Shows local and remote branches sorted by most recent commit, with a log preview.
+Requires supported `fzf` 0.52.0+ and an interactive terminal. Shows local and remote branches sorted by most recent commit, with a log preview.
 
 ```zsh
 fbr              # opens branch picker and checks out the selected branch
@@ -644,6 +661,7 @@ Nix bridge details:
 
 - `upkg` only exposes the `nix` backend when `nix` is installed and the `npkg` shell function is defined in the current shell.
 - `upkg outdated --only nix` is blocked when `jq` is missing because `npkg outdated` depends on it.
+- Nix outdated checks propagate a stable `current`, `changed`, or `partial` result into both `upkg outdated` and `upkg plan`. A partial result is reported as failed, keeps the Nix diagnostic rows, and makes the aggregate command return nonzero after other managers finish.
 - `upkg upgrade --only nix` still works without `jq`.
 - `upkg clean --only nix` calls `nix-collect-garbage` directly without generation-deletion flags, so it does not depend on `jq` and preserves rollback history.
 - The dependency checker verifies `nix-collect-garbage` when Nix is installed and reports it as an optional missing capability.
@@ -698,7 +716,7 @@ Search summary: 2 result(s) across 2 manager(s).
 
 ## Nix Package Manager (npkg)
 
-Defined in `60-functions.zsh`. Only available when `nix` is installed. It is an `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require `jq`, `fzf`, and a real terminal.
+Defined in `60-functions.zsh`. Only available when `nix` is installed. It is an `apt`-like wrapper around `nix profile` with optional `fzf` pickers. `npkg refresh` and `npkg outdated` require `jq`; interactive `add`/`find`/`remove` pickers require `jq`, supported `fzf` 0.52.0+, and a real terminal.
 
 ### Commands
 
@@ -711,7 +729,7 @@ Defined in `60-functions.zsh`. Only available when `nix` is installed. It is an 
 | `npkg list` / `npkg ls` | List installed packages in the current profile |
 | `npkg remove <pkg>` / `npkg rm <pkg>` / `npkg uninstall <pkg>` / `npkg delete <pkg>` | Remove a package |
 | `npkg remove` / `npkg rm` | Open an fzf picker to choose packages to remove |
-| `npkg outdated` / `npkg check` / `npkg diff` | Show available upgrades before running upgrade |
+| `npkg outdated` / `npkg check` / `npkg diff` | Compare installed and currently evaluated output-path sets |
 | `npkg upgrade` / `npkg up` / `npkg update` | Upgrade all packages |
 | `npkg upgrade <pkg>` | Upgrade a specific package |
 | `npkg refresh` | Rebuild the cached nixpkgs attribute index |
@@ -721,13 +739,15 @@ npkg add bat           # install bat
 npkg find nvim         # fuzzy-pick a neovim variant
 npkg search ripgrep    # search with descriptions
 npkg remove            # interactive removal picker
-npkg outdated          # see what would be upgraded
+npkg outdated          # report current, changed, and unknown outputs
 npkg upgrade           # upgrade everything
 ```
 
 The fzf picker preview shows the package description, version, and homepage from nixpkgs using the shared Catppuccin Mocha palette. The preview stays on the right in wide terminals and moves below the picker in narrower terminals so package names and metadata remain readable. The attribute name cache is stored under `${XDG_CACHE_HOME:-~/.cache}/npkg/` and is refreshed automatically once it is at least 24 hours old.
 
-`npkg outdated` compares installed store-path versions against the latest in nixpkgs (evaluated in parallel) and prints an ASCII-safe table in plain mode, or a responsive Mocha dashboard in rich terminals — run it before `npkg upgrade` to see what will change.
+`npkg outdated` reads every active nixpkgs profile element from either the object- or array-shaped manifest schema, then evaluates the same source, resolved attribute, and selected outputs in parallel. Status comes only from output identity: an equal store-path set is `current`; a different set is `change available`; and incomplete profile data, failed evaluation, or missing usable outputs is `unknown`. The comparison honors explicit multi-output selection and `meta.outputsToInstall` defaults. Version strings come from evaluated package metadata only, are display information, and are never parsed from store-path basenames or used to infer ordering. Pressing Ctrl+C stops and reaps only the recorded evaluation workers, removes the command's temporary files, preserves unrelated background jobs, and returns status `130`.
+
+A complete report with changes still exits zero because the check itself succeeded. A report containing any `unknown` row is labeled partial and exits nonzero, with separate change and unknown counts; it never prints `Everything is up to date.` This deliberately does not claim that a changed output is newer—it can be an upgrade, downgrade, rebuild, changed input, or packaging change. A profile with no active nixpkgs elements is a complete zero-count result and prints `No nixpkgs packages found in the current profile.`
 
 `npkg refresh` also needs `jq`, because the cache is built from JSON output.
 
@@ -744,7 +764,7 @@ tips    # prints one random tip, e.g.:
         # tip: Run mkcd <dir> to create a directory and cd into it in one step
 ```
 
-Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific tips only appear when the supporting commands are available. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are available, and `upkg` tips are added automatically whenever at least one supported package manager is detected.
+Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific fuzzy tips appear only when the shared `fzf` gate is ready. Extra `npkg` picker tips are added automatically when `nix`, `jq`, and supported `fzf` are available, and `upkg` tips are added automatically whenever at least one supported package manager is detected.
 
 One tip points to `zhelp` for searchable command discovery. Command-tip catalogue consolidation remains separate from the palette itself, so the existing tip pool and hook-free behavior are otherwise unchanged.
 
@@ -895,7 +915,7 @@ npkg find <query>   → seeded fuzzy install picker
 npkg search <query> → search nixpkgs with descriptions
 npkg list           → list installed packages
 npkg remove         → fuzzy-pick packages to remove
-npkg outdated       → show available upgrades
+npkg outdated       → compare Nix output identities
 npkg upgrade        → upgrade all packages
 npkg refresh        → rebuild nixpkgs attribute cache
 ```

@@ -15,6 +15,7 @@ _zsh_tip_pool=(
   "Run mkcd <dir> to create a directory and cd into it in one step"
   "Run croot to jump to the root of the current git repo"
   "Run path to inspect each PATH entry with rich output in capable terminals"
+  "dusage, bigfiles, and path render control characters as visible escapes without changing printable Unicode"
   "Run fbr to fuzzy-pick and checkout a git branch from local or remote refs"
   "Run dusage [path] [count] to summarize any directory with a custom limit"
   "Run bigfiles [path] [count] to inspect any tree with a custom limit"
@@ -35,13 +36,15 @@ _zsh_tip_pool=(
   "Use cd ~1 after dirs -v to jump back through your directory stack"
   "Run ll for a long listing with hidden files and readable sizes"
   "Use **/*.ext for recursive glob matching (EXTENDED_GLOB)"
-  "* includes dotfiles because GLOB_DOTS is enabled"
+  "Use *(D) or **/*(D) when a glob should explicitly include dotfiles"
   "Use *(.m-1) to glob files modified in the last day"
   "file2 sorts before file10 because NUMERIC_GLOB_SORT is enabled"
   "Command spell-correction prompts are intentionally disabled"
   "Tab completion is case-insensitive for names and paths"
   "Custom commands complete only the argument types they accept, such as archives, directories, counts, URLs, and signals"
   "Run zhelp to search available commands and queue an editable example without executing it"
+  "Fuzzy workflows require stable fzf 0.52.0 or newer; check setup with scripts/check-deps.sh"
+  "Validated fzf startup integration is reused across shells and refreshes automatically when fzf changes"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
   "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"
@@ -51,11 +54,13 @@ _zsh_tip_pool=(
 if (( $+commands[zoxide] )); then
   _zsh_tip_pool+=(
     "Use z <pattern> to jump to directories zoxide remembers"
-    "Use zi for an interactive zoxide directory picker"
   )
+  if [[ ${_FZF_STATE:-blocked} == ready ]]; then
+    _zsh_tip_pool+=("Use zi for an interactive zoxide directory picker")
+  fi
 fi
 
-if (( $+commands[fzf] )) && [[ -o interactive ]] && [[ -z "$ZSH_EXECUTION_STRING" ]]; then
+if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
   _zsh_tip_pool+=(
     "Press Ctrl+R to fuzzy search your command history"
     "Press Ctrl+T to fuzzy insert a file path at your cursor"
@@ -81,11 +86,12 @@ fi
 if (( $+commands[nix] && $+commands[jq] )); then
   _zsh_tip_pool+=(
     "Run npkg refresh to rebuild the cached nixpkgs picker index (requires jq)"
-    "Run npkg outdated to preview available package upgrades before running npkg upgrade"
+    "Run npkg outdated to report current, changed, or unknown Nix outputs before upgrading"
+    "Press Ctrl+C during npkg outdated to cancel its checks without disturbing unrelated background jobs"
   )
 fi
 
-if (( $+commands[nix] && $+commands[fzf] && $+commands[jq] )); then
+if (( $+commands[nix] && $+commands[jq] )) && [[ ${_FZF_STATE:-blocked} == ready ]]; then
   _zsh_tip_pool+=(
     "Run npkg install with no args to fuzzy-pick nixpkgs attribute names"
     "Run npkg find nvim to seed the nix package picker with an initial query"

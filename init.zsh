@@ -5,7 +5,7 @@ setopt AUTO_PUSHD           # Push directories onto stack
 setopt PUSHD_IGNORE_DUPS    # No duplicate entries in directory stack
 setopt PUSHD_SILENT         # Don't print directory stack after pushd/popd
 setopt EXTENDED_GLOB        # Powerful glob patterns (e.g. **/*, ^pattern)
-setopt GLOB_DOTS            # Include dotfiles in globs
+unsetopt GLOB_DOTS          # Require explicit (D) qualifiers for hidden entries
 setopt NUMERIC_GLOB_SORT    # Sort numbers numerically in globs
 unsetopt CORRECT            # Disable spell-correction prompts, even if enabled earlier
 setopt NO_BEEP              # No beeping

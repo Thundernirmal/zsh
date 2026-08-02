@@ -44,7 +44,7 @@ if (( $+functions[compdef] )); then
     'rm:Alias for remove'
     'uninstall:Alias for remove'
     'delete:Alias for remove'
-    'outdated:Show available package upgrades'
+    'outdated:Compare installed and evaluated Nix outputs'
     'check:Alias for outdated'
     'diff:Alias for outdated'
     'refresh:Rebuild the cached nixpkgs attribute index'

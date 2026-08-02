@@ -48,7 +48,7 @@ Required for the intended shared setup:
 - `ss`
 - `lsd`
 - `zoxide`
-- `fzf`
+- `fzf` 0.52.0 or newer
 
 Optional extras:
 
@@ -61,20 +61,25 @@ Optional extras:
 
 Missing optional tools keep the shell usable. The config uses runtime checks and either skips the integration or falls back to a simpler command where possible.
 
+The dependency checker reads `fzf --version`, reports both the installed and minimum versions, and fails for a missing, malformed, prerelease, or pre-0.52 build. Its install hint points to a current supported package or the official upstream instructions instead of assuming an older distribution package is sufficient.
+
 ## Behavior Notes
 
 - `init.zsh` skips unreadable module files instead of failing shell startup.
+- Ordinary `*` and `**/*` globs exclude hidden entries, even if an earlier framework enabled `GLOB_DOTS`; opt in with `*(D)` or `**/*(D)` when hidden matches are intentional.
 - External integrations are guarded before use. Startup-time guards use zsh's prehashed `$+commands` table so a missing tool costs no `PATH` walk; guards inside functions use `command -v` so they stay correct when `PATH` changes mid-session.
-- `40-fzf.zsh` initializes `fzf --zsh` only for normal interactive startup, which avoids `zle` warnings in `zsh -i -c ...` paths.
+- `40-fzf.zsh` requires stable `fzf` 0.52.0 or newer. The first normal prompt for a new fzf binary validates its version, non-empty generated Zsh code, and syntax before atomically storing a private integration cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/`. Later prompts match that cache to the executable identity and Zsh version with builtins, verify its ownership and permissions, and source it without launching `fzf` or a validation shell again. Missing, older, malformed, prerelease, and broken installations hard-block only fuzzy workflows and print one actionable diagnostic; non-interactive and `zsh -i -c ...` paths stay silent.
+- Within a shell, the `fzf` result is cached by resolved executable path. Every repository picker—including Ctrl+R, Ctrl+T, Alt+C, `fkill`, `fbr`, `zi`, `zhelp`, and interactive `npkg` paths—consults that shared gate before launch, so a different binary selected after a `PATH` change is checked before use. Across shells, changing the fzf file identity, Zsh version, or cache schema automatically creates a newly validated integration cache.
 - `50-completion.zsh` intentionally stays small and assumes the main `~/.zshrc` or framework already ran `compinit`.
 - `65-help.zsh` registers catalogue data without launching subprocesses. `zhelp` checks the live shell only when invoked.
 - `66-compdefs.zsh` registers custom completions only when `compdef` is available. Without `compinit`, it is a silent no-op.
 - `upkg` completion covers subcommands, aliases, flags, and comma-separated manager IDs. `npkg` completion reads an existing attribute cache when available but never runs Nix or refreshes the cache from Tab.
-- `zhelp` uses fzf only in a suitable interactive terminal. Enter queues the selected example for editing and never executes it; pipes, redirects, missing fzf, `TERM=dumb`, and `--plain` use stable plain text.
+- `zhelp` uses fzf only in a suitable interactive terminal with a supported, ready version. Enter queues the selected example for editing and never executes it; pipes, redirects, blocked fzf, `TERM=dumb`, and `--plain` use stable plain text without launching the blocked binary.
 - Rich dashboards are used only in real UTF-8 terminals that are at least 60 columns wide and do not set `NO_COLOR`; pipes, redirects, `TERM=dumb`, and narrow terminals get plain output.
 - Set `NO_NERD_FONT=1` to keep colors while forcing ASCII-safe icons and bars.
 - `path` uses rich indexed output in capable terminals and stays one-entry-per-line in plain contexts.
 - `path` preserves empty `PATH` components exactly; rich output labels them as `.`, while plain output keeps the corresponding empty lines.
+- `dusage`, `bigfiles`, and `path` sanitize filesystem- and environment-controlled labels before measuring or rendering them. Control bytes become visible escapes such as `\e`, `\n`, or `\x7f`, while ordinary ASCII and printable Unicode remain unchanged.
 - `fkill` defaults to `SIGTERM` for graceful shutdown; pass `9` explicitly when a process must be force-killed.
 - `tips` is hook-free and only prints when called manually.
 - This shared config targets GNU/Linux environments. Commands such as `ss`, GNU color flags, and several `find`/`du` flows are Linux-oriented.
@@ -124,6 +129,8 @@ upkg clean --sudo --only apt
 In rich terminals, every valid `upkg` command path—including help, upgrades, and cleanup—uses the shared dashboard theme. Operational commands include themed titles, manager sections, and summaries; help uses themed command and flag panels. Pipes, redirects, and other plain contexts keep script-friendly output.
 
 `npkg` is defined only when `nix` is available. Interactive `npkg` pickers and `npkg refresh`/`outdated` need `jq`, and the pickers also need `fzf` plus a real terminal.
+
+`npkg outdated` compares the complete installed store-path set with the outputs selected by the current nixpkgs installable. A difference is reported conservatively as `change available`—it may be an upgrade, downgrade, rebuild, input change, or packaging change. Display versions are informational and never determine status. Missing profile data or failed evaluation produces `unknown`, a partial summary, and a nonzero result; only a complete all-current report may say `Everything is up to date.` Pressing Ctrl+C cancels and reaps only the command's evaluation workers, removes its temporary files, leaves unrelated background jobs alone, and returns status `130`. The `upkg` Nix bridge consumes the stable `current`, `changed`, or `partial` state rather than matching display text.
 
 See [`GUIDE.md`](./GUIDE.md#unified-package-updates-upkg) for the full command reference.
 
