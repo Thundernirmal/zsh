@@ -154,7 +154,7 @@ prepare_fzf_fakebin() {
   local tool
 
   command mkdir -p -- "$fakebin" || return 1
-  for tool in zsh mktemp rm ls grep diff; do
+  for tool in zsh chmod mkdir mktemp mv rm ls grep diff; do
     command ln -s -- "${commands[$tool]}" "$fakebin/$tool" || return 1
   done
 
@@ -205,6 +205,10 @@ case "$1" in
         printf "%s\n" "if ("
         exit 0
         ;;
+      runtime-fail)
+        printf "%s\n" "false"
+        exit 0
+        ;;
       *)
         printf "%s\n" \
           "typeset -g FZF_TEST_EVALUATED=1" \
@@ -250,6 +254,7 @@ print -r -- "generated=${+functions[fzf-file-widget]}${+functions[fzf-cd-widget]
 print -r -- "defined=${+functions[fkill]}${+functions[fbr]}${+functions[zhelp]}${+functions[npkg]}${+functions[zi]}"' > "$script_file"
 
   HOME="$tmp_home" \
+    XDG_CACHE_HOME="$case_dir/cache" \
     PATH="$case_dir/bin" \
     FZF_TEST_LOG="$log_file" \
     FZF_TEST_WIDGET_LOG="$widget_log" \
@@ -373,6 +378,7 @@ test_fzf_startup_gate() {
     'failed integration|fail|integration generation failed'
     'empty integration|empty|empty integration output'
     'invalid integration|invalid|invalid integration output'
+    'failing integration initialization|runtime-fail|integration initialization failed'
   )
 
   for case_spec in "${integration_cases[@]}"; do
@@ -417,6 +423,91 @@ test_fzf_startup_gate() {
     assert_matching_lines "$FZF_CASE_LOG" ':--zsh' 1 "$label requests generated integration once" || return 1
     command rm -rf -- "$FZF_CASE_DIR"
   done
+}
+
+test_fzf_persistent_startup_cache() {
+  local case_dir cache_root script_file stdout_file stderr_file log_file process_log
+  local output cmd_status phase cache_file
+  local -a cache_files
+
+  case_dir=$(mktemp -d "$tmp_home/fzf-persistent-cache.XXXXXX") || return 1
+  cache_root="$case_dir/cache"
+  script_file="$case_dir/startup.zsh"
+  stdout_file="$case_dir/stdout"
+  stderr_file="$case_dir/stderr"
+  log_file="$case_dir/fzf.log"
+  process_log="$case_dir/process.log"
+  : > "$log_file"
+  : > "$process_log"
+
+  prepare_fzf_fakebin "$case_dir/bin" 0.67.0 0 ok 1 || return 1
+  command rm -f -- "$case_dir/bin/zsh"
+  print -r -- '#!/bin/sh
+printf "zsh:%s\n" "$*" >> "${FZF_TEST_PROCESS_LOG:-/dev/null}"
+exec "$FZF_TEST_REAL_ZSH" "$@"' > "$case_dir/bin/zsh"
+  command chmod +x "$case_dir/bin/zsh"
+
+  print -r -- 'source "$HOME/.config/zsh/init.zsh"
+print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:-0} opts=${+FZF_DEFAULT_OPTS}"' > "$script_file"
+
+  for phase in cold warm; do
+    HOME="$tmp_home" \
+      XDG_CACHE_HOME="$cache_root" \
+      PATH="$case_dir/bin" \
+      FZF_TEST_LOG="$log_file" \
+      FZF_TEST_PROCESS_LOG="$process_log" \
+      FZF_TEST_REAL_ZSH="$zsh_bin" \
+      "$zsh_bin" -dfi "$script_file" >"$stdout_file" 2>"$stderr_file"
+    cmd_status=$?
+    output=$(file_contents "$stdout_file")
+
+    assert_status "$cmd_status" 0 "$phase persistent-cache startup exits cleanly" || return 1
+    assert_contains "$output" 'state=ready found=0.67.0 evaluated=1 opts=1' "$phase persistent-cache startup retains the full integration" || return 1
+    assert_no_output "$stderr_file" "$phase persistent-cache startup stays quiet" || return 1
+  done
+
+  assert_matching_lines "$(file_contents "$log_file")" ':--version' 1 'warm startup reuses the cached version result' || return 1
+  assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 1 'warm startup does not regenerate fzf integration' || return 1
+  assert_matching_lines "$(file_contents "$process_log")" 'zsh:-fn ' 1 'warm startup does not repeat syntax validation' || return 1
+
+  cache_files=( "$cache_root"/zsh/fzf/integration-*.zsh(N) )
+  assert_equals "${#cache_files[@]}" 1 'cold startup creates one persistent integration cache file' || return 1
+  cache_file=${cache_files[1]}
+
+  command chmod 666 -- "$cache_file"
+  HOME="$tmp_home" \
+    XDG_CACHE_HOME="$cache_root" \
+    PATH="$case_dir/bin" \
+    FZF_TEST_LOG="$log_file" \
+    FZF_TEST_PROCESS_LOG="$process_log" \
+    FZF_TEST_REAL_ZSH="$zsh_bin" \
+    "$zsh_bin" -dfi "$script_file" >"$stdout_file" 2>"$stderr_file"
+  cmd_status=$?
+  output=$(file_contents "$stdout_file")
+  assert_status "$cmd_status" 0 'unsafe persistent cache is replaced cleanly' || return 1
+  assert_contains "$output" 'state=ready found=0.67.0 evaluated=1 opts=1' 'unsafe cache replacement retains the full integration' || return 1
+  assert_no_output "$stderr_file" 'unsafe persistent cache replacement stays quiet' || return 1
+  assert_matching_lines "$(file_contents "$log_file")" ':--version' 2 'group-writable cache forces version revalidation' || return 1
+  assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 2 'group-writable cache forces integration regeneration' || return 1
+
+  print -r -- '# changed binary identity' >> "$case_dir/bin/fzf"
+  HOME="$tmp_home" \
+    XDG_CACHE_HOME="$cache_root" \
+    PATH="$case_dir/bin" \
+    FZF_TEST_LOG="$log_file" \
+    FZF_TEST_PROCESS_LOG="$process_log" \
+    FZF_TEST_REAL_ZSH="$zsh_bin" \
+    "$zsh_bin" -dfi "$script_file" >"$stdout_file" 2>"$stderr_file"
+  cmd_status=$?
+  output=$(file_contents "$stdout_file")
+  assert_status "$cmd_status" 0 'changed fzf binary rebuilds the persistent cache cleanly' || return 1
+  assert_contains "$output" 'state=ready found=0.67.0 evaluated=1 opts=1' 'changed binary cache rebuild retains the full integration' || return 1
+  assert_no_output "$stderr_file" 'changed fzf binary cache rebuild stays quiet' || return 1
+  assert_matching_lines "$(file_contents "$log_file")" ':--version' 3 'changed fzf binary invalidates the cached version result' || return 1
+  assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 3 'changed fzf binary invalidates generated integration' || return 1
+  assert_matching_lines "$(file_contents "$process_log")" 'zsh:-fn ' 3 'only cold and invalidated caches receive syntax validation' || return 1
+
+  command rm -rf -- "$case_dir"
 }
 
 test_fzf_quiet_startup_modes() {
@@ -531,6 +622,7 @@ _fzf_require_ready; ready_again=$?
 print -r -- "states=$ready_one,$ready_two,$blocked_one,$blocked_two,$ready_again final=$_FZF_STATE found=$_FZF_FOUND"' > "$script_file"
 
   HOME="$tmp_home" \
+    XDG_CACHE_HOME="$case_dir/cache" \
     PATH="$ready_bin" \
     FZF_TEST_READY_BIN="$ready_bin" \
     FZF_TEST_BLOCKED_BIN="$blocked_bin" \
@@ -576,6 +668,7 @@ __fzf_comprun test; completion_rc=$?
 print -r -- "generated-guards=$file_rc,$cd_rc,$history_rc,$completion_rc"' > "$script_file"
 
   HOME="$tmp_home" \
+    XDG_CACHE_HOME="$case_dir/cache" \
     PATH="$ready_bin" \
     FZF_TEST_BLOCKED_BIN="$blocked_bin" \
     FZF_TEST_LOG="$log_file" \
@@ -690,6 +783,7 @@ main() {
   run_init_case 'high-risk alias init smoke test' "$high_risk_alias_setup" || return 1
   test_glob_policy || return 1
   test_fzf_startup_gate || return 1
+  test_fzf_persistent_startup_cache || return 1
   test_fzf_quiet_startup_modes || return 1
   test_fzf_runtime_guards || return 1
   test_fzf_path_cache || return 1

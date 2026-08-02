@@ -262,13 +262,15 @@ The interactive `zi` path uses the same stable `fzf` 0.52.0+ gate as the reposit
 
 The complete shared fuzzy layer requires a stable `fzf` 0.52.0 or newer. This retains the Catppuccin theme—including `selected-bg`—the generated completion and keybindings, every preview, and all three specialized option variables. There is no reduced compatibility mode for older releases.
 
-During normal interactive startup, the config resolves `fzf`, parses its numeric version components, then captures and syntax-checks non-empty `fzf --zsh` output before evaluating it. Only after those checks pass does it export `FZF_DEFAULT_OPTS`, `FZF_CTRL_T_OPTS`, `FZF_ALT_C_OPTS`, and `FZF_CTRL_R_OPTS`. Missing, malformed, prerelease, older, empty-output, or failing installations block only fuzzy workflows and print this once on stderr:
+The first normal interactive startup for a new fzf binary resolves the executable, parses its numeric version components, then captures and syntax-checks non-empty `fzf --zsh` output. It writes the validated integration atomically with private permissions under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` before loading it. Later prompts match the cache against the resolved path, executable device/inode/size/timestamps, Zsh version, and cache schema using Zsh builtins; they also require the cache file and its directory to be owned by the current user and not group- or world-writable. A matching warm cache is sourced without running `fzf --version`, `fzf --zsh`, `mktemp`, or a child `zsh -fn` validation process again. If persistent cache setup is unavailable, the same validation still runs through a temporary file so fuzzy workflows remain portable.
+
+Only after a cold validation or safe cache load succeeds does the config export `FZF_DEFAULT_OPTS`, `FZF_CTRL_T_OPTS`, `FZF_ALT_C_OPTS`, and `FZF_CTRL_R_OPTS`. Missing, malformed, prerelease, older, empty-output, or failing installations block only fuzzy workflows and print this once on stderr:
 
 ```text
 zsh config: fzf 0.52.0 or newer is required (found: <version-or-reason>). Upgrade fzf and restart the shell.
 ```
 
-The ready or blocked result is cached by resolved executable path. Ctrl+R, Ctrl+T, Alt+C, `fkill`, `fbr`, `zi`, the `zhelp` palette, and every interactive `npkg` path recheck the shared gate before invoking a picker; changing `PATH` to a different `fzf` causes that binary to be validated first. Normal non-interactive sourcing and `zsh -i -c ...` do not inspect the version, initialize ZLE bindings, or print the diagnostic.
+Within the running shell, the ready or blocked result is cached by resolved executable path. Ctrl+R, Ctrl+T, Alt+C, `fkill`, `fbr`, `zi`, the `zhelp` palette, and every interactive `npkg` path recheck the shared gate before invoking a picker; changing `PATH` to a different `fzf` causes that binary to be validated first. Across shell launches, a changed fzf identity, Zsh version, or cache schema selects a fresh cache and repeats validation once. Removing the `zsh/fzf` directory below the active cache home also forces a clean rebuild. Normal non-interactive sourcing and `zsh -i -c ...` do not inspect the version, initialize ZLE bindings, or print the diagnostic.
 
 Run `~/.config/zsh/scripts/check-deps.sh` after installation. It reports the installed and minimum `fzf` versions and exits nonzero for every blocked case. Its hint directs you to a current package or the official upstream installation instructions rather than promising that an older distribution package is compatible.
 

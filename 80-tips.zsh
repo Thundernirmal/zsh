@@ -44,6 +44,7 @@ _zsh_tip_pool=(
   "Custom commands complete only the argument types they accept, such as archives, directories, counts, URLs, and signals"
   "Run zhelp to search available commands and queue an editable example without executing it"
   "Fuzzy workflows require stable fzf 0.52.0 or newer; check setup with scripts/check-deps.sh"
+  "Validated fzf startup integration is reused across shells and refreshes automatically when fzf changes"
   "History is shared across all open terminal sessions"
   "Ctrl+R history search skips duplicate commands"
   "Commands starting with a space are omitted from history (HIST_IGNORE_SPACE)"
