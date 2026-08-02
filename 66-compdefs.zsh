@@ -190,6 +190,31 @@ if (( $+functions[compdef] )); then
     _arguments '1:URL:_message "URL"' '*: :_message "no additional arguments"'
   }
 
+  _zsh_zhelp_commands() {
+    local id
+    local -a command_specs
+
+    if (( ! $+parameters[_ZSH_HELP_ORDER] )); then
+      _message 'command or search query'
+      return 0
+    fi
+
+    for id in "${_ZSH_HELP_ORDER[@]}"; do
+      command_specs+=("${id}:${_ZSH_HELP_SUMMARY[$id]}")
+    done
+
+    _describe -t commands 'zhelp command' command_specs
+  }
+
+  _zsh_zhelp() {
+    _arguments \
+      '(-h --help)'{-h,--help}'[show zhelp usage]' \
+      '--all[include commands unavailable on this machine]' \
+      '--plain[force deterministic plain-text output]' \
+      '1:command or search query:_zsh_zhelp_commands' \
+      '*:additional search term:'
+  }
+
   _zsh_no_arguments() {
     _message 'no arguments'
   }
@@ -203,6 +228,7 @@ if (( $+functions[compdef] )); then
   compdef _zsh_bigfiles bigfiles
   compdef _zsh_fkill fkill
   compdef _zsh_headers headers
+  compdef _zsh_zhelp zhelp
   compdef _zsh_no_arguments fbr croot path ports myip gitcount fanprofile tips
 
   if (( $+functions[npkg] )); then

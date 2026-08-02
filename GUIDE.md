@@ -12,6 +12,7 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
 ├── 55-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers, title lines, and consistent section separators
 ├── 60-functions.zsh        → Shell functions (extract, search, kill, fanprofile, git helpers, upkg, npkg, etc.)
+├── 65-help.zsh             → Searchable command catalogue and zhelp palette
 ├── 66-compdefs.zsh          → Command-aware completion for custom functions
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
 └── 80-tips.zsh             → On-demand tips function
@@ -27,14 +28,15 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 4. [Zoxide — Smart Navigation](#zoxide--smart-navigation)
 5. [FZF — Fuzzy Finder](#fzf--fuzzy-finder)
 6. [Tab Completion](#tab-completion)
-7. [Shell Functions](#shell-functions)
-8. [Global Aliases](#global-aliases)
-9. [Unified Package Updates (upkg)](#unified-package-updates-upkg)
-10. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
-11. [Tips Function](#tips-function)
-12. [OMZ Plugins](#omz-plugins)
-13. [Starship Prompt](#starship-prompt)
-14. [Quick Reference Card](#quick-reference-card)
+7. [Searchable Help](#searchable-help)
+8. [Shell Functions](#shell-functions)
+9. [Global Aliases](#global-aliases)
+10. [Unified Package Updates (upkg)](#unified-package-updates-upkg)
+11. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
+12. [Tips Function](#tips-function)
+13. [OMZ Plugins](#omz-plugins)
+14. [Starship Prompt](#starship-prompt)
+15. [Quick Reference Card](#quick-reference-card)
 
 ---
 
@@ -346,6 +348,27 @@ fkill <Tab>                # signal names and numbers
 File, directory, numeric-count, URL, signal, and no-argument functions also suppress irrelevant fallback completion where appropriate. All completion work is deferred until Tab is pressed, and sourcing the module launches no subprocesses.
 
 > **Note:** Heavy global completion UI features such as menu selection, colored listings, and grouped results remain intentionally disabled because they made completion lists noticeably slower. The concise descriptions attached to custom commands do not enable those global UI layers. Add any heavier presentation locally in `~/.zshrc` after sourcing `init.zsh`.
+
+---
+
+## Searchable Help
+
+`65-help.zsh` provides a central catalogue for every custom command and the important aliases in this repository. Each record includes a category, description, usage, editable example, dependency label, and current availability.
+
+```zsh
+zhelp                  # open the palette, or list available commands in plain mode
+zhelp package          # search names, categories, descriptions, usage, and examples
+zhelp upkg             # show full help for an exact command
+zhelp --all npkg       # include unavailable commands and explain requirements
+zhelp --plain file     # force deterministic plain text
+zhelp --help           # show zhelp usage
+```
+
+In a real terminal with fzf available, the palette shows command, category, and summary rows with a detail preview. Enter closes the picker and places the selected example in the editable command buffer; it never runs the example. Escape cancels successfully without changing the buffer. `NO_COLOR=1` keeps the picker interactive but removes colour, while `NO_NERD_FONT=1` uses ASCII markers.
+
+When fzf is missing, stdin or stdout is redirected, `TERM=dumb`, or `--plain` is passed, `zhelp` prints a stable uncoloured table instead. Exact command records remain detailed in either mode. Commands unavailable in the live shell are hidden by default and included with `--all`.
+
+Module sourcing registers data only. Availability checks and fzf launch only after `zhelp` is called, so the catalogue adds no startup subprocesses.
 
 ---
 
@@ -690,6 +713,8 @@ tips    # prints one random tip, e.g.:
 
 Tips cover aliases, functions, glob patterns, history, and more. Dependency-specific tips only appear when the supporting commands are available. Extra `npkg` tips are added automatically when `nix`, `fzf`, and `jq` are available, and `upkg` tips are added automatically whenever at least one supported package manager is detected.
 
+One tip points to `zhelp` for searchable command discovery. Command-tip catalogue consolidation remains separate from the palette itself, so the existing tip pool and hook-free behavior are otherwise unchanged.
+
 In rich terminals, `tips` renders a compact Rosewater card. In plain contexts it stays a one-line `tip:` message.
 
 ---
@@ -815,6 +840,7 @@ headers <url>       → HTTP headers
 path                → inspect PATH entries
 fanprofile          → current laptop performance profile
 tips                → print a random usage tip
+zhelp [query]       → search commands or queue an editable example
 ```
 
 ### Package Updates

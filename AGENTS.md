@@ -3,7 +3,7 @@
 ## Repo Shape
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
-- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
+- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Edit Rules
@@ -32,7 +32,8 @@ Run these in order after edits:
 4. `zsh scripts/test-functions.zsh`
 5. `zsh scripts/test-upkg.zsh`
 6. `zsh scripts/test-completions.zsh`
-7. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
+7. `zsh scripts/test-help.zsh`
+8. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
 - `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `nix`) still exit `0` and only print hints.
