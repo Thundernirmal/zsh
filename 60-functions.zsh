@@ -4060,7 +4060,7 @@ if command -v nix >/dev/null 2>&1; then
     local installed_version available_version package_state display_state marker role detail error_output
     local width name_width version_width visible_count more
     local current_file locked_file pid
-    integer pkg_count=0 changed=0 unknown=0 idx
+    integer pkg_count=0 changed=0 unknown=0 idx interrupted=0
     integer max_jobs=8
     local -a names attrs sources locked_uris installed_path_sets output_specs structurally_valid
     local -a installed_versions available_versions statuses unknown_details job_pids
@@ -4199,10 +4199,11 @@ if command -v nix >/dev/null 2>&1; then
       return 1
     }
 
-    trap 'for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done; wait 2>/dev/null; command rm -rf -- "$tmp_dir"; trap - EXIT INT TERM; return 130' INT TERM
     trap 'command rm -rf -- "$tmp_dir"' EXIT
+    trap 'interrupted=1; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' INT TERM
 
     for (( idx = 1; idx <= pkg_count; idx++ )); do
+      (( interrupted )) && break
       (( structurally_valid[$idx] )) || continue
 
       (
@@ -4225,11 +4226,17 @@ if command -v nix >/dev/null 2>&1; then
       ) &
       job_pids+=("$!")
 
+      if (( interrupted )); then
+        command kill "${job_pids[-1]}" 2>/dev/null
+        break
+      fi
+
       if (( ${#job_pids[@]} >= max_jobs )); then
         for pid in "${job_pids[@]}"; do
           wait "$pid" 2>/dev/null
         done
         job_pids=()
+        (( interrupted )) && break
       fi
     done
 
@@ -4238,7 +4245,15 @@ if command -v nix >/dev/null 2>&1; then
     done
     job_pids=()
 
+    if (( interrupted )); then
+      trap - INT TERM
+      command rm -rf -- "$tmp_dir"
+      trap - EXIT
+      return 130
+    fi
+
     for (( idx = 1; idx <= pkg_count; idx++ )); do
+      (( interrupted )) && break
       installed_version='?'
       available_version='?'
       package_state=unknown
@@ -4300,8 +4315,15 @@ if command -v nix >/dev/null 2>&1; then
       unknown_details+=("$detail")
     done
 
+    trap - INT TERM
+    if (( interrupted )); then
+      command rm -rf -- "$tmp_dir"
+      trap - EXIT
+      return 130
+    fi
+
     command rm -rf -- "$tmp_dir"
-    trap - EXIT INT TERM
+    trap - EXIT
 
     if (( unknown > 0 )); then
       _npkg_set_outdated_state partial "$pkg_count" "$changed" "$unknown"

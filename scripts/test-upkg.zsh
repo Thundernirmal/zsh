@@ -213,6 +213,99 @@ run_npkg_outdated_capture() {
   return $rc
 }
 
+run_npkg_interrupt_capture() {
+  local npkg_tmp_dir=$1
+  local worker_started="$tmp_prefix/npkg-interrupt-started"
+  local unrelated_stop="$tmp_prefix/npkg-interrupt-stop"
+  local output_file="$tmp_prefix/npkg-interrupt-output"
+  local harness_pid signaler_pid rc
+
+  command rm -f -- "$worker_started" "$unrelated_stop" "$output_file"
+  zmodload zsh/zselect || return 1
+
+  (
+    emulate -L zsh
+    setopt localtraps NO_UNSET
+
+    local unrelated_pid=''
+    integer npkg_status unrelated_alive=0
+    local -a leftover_tmp
+
+    export TMPDIR=$npkg_tmp_dir
+    functions[_ui_is_rich_terminal]='return 1'
+    functions[_ui_plain_mode]='return 0'
+
+    _npkg_nix() {
+      if [[ "$*" == 'profile list --json' ]]; then
+        print -r -- '{"elements":{"interrupt":{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/locked-interrupt","attrPath":"packages.test.interrupt","storePaths":["/nix/store/interrupt-installed"],"outputs":null}}}'
+        return 0
+      fi
+      return 2
+    }
+
+    _npkg_eval_installable_record() {
+      integer worker_ticks=0
+
+      : >"$worker_started"
+      while (( worker_ticks < 600 )); do
+        zselect -t 1
+        (( worker_ticks++ ))
+      done
+      return 1
+    }
+
+    _npkg_interrupt_harness_cleanup() {
+      [[ -n $unrelated_pid ]] || return 0
+      : >"$unrelated_stop"
+      wait "$unrelated_pid" 2>/dev/null
+    }
+    trap _npkg_interrupt_harness_cleanup EXIT
+
+    (
+      integer unrelated_ticks=0
+
+      while [[ ! -e $unrelated_stop ]] && (( unrelated_ticks < 500 )); do
+        zselect -t 1
+        (( unrelated_ticks++ ))
+      done
+    ) &
+    unrelated_pid=$!
+
+    npkg outdated >/dev/null 2>&1
+    npkg_status=$?
+
+    kill -0 "$unrelated_pid" 2>/dev/null && unrelated_alive=1
+    leftover_tmp=( "$npkg_tmp_dir"/npkg-outdated.*(N) )
+
+    print -r -- "status=$npkg_status"
+    print -r -- "unrelated_alive=$unrelated_alive"
+    print -r -- "leftovers=${#leftover_tmp[@]}"
+
+    : >"$unrelated_stop"
+    wait "$unrelated_pid" 2>/dev/null
+    unrelated_pid=''
+  ) >"$output_file" 2>&1 &
+  harness_pid=$!
+
+  (
+    integer signal_ticks=0
+
+    while [[ ! -e $worker_started ]] && (( signal_ticks < 100 )); do
+      zselect -t 1
+      (( signal_ticks++ ))
+    done
+    [[ -e $worker_started ]] && kill -INT "$harness_pid" 2>/dev/null
+  ) &
+  signaler_pid=$!
+
+  wait "$harness_pid" 2>/dev/null
+  rc=$?
+  wait "$signaler_pid" 2>/dev/null
+  typeset -g NPKG_INTERRUPT_OUTPUT="$(<"$output_file")"
+  command rm -f -- "$worker_started" "$unrelated_stop" "$output_file"
+  return $rc
+}
+
 main() {
   local output cmd_status route state_role npm_stdout npm_stderr
   local npkg_profile_file="$tmp_prefix/npkg-profile.json"
@@ -1421,6 +1514,14 @@ esac
     assert_equals "$_NPKG_OUTDATED_CHANGED" 1 'hidden changed row contributes to the change total' || return 1
     assert_contains "$output" '+9 not shown' 'rich dashboard reports rows hidden by terminal height' || return 1
     assert_contains "$output" '1 change(s) available. Run npkg upgrade to apply.' 'rich summary counts a hidden changed row' || return 1
+
+    run_npkg_interrupt_capture "$npkg_tmp_dir"
+    cmd_status=$?
+    output=$NPKG_INTERRUPT_OUTPUT
+    assert_status "$cmd_status" 0 'npkg interrupt regression harness completes' || return 1
+    assert_contains "$output" 'status=130' 'npkg outdated returns 130 from its main function after Ctrl+C' || return 1
+    assert_contains "$output" 'unrelated_alive=1' 'npkg outdated does not wait for or terminate unrelated background jobs' || return 1
+    assert_contains "$output" 'leftovers=0' 'npkg outdated removes temporary files after Ctrl+C' || return 1
 
     leftover_tmp=( "$npkg_tmp_dir"/*(N) )
     assert_equals "${#leftover_tmp[@]}" 0 'npkg outdated removes temporary files after every normal result' || return 1
