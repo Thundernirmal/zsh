@@ -149,7 +149,10 @@ print_hints() {
   case "$manager" in
     apt)
       printf '  sudo apt update\n'
-      printf '  sudo apt install zsh git curl iproute2 lsd zoxide bat tree fd-find jq\n'
+      printf '  sudo apt install zsh git curl iproute2 lsd zoxide tree fd-find jq\n'
+      printf '  Debian/Ubuntu expose bat as batcat; install the expected bat command with one of:\n'
+      printf '    nix profile add nixpkgs#bat\n'
+      printf '    brew install bat\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     dnf)
