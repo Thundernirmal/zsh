@@ -53,6 +53,16 @@ if (( $+functions[compdef] )); then
     'update:Alias for upgrade'
     'help:Show usage help'
   )
+  if (( $+functions[cgm] )); then
+    typeset -ga _ZSH_CGM_COMMAND_SPECS=(
+      'set:Securely store or replace one credential'
+      'list:List saved names without retrieving values'
+      'env:Load credentials into the current shell'
+      'unset:Remove variables from the current shell'
+      'delete:Delete stored credentials and unset them here'
+      'help:Show usage help'
+    )
+  fi
 
   _zsh_upkg_managers() {
     local -a manager_specs
@@ -155,6 +165,54 @@ if (( $+functions[compdef] )); then
     esac
   }
 
+  if (( $+functions[cgm] )); then
+    _zsh_cgm_saved_credentials() {
+      if (( ! $+functions[_cgm_catalog_names] )); then
+        _message 'saved credential name'
+        return 0
+      fi
+
+      _cgm_catalog_names || return 0
+      if (( ${#reply[@]} == 0 )); then
+        _message 'no saved credentials'
+        return 0
+      fi
+
+      _values 'saved credential' "${reply[@]}"
+    }
+
+    _zsh_cgm() {
+      local context state state_descr line
+      typeset -A opt_args
+
+      _arguments -C \
+        '(-h --help)'{-h,--help}'[show cgm usage]' \
+        '1:cgm command:->command' \
+        '*:command argument:->argument' && return 0
+
+      case $state in
+        command)
+          _describe -t commands 'cgm command' _ZSH_CGM_COMMAND_SPECS
+          ;;
+        argument)
+          case ${line[1]-} in
+            set|unset|delete)
+              _zsh_cgm_saved_credentials
+              ;;
+            env)
+              _alternative \
+                'modes:load mode:(--all)' \
+                'credentials:saved credential:_zsh_cgm_saved_credentials'
+              ;;
+            *)
+              _message 'no additional arguments'
+              ;;
+          esac
+          ;;
+      esac
+    }
+  fi
+
   _zsh_extract() {
     local context state state_descr line
     typeset -A opt_args
@@ -234,5 +292,8 @@ if (( $+functions[compdef] )); then
 
   if (( $+functions[npkg] )); then
     compdef _zsh_npkg npkg
+  fi
+  if (( $+functions[cgm] )); then
+    compdef _zsh_cgm cgm
   fi
 fi

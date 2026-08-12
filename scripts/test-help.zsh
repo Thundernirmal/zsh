@@ -90,7 +90,7 @@ file_contents() {
 
 test_catalogue() {
   local id before_count rc
-  local expected='.. ... .... - z zi mkcd croot ls ll la lt mkdir cp mv rm cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path upkg npkg G L W H T NE NUL tips zhelp'
+  local expected='.. ... .... - z zi mkcd croot ls ll la lt mkdir cp mv rm cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm upkg npkg G L W H T NE NUL tips zhelp'
 
   assert_equals "${(j: :)_ZSH_HELP_ORDER}" "$expected" 'catalogue covers the public command suite in stable order' || return 1
   assert_unique 'catalogue IDs are unique' "${_ZSH_HELP_ORDER[@]}" || return 1
@@ -127,7 +127,7 @@ test_matching() {
 }
 
 test_plain_rendering_and_availability() {
-  local output rc fakebin="$tmp_dir/availability-fakebin" old_path=$PATH
+  local output cgm_output rc fakebin="$tmp_dir/availability-fakebin" old_path=$PATH
 
   unfunction npkg 2>/dev/null || true
 
@@ -150,16 +150,25 @@ test_plain_rendering_and_availability() {
   output=$(zhelp --plain --all npkg)
   assert_contains "$output" 'Availability: unavailable (requires nix; jq and fzf 0.52.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
 
+  output=$(zhelp --plain --all cgm)
+  assert_contains "$output" 'Description:  Store credential values securely and load them into the current shell' 'cgm has a complete help record' || return 1
+  assert_contains "$output" 'Availability: unavailable (requires secret-tool and a Secret Service provider)' 'cgm help explains its optional dependency' || return 1
+
   command mkdir -p -- "$fakebin"
   print -r -- '#!/bin/sh
 exit 0' > "$fakebin/nix"
-  command chmod +x "$fakebin/nix"
+  print -r -- '#!/bin/sh
+exit 0' > "$fakebin/secret-tool"
+  command chmod +x "$fakebin/nix" "$fakebin/secret-tool"
   npkg() { :; }
+  cgm() { :; }
   PATH="$fakebin:$PATH"
   output=$(zhelp --plain npkg)
+  cgm_output=$(zhelp --plain cgm)
   PATH=$old_path
-  unfunction npkg
+  unfunction npkg cgm
   assert_contains "$output" 'Availability: available' 'availability checks use the live function table and PATH' || return 1
+  assert_contains "$cgm_output" 'Availability: available' 'cgm availability checks its live function and secret-tool path' || return 1
 
   output=$(TERM=dumb zhelp --all package)
   assert_contains "$output" 'Command        Category' 'unsuitable terminals use the plain table' || return 1
@@ -225,7 +234,7 @@ test_source_has_no_subprocesses() {
   local tool
 
   command mkdir -p -- "$fakebin"
-  for tool in git nix fzf find jq curl; do
+  for tool in git nix fzf find jq curl secret-tool; do
     print -r -- '#!/bin/sh
 printf "%s\n" "$0" >> "$_ZSH_HELP_INVOCATION_LOG"' > "$fakebin/$tool"
     command chmod +x "$fakebin/$tool"

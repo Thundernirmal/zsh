@@ -760,6 +760,7 @@ test_fzf_dependency_checker() {
     run_dependency_case "$version" 0 1 || return 1
     assert_status "$FZF_DEP_STATUS" 0 "dependency checker accepts $label fzf" || return 1
     assert_contains "$FZF_DEP_OUTPUT" "ok: fzf ${version} (minimum 0.52.0)" "dependency checker reports installed and minimum versions for $label" || return 1
+    assert_contains "$FZF_DEP_OUTPUT" 'missing optional: secret-tool' "dependency checker reports optional cgm support for $label" || return 1
     command rm -rf -- "$FZF_DEP_DIR"
   done
 }

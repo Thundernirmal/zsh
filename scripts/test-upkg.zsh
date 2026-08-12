@@ -1281,8 +1281,11 @@ esac
   assert_contains "$output" 'flatpak: partial - flatpak system cleanup failed' 'Flatpak partial summary identifies the failed installation' || return 1
 
   command rm -f "$fakebin/nix-collect-garbage"
+  local path_with_nix_gc=$PATH
+  PATH=$fakebin
   output=$(run_upkg_with_managers 'nix' clean --only=nix 2>&1)
   cmd_status=$?
+  PATH=$path_with_nix_gc
   assert_status "$cmd_status" 1 'missing nix-collect-garbage fails Nix cleanup' || return 1
   assert_contains "$output" 'nix-collect-garbage is required for Nix cleanup' 'missing Nix garbage collector prints an actionable message' || return 1
   assert_contains "$output" 'nix: failed - nix-collect-garbage is not available' 'missing Nix garbage collector is summarized as failed' || return 1

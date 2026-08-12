@@ -19,10 +19,15 @@ for zsh_config_file in \
   "$HOME/.config/zsh/50-completion.zsh" \
   "$HOME/.config/zsh/55-ui-helpers.zsh" \
   "$HOME/.config/zsh/60-functions.zsh" \
+  "$HOME/.config/zsh/62-cgm.zsh" \
   "$HOME/.config/zsh/65-help.zsh" \
   "$HOME/.config/zsh/66-compdefs.zsh" \
   "$HOME/.config/zsh/70-globals.zsh" \
   "$HOME/.config/zsh/80-tips.zsh"; do
+  # CGM is fully optional: do not parse or define its module without secret-tool.
+  if [[ $zsh_config_file == "$HOME/.config/zsh/62-cgm.zsh" ]] && (( ! $+commands[secret-tool] )); then
+    continue
+  fi
   if [ -r "$zsh_config_file" ]; then
     source "$zsh_config_file"
   fi

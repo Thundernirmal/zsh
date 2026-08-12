@@ -94,6 +94,7 @@ test_registration() {
     fkill _zsh_fkill
     headers _zsh_headers
     zhelp _zsh_zhelp
+    cgm _zsh_cgm
     fbr _zsh_no_arguments
     croot _zsh_no_arguments
     path _zsh_no_arguments
@@ -109,6 +110,7 @@ test_registration() {
 
   unset '_comps[npkg]'
   unfunction npkg 2>/dev/null || true
+  source "$repo_dir/62-cgm.zsh"
   source "$repo_dir/65-help.zsh"
   source "$repo_dir/66-compdefs.zsh"
 
@@ -168,8 +170,42 @@ test_static_values() {
   assert_equals "${(j: :)values}" 'add install i find pick fzf search s list ls remove rm uninstall delete outdated check diff refresh upgrade up update help' 'npkg commands and aliases match the public interface' || return 1
   assert_unique 'npkg command values are unique' "${values[@]}" || return 1
 
+  spec_values "${_ZSH_CGM_COMMAND_SPECS[@]}"
+  values=( "${reply[@]}" )
+  assert_equals "${(j: :)values}" 'set list env unset delete help' 'cgm commands match the public interface' || return 1
+  assert_unique 'cgm command values are unique' "${values[@]}" || return 1
+
   assert_equals "${(j: :)_ZSH_EXTRACT_EXTENSIONS}" 'tar.bz2 tar.gz tar.xz tar.zst bz2 rar gz tar tbz2 tgz tzst zip Z 7z' 'extract completion covers every supported extension' || return 1
   assert_unique 'extract extensions are unique' "${_ZSH_EXTRACT_EXTENSIONS[@]}" || return 1
+}
+
+test_cached_cgm_names() {
+  local data_root="$tmp_dir/cgm-data"
+  local invocation_log="$tmp_dir/cgm-invocations"
+  local old_data_home=${XDG_DATA_HOME-}
+  local had_data_home=${+XDG_DATA_HOME}
+  local -a offered
+
+  command mkdir -p -- "$data_root/cgm/entries"
+  : > "$data_root/cgm/entries/OPENAI_KEY"
+  : > "$data_root/cgm/entries/GITHUB_PAT"
+  : > "$data_root/cgm/entries/not-valid-name"
+  command ln -s -- "$invocation_log" "$data_root/cgm/entries/SYMLINK_KEY"
+  : > "$invocation_log"
+
+  XDG_DATA_HOME=$data_root
+  _values() { offered=( "${(@)argv[2,-1]}" ); }
+  _zsh_cgm_saved_credentials
+  assert_status "$?" 0 'cgm completion reads the name catalogue successfully' || return 1
+  assert_equals "${(j: :)offered}" 'GITHUB_PAT OPENAI_KEY' 'cgm completion offers only valid regular-file credential names' || return 1
+  assert_equals "$(file_contents "$invocation_log")" '' 'cgm completion never invokes or follows a secret-bearing backend path' || return 1
+  unfunction _values
+
+  if (( had_data_home )); then
+    XDG_DATA_HOME=$old_data_home
+  else
+    unset XDG_DATA_HOME
+  fi
 }
 
 test_cached_npkg_attributes() {
@@ -221,7 +257,7 @@ test_source_has_no_subprocesses() {
   local tool
 
   command mkdir -p -- "$fakebin"
-  for tool in git nix fzf find jq; do
+  for tool in git nix fzf find jq secret-tool; do
     print -r -- '#!/bin/sh
 printf "%s\n" "$0" >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/$tool"
     command chmod +x "$fakebin/$tool"
@@ -230,6 +266,7 @@ printf "%s\n" "$0" >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/$tool"
   _ZSH_COMPLETION_LOG=$invocation_log PATH=$fakebin "$zsh_bin" -f -c '
     compdef() { :; }
     npkg() { :; }
+    cgm() { :; }
     source "$1"
   ' zsh "$repo_dir/66-compdefs.zsh"
   assert_status "$?" 0 'completion module sources with fake external tools on PATH' || return 1
@@ -242,6 +279,7 @@ main() {
   test_zhelp_values || return 1
   test_static_values || return 1
   test_cached_npkg_attributes || return 1
+  test_cached_cgm_names || return 1
   test_source_has_no_subprocesses || return 1
 }
 
