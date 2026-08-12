@@ -2,11 +2,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Implemented |
 | Audit date | 2026-08-02 |
-| Target | Next stable release |
-| Working branch | `spec/high-critical-ux-fixes` |
+| Implemented | 2026-08-02 in `b2301a2` |
+| Released | `v2026.08.04` |
 | Scope | Four High-priority release blockers; the audit identified no separate Critical-severity finding |
+
+> This is a historical implementation specification. For current setup, usage, and gotchas, use [`GUIDE.md`](../../GUIDE.md).
 
 ## Summary
 

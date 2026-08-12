@@ -98,12 +98,15 @@ test_catalogue() {
   for id in "${_ZSH_HELP_ORDER[@]}"; do
     [[ -n ${_ZSH_HELP_CATEGORY[$id]-} ]] || { print -u2 -- "not ok: $id has a category"; return 1; }
     [[ -n ${_ZSH_HELP_SUMMARY[$id]-} ]] || { print -u2 -- "not ok: $id has a summary"; return 1; }
+    (( ${#_ZSH_HELP_SUMMARY[$id]} <= 60 )) || { print -u2 -- "not ok: $id has a concise summary"; return 1; }
     [[ -n ${_ZSH_HELP_USAGE[$id]-} ]] || { print -u2 -- "not ok: $id has usage"; return 1; }
     [[ -n ${_ZSH_HELP_EXAMPLE[$id]-} ]] || { print -u2 -- "not ok: $id has an example"; return 1; }
   done
-  print -- 'ok: every catalogue entry has required help fields'
+  print -- 'ok: every catalogue entry has concise required help fields'
 
-  assert_equals "${_ZSH_HELP_SUMMARY[upkg]}" 'Check, search, plan, upgrade, or clean detected package managers' 'upkg help summary includes cleanup' || return 1
+  assert_equals "${_ZSH_HELP_SUMMARY[upkg]}" 'Check, search, upgrade, and clean detected managers' 'upkg help summary is concise and includes cleanup' || return 1
+  assert_equals "${_ZSH_HELP_USAGE[weather]}" 'weather' 'weather help does not promise an unsupported location argument' || return 1
+  assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat or cat' 'peek help names its real fallback' || return 1
 
   before_count=${#_ZSH_HELP_ORDER[@]}
   _zsh_help_register extract Files duplicate duplicate duplicate none function none
@@ -116,7 +119,7 @@ test_matching() {
   _zsh_help_matches PACKAGES 1
   assert_equals "${(j: :)reply}" 'upkg npkg' 'query matching is case-insensitive across categories' || return 1
 
-  _zsh_help_matches 'largest files' 1
+  _zsh_help_matches 'recursively by size' 1
   assert_equals "${(j: :)reply}" 'bigfiles' 'query matching searches summaries' || return 1
 
   _zsh_help_matches '[signal]' 1
@@ -137,10 +140,13 @@ test_plain_rendering_and_availability() {
   _zsh_help_matches '' 1
   assert_contains " ${(j: :)reply} " ' npkg ' '--all results include unavailable commands' || return 1
 
+  output=$(zhelp --plain --all package)
+  assert_contains "$output" 'Manage the current Nix profile [needs nix; jq and fzf 0.52.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
+
   output=$(zhelp --plain --all upkg)
-  assert_contains "$output" 'Command:      upkg' 'exact lookup renders the selected command' || return 1
-  assert_contains "$output" 'Description:  Check, search, plan, upgrade, or clean detected package managers' 'exact lookup describes upkg cleanup' || return 1
-  assert_contains "$output" 'Example:      upkg search ripgrep --only=apt,nix' 'exact lookup renders the catalogue example' || return 1
+  assert_contains "$output" 'upkg: Check, search, upgrade, and clean detected managers' 'exact lookup renders a concise command summary' || return 1
+  assert_contains "$output" 'Usage:   upkg [command] [args] [flags]' 'exact lookup renders command usage' || return 1
+  assert_contains "$output" 'Example: upkg search ripgrep --only=apt,nix' 'exact lookup renders the catalogue example' || return 1
 
   output=$(zhelp --plain npkg 2>&1)
   rc=$?
@@ -148,11 +154,11 @@ test_plain_rendering_and_availability() {
   assert_contains "$output" "Run 'zhelp --all npkg'" 'unavailable exact lookup explains how to include the command' || return 1
 
   output=$(zhelp --plain --all npkg)
-  assert_contains "$output" 'Availability: unavailable (requires nix; jq and fzf 0.52.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
+  assert_contains "$output" 'Status:  unavailable (needs nix; jq and fzf 0.52.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
 
   output=$(zhelp --plain --all cgm)
-  assert_contains "$output" 'Description:  Store credential values securely and load them into the current shell' 'cgm has a complete help record' || return 1
-  assert_contains "$output" 'Availability: unavailable (requires secret-tool and a Secret Service provider)' 'cgm help explains its optional dependency' || return 1
+  assert_contains "$output" 'cgm: Store and load shell credentials securely' 'cgm has a concise help record' || return 1
+  assert_contains "$output" 'Status:  unavailable (needs secret-tool and a Secret Service provider)' 'cgm help explains its optional dependency' || return 1
 
   command mkdir -p -- "$fakebin"
   print -r -- '#!/bin/sh
@@ -167,8 +173,8 @@ exit 0' > "$fakebin/secret-tool"
   cgm_output=$(zhelp --plain cgm)
   PATH=$old_path
   unfunction npkg cgm
-  assert_contains "$output" 'Availability: available' 'availability checks use the live function table and PATH' || return 1
-  assert_contains "$cgm_output" 'Availability: available' 'cgm availability checks its live function and secret-tool path' || return 1
+  assert_contains "$output" 'Status:  available' 'availability checks use the live function table and PATH' || return 1
+  assert_contains "$cgm_output" 'Status:  available' 'cgm availability checks its live function and secret-tool path' || return 1
 
   output=$(TERM=dumb zhelp --all package)
   assert_contains "$output" 'Command        Category' 'unsuitable terminals use the plain table' || return 1
@@ -245,6 +251,32 @@ printf "%s\n" "$0" >> "$_ZSH_HELP_INVOCATION_LOG"' > "$fakebin/$tool"
   assert_equals "$(file_contents "$invocation_log")" '' 'help module sourcing invokes no external tools' || return 1
 }
 
+test_tips_are_concise() {
+  local tip
+
+  source "$repo_dir/80-tips.zsh"
+  (( ${#_zsh_tip_pool[@]} > 0 && ${#_zsh_tip_pool[@]} <= 60 )) || {
+    print -u2 -- 'not ok: tip pool stays focused'
+    return 1
+  }
+
+  for tip in "${_zsh_tip_pool[@]}"; do
+    (( ${#tip} <= 80 )) || {
+      print -u2 -- "not ok: tip exceeds 80 characters: $tip"
+      return 1
+    }
+    case $tip in
+      Run\ *|Use\ *|Press\ *|Start\ *) ;;
+      *)
+        print -u2 -- "not ok: tip is not actionable: $tip"
+        return 1
+        ;;
+    esac
+  done
+
+  print -- 'ok: tips stay focused, short, and actionable'
+}
+
 main() {
   source "$repo_dir/65-help.zsh"
 
@@ -253,6 +285,7 @@ main() {
   test_plain_rendering_and_availability || return 1
   test_palette_queue_and_cancel || return 1
   test_source_has_no_subprocesses || return 1
+  test_tips_are_concise || return 1
 }
 
 main "$@"
