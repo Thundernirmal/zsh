@@ -3,7 +3,7 @@
 ## Repo Shape
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
-- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
+- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Edit Rules
@@ -20,6 +20,7 @@
 - `50-completion.zsh` only tunes `zstyle`s; it assumes the main `~/.zshrc` / Oh My Zsh layer already ran `compinit`.
 - Keep `50-completion.zsh` lightweight. Heavy completion UI options were intentionally removed because they made completion lists noticeably slower.
 - `80-tips.zsh` defines an on-demand `tips` shell function. Keep it hook-free; prompt hooks were removed because they added latency for every command cycle.
+- `62-cgm.zsh` must remain entirely optional. `init.zsh` skips the whole module when `secret-tool` is absent; when available, sourcing must not contact Secret Service or read the catalogue. Never add a plaintext secret fallback, reveal command, `eval`-based export, completion path that retrieves values, or secret-loading path that leaves Zsh `xtrace` enabled.
 - Changes in `20-aliases.zsh` are high impact: it intentionally redefines common interactive commands such as `mkdir`, `cp`, `mv`, and `rm`.
 
 ## Verification
@@ -30,13 +31,14 @@ Run these in order after edits:
 2. `sh -n scripts/check-deps.sh`
 3. `zsh scripts/test-init.zsh`
 4. `zsh scripts/test-functions.zsh`
-5. `zsh scripts/test-upkg.zsh`
-6. `zsh scripts/test-completions.zsh`
-7. `zsh scripts/test-help.zsh`
-8. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
+5. `zsh scripts/test-cgm.zsh`
+6. `zsh scripts/test-upkg.zsh`
+7. `zsh scripts/test-completions.zsh`
+8. `zsh scripts/test-help.zsh`
+9. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
-- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
+- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `secret-tool`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
 
 ## Manual QA Checklist
 

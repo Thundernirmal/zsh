@@ -149,27 +149,27 @@ print_hints() {
   case "$manager" in
     apt)
       printf '  sudo apt update\n'
-      printf '  sudo apt install zsh git curl iproute2 lsd zoxide tree fd-find jq\n'
+      printf '  sudo apt install zsh git curl iproute2 lsd zoxide tree fd-find jq libsecret-tools\n'
       printf '  Debian/Ubuntu expose bat as batcat; install the expected bat command with one of:\n'
       printf '    nix profile add nixpkgs#bat\n'
       printf '    brew install bat\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     dnf)
-      printf '  sudo dnf install zsh git curl iproute lsd zoxide bat tree fd-find jq\n'
+      printf '  sudo dnf install zsh git curl iproute lsd zoxide bat tree fd-find jq libsecret\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     pacman)
-      printf '  sudo pacman -S zsh git curl iproute2 lsd zoxide bat tree fd jq\n'
+      printf '  sudo pacman -S zsh git curl iproute2 lsd zoxide bat tree fd jq libsecret\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     brew)
-      printf '  brew install zsh git curl lsd zoxide bat tree fd jq\n'
+      printf '  brew install zsh git curl lsd zoxide bat tree fd jq libsecret\n'
       printf '  On GNU/Linux, install ss via your distro package for iproute/iproute2.\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     *)
-      printf '  Install these commands manually: zsh git curl ss lsd zoxide bat tree fd/fdfind jq\n'
+      printf '  Install these commands manually: zsh git curl ss lsd zoxide bat tree fd/fdfind jq secret-tool\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
   esac
@@ -192,6 +192,7 @@ check_cmd bat optional
 check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
 check_cmd jq optional
+check_cmd secret-tool optional
 check_cmd nix optional
 if have_cmd nix; then
   check_cmd nix-collect-garbage optional

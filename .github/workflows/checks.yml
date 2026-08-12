@@ -39,6 +39,12 @@ jobs:
       - name: Run function regression tests
         run: zsh scripts/test-functions.zsh
 
+      - name: Check credential manager regression test syntax
+        run: zsh -n scripts/test-cgm.zsh
+
+      - name: Run credential manager regression tests
+        run: zsh scripts/test-cgm.zsh
+
       - name: Check upkg smoke test syntax
         run: zsh -n scripts/test-upkg.zsh
 

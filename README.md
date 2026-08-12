@@ -13,6 +13,7 @@ This directory contains the portable, versioned part of the Zsh setup. It is mea
 | `50-completion.zsh` | Lightweight completion `zstyle`s; assumes `compinit` already ran |
 | `55-ui-helpers.zsh` | Shared rich-terminal UI helpers with plain fallbacks |
 | `60-functions.zsh` | Shell helpers such as `extract`, `ff`, `ft`, `path`, `fbr`, `dusage`, `upkg`, and `npkg` |
+| `62-cgm.zsh` | Optional Credential Global Manager backed by Linux Secret Service |
 | `65-help.zsh` | Command catalogue, availability checks, plain help, and the searchable `zhelp` palette |
 | `66-compdefs.zsh` | Guarded command-aware completions for the custom function suite |
 | `70-globals.zsh` | Global aliases for pipes and redirection (`G`, `L`, `W`, `H`, `T`, `NE`, `NUL`) |
@@ -56,6 +57,7 @@ Optional extras:
 - `tree`
 - `fd` / `fdfind`
 - `jq`
+- `secret-tool` from the system's libsecret tools package (`libsecret-tools` on Debian/Ubuntu) for the optional `cgm` credential manager
 - `nix`
 - `nix-collect-garbage` for Nix cleanup (checked when `nix` is installed)
 
@@ -68,6 +70,7 @@ The dependency checker reads `fzf --version`, reports both the installed and min
 - `init.zsh` skips unreadable module files instead of failing shell startup.
 - Ordinary `*` and `**/*` globs exclude hidden entries, even if an earlier framework enabled `GLOB_DOTS`; opt in with `*(D)` or `**/*(D)` when hidden matches are intentional.
 - External integrations are guarded before use. Startup-time guards use zsh's prehashed `$+commands` table so a missing tool costs no `PATH` walk; guards inside functions use `command -v` so they stay correct when `PATH` changes mid-session.
+- `62-cgm.zsh` is not sourced at all when `secret-tool` is absent at startup. When present, sourcing defines functions only: it does not contact Secret Service, unlock a keyring, or read the credential catalogue.
 - `40-fzf.zsh` requires stable `fzf` 0.52.0 or newer. The first normal prompt for a new fzf binary validates its version, non-empty generated Zsh code, and syntax before atomically storing a private integration cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/`. Later prompts match that cache to the executable identity and Zsh version with builtins, verify its ownership and permissions, and source it without launching `fzf` or a validation shell again. Missing, older, malformed, prerelease, and broken installations hard-block only fuzzy workflows and print one actionable diagnostic; non-interactive and `zsh -i -c ...` paths stay silent.
 - Within a shell, the `fzf` result is cached by resolved executable path. Every repository picker—including Ctrl+R, Ctrl+T, Alt+C, `fkill`, `fbr`, `zi`, `zhelp`, and interactive `npkg` paths—consults that shared gate before launch, so a different binary selected after a `PATH` change is checked before use. Across shells, changing the fzf file identity, Zsh version, or cache schema automatically creates a newly validated integration cache.
 - `50-completion.zsh` intentionally stays small and assumes the main `~/.zshrc` or framework already ran `compinit`.
@@ -97,6 +100,26 @@ zhelp --plain file     # force deterministic text suitable for pipes
 ```
 
 The default view hides commands that are unusable in the current shell. `--all` includes them with dependency and availability details. Interactive selection inserts the catalogue example into the command buffer with `print -z`; it does not evaluate or execute the text.
+
+## Credential Global Manager
+
+`cgm` stores API keys and personal access tokens in Linux Secret Service through `secret-tool`, then loads selected values into the current Zsh session when requested. It is defined only when `secret-tool` is available during startup.
+
+```zsh
+cgm set OPENAI_KEY             # enter and save a value with hidden input
+cgm list                       # list saved names; never retrieve values
+cgm env OPENAI_KEY            # export one value into this shell
+cgm env OPENAI_KEY GITHUB_PAT # export selected values together
+cgm env --all                 # export every saved value
+cgm unset OPENAI_KEY          # remove it from this shell only
+cgm delete OPENAI_KEY         # delete it from storage and unset it here
+```
+
+Credential values never enter command arguments, the local catalogue, completion, `cgm list`, or CGM status output. Secret loading locally disables Zsh execution tracing so an inherited `set -x` cannot print retrieved assignments, then restores the caller's tracing state. The name-only catalogue lives under `${XDG_DATA_HOME:-$HOME/.local/share}/cgm/entries/` with private permissions. `cgm env --all` completes every keyring lookup before exporting anything, so a missing or inaccessible item leaves the environment unchanged.
+
+Credential names follow the conventional uppercase environment format `[A-Z_][A-Z0-9_]*`; CGM also refuses to replace Zsh special, read-only, or non-scalar parameters.
+
+Environment variables are inherited by processes started after loading. They do not alter other open shells or already-running processes, and deleting a credential cannot remove copies already inherited by those processes. Run the environment-changing `env`, `unset`, and `delete` commands directly in the current shell; pipelines, command substitutions, and subshells are rejected to avoid reporting a change that cannot reach the parent shell. If a variable has become read-only or otherwise unsafe to unset, `cgm delete` still removes its stored value but returns nonzero and warns that the current-shell copy remains set.
 
 ## Package Helpers
 
@@ -143,6 +166,7 @@ zsh -n *.zsh
 sh -n scripts/check-deps.sh
 zsh scripts/test-init.zsh
 zsh scripts/test-functions.zsh
+zsh scripts/test-cgm.zsh
 zsh scripts/test-upkg.zsh
 zsh scripts/test-completions.zsh
 zsh scripts/test-help.zsh

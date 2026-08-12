@@ -101,6 +101,9 @@ _zsh_help_register ports System 'Show listening ports and their processes' 'port
 _zsh_help_register myip System 'Show the public IP address over HTTPS' 'myip' 'myip' curl function curl
 _zsh_help_register path System 'List the current PATH entries' 'path' 'path' none function none
 
+# Credentials
+_zsh_help_register cgm Security 'Store credential values securely and load them into the current shell' 'cgm <command> [credential ...]' 'cgm env OPENAI_KEY' 'secret-tool and a Secret Service provider' function secret-tool
+
 # Packages and meta helpers
 _zsh_help_register upkg Packages 'Check, search, plan, upgrade, or clean detected package managers' 'upkg [command] [args] [flags]' 'upkg search ripgrep --only=apt,nix' 'a supported package manager' function package-manager
 _zsh_help_register npkg Packages 'Manage the current Nix profile with short commands and pickers' 'npkg <command> [args]' 'npkg search ripgrep' 'nix; jq and fzf 0.52.0+ for optional workflows' function nix
@@ -183,6 +186,9 @@ _zsh_help_is_available() {
       ;;
     ss)
       command -v ss >/dev/null 2>&1
+      ;;
+    secret-tool)
+      command -v secret-tool >/dev/null 2>&1
       ;;
     package-manager)
       command -v paru >/dev/null 2>&1 ||

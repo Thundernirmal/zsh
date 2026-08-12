@@ -12,6 +12,7 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 ├── 50-completion.zsh       → Tab completion tuning (case-insensitive, process completion)
 ├── 55-ui-helpers.zsh       → Shared Catppuccin Mocha dashboard helpers, title lines, and consistent section separators
 ├── 60-functions.zsh        → Shell functions (extract, search, kill, fanprofile, git helpers, upkg, npkg, etc.)
+├── 62-cgm.zsh              → Optional Linux Secret Service credential manager
 ├── 65-help.zsh             → Searchable command catalogue and zhelp palette
 ├── 66-compdefs.zsh          → Command-aware completion for custom functions
 ├── 70-globals.zsh          → Global aliases (pipe shortcuts)
@@ -30,13 +31,14 @@ Your zsh setup is built in two layers: **Oh My Zsh** in `~/.zshrc` handles the f
 6. [Tab Completion](#tab-completion)
 7. [Searchable Help](#searchable-help)
 8. [Shell Functions](#shell-functions)
-9. [Global Aliases](#global-aliases)
-10. [Unified Package Updates (upkg)](#unified-package-updates-upkg)
-11. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
-12. [Tips Function](#tips-function)
-13. [OMZ Plugins](#omz-plugins)
-14. [Starship Prompt](#starship-prompt)
-15. [Quick Reference Card](#quick-reference-card)
+9. [Credential Global Manager (cgm)](#credential-global-manager-cgm)
+10. [Global Aliases](#global-aliases)
+11. [Unified Package Updates (upkg)](#unified-package-updates-upkg)
+12. [Nix Package Manager (npkg)](#nix-package-manager-npkg)
+13. [Tips Function](#tips-function)
+14. [OMZ Plugins](#omz-plugins)
+15. [Starship Prompt](#starship-prompt)
+16. [Quick Reference Card](#quick-reference-card)
 
 ---
 
@@ -355,12 +357,14 @@ upkg <Tab>                 # commands and aliases
 upkg --only=<Tab>          # apt, dnf, pacman, paru, brew, flatpak, nix, npm
 upkg --only=apt,<Tab>      # remaining manager IDs in the same argument
 npkg <Tab>                 # commands and aliases, when npkg is available
+cgm <Tab>                  # commands, when cgm is available
+cgm env <Tab>              # saved names from the local name-only catalogue
 extract <Tab>              # supported archive types only
 ff pattern <Tab>           # search root directories
 fkill <Tab>                # signal names and numbers
 ```
 
-`npkg add` and picker-oriented `npkg find` completion may read attribute names from files already under `${XDG_CACHE_HOME:-~/.cache}/npkg/`. A missing cache produces no package candidates. Tab never runs `nix search`, `nix eval`, `nix profile list`, a cache refresh, or a network lookup.
+`npkg add` and picker-oriented `npkg find` completion may read attribute names from files already under `${XDG_CACHE_HOME:-~/.cache}/npkg/`. A missing cache produces no package candidates. Tab never runs `nix search`, `nix eval`, `nix profile list`, a cache refresh, or a network lookup. CGM completion similarly reads only its name catalogue and never contacts Secret Service or retrieves a value.
 
 File, directory, numeric-count, URL, signal, and no-argument functions also suppress irrelevant fallback completion where appropriate. All completion work is deferred until Tab is pressed, and sourcing the module launches no subprocesses.
 
@@ -509,6 +513,47 @@ fbr              # opens branch picker and checks out the selected branch
 If you pick a remote branch that is not checked out locally yet, `fbr` creates a tracking branch automatically.
 
 The picker inherits your `FZF_DEFAULT_OPTS` theme (Catppuccin Mocha when configured globally) and adds matching pointer and marker glyphs when Nerd Fonts are enabled.
+
+---
+
+## Credential Global Manager (cgm)
+
+Defined in `62-cgm.zsh` only when `secret-tool` is present during shell startup. CGM stores API keys and personal access tokens in the current user's Linux Secret Service collection and exports them only when explicitly requested.
+
+### Commands
+
+| Command | Behavior |
+|---|---|
+| `cgm set <name>` | Prompt with hidden input and securely store or replace one value |
+| `cgm list` | List saved credential names without retrieving values |
+| `cgm env <name ...>` | Load selected values into the current shell |
+| `cgm env --all` | Load every catalogued value into the current shell |
+| `cgm unset <name ...>` | Remove variables from the current shell without deleting storage |
+| `cgm delete <name ...>` | Confirm, delete stored values, and unset them in the current shell |
+| `cgm help` | Show command help and the storage/scope contract |
+
+```zsh
+cgm set OPENAI_KEY
+cgm set GITHUB_PAT
+cgm list
+cgm env OPENAI_KEY
+cgm env OPENAI_KEY GITHUB_PAT
+cgm env --all
+cgm unset OPENAI_KEY
+cgm delete GITHUB_PAT
+```
+
+Names must be uppercase environment identifiers matching `[A-Z_][A-Z0-9_]*`. CGM rejects existing non-scalar, special, and read-only parameters, so a credential cannot accidentally replace values such as `PATH` or an array. `set` accepts a single-line value from an interactive hidden prompt; it never accepts the secret as a command-line argument.
+
+Secret values exist only in Linux Secret Service and briefly in local shell variables while being loaded. CGM maintains a name-only catalogue under `${XDG_DATA_HOME:-$HOME/.local/share}/cgm/entries/`; the directory is private and each empty marker is mode `0600`. `list` and Tab completion read those markers only and never invoke `secret-tool`. Exact-name loads also repair a missing marker after a successful lookup.
+
+`cgm env --all` retrieves and validates every value before exporting any of them. A missing, empty, multiline, or inaccessible value therefore leaves the current environment unchanged. Assignments use Zsh parameter operations rather than `eval`, so shell syntax inside a token remains literal data. The loading scope temporarily disables Zsh execution tracing, preventing an inherited `set -x` from echoing retrieved assignments, and restores the caller's trace option afterward.
+
+Loading affects only the current shell and processes launched from it afterward. It cannot change another terminal, an already-running process, or the parent of a subshell. For that reason, CGM rejects the environment-changing `env`, `unset`, and `delete` commands from pipelines, command substitutions, and subshells. Deletion removes the keyring item and the current shell variable, but processes that already inherited the value may retain it until they exit. If the variable has become read-only or otherwise unsafe to unset, deletion still removes the keyring item and catalogue marker, then returns nonzero with a warning that the current-shell copy remains set.
+
+If `secret-tool` is absent, `init.zsh` skips the entire module. Install the distro's libsecret tools package and restart the shell to enable it. A missing or unavailable Secret Service provider never triggers a plaintext fallback.
+
+In a capable terminal, CGM uses the shared Catppuccin dashboard titles, panels, status colors, and Nerd Font/ASCII fallbacks. Redirected output, narrow terminals, `TERM=dumb`, and `NO_COLOR=1` use concise deterministic text. Neither mode renders secret values.
 
 ---
 
@@ -896,6 +941,16 @@ tips                → print a random usage tip
 zhelp [query]       → search commands or queue an editable example
 ```
 
+### Credentials (cgm — requires secret-tool)
+```
+cgm set <name>      → securely prompt for and store one credential
+cgm list            → list saved names without retrieving values
+cgm env <name>      → load a credential into the current shell
+cgm env --all       → load every saved credential
+cgm unset <name>    → unset it without deleting storage
+cgm delete <name>   → delete it from storage and unset it here
+```
+
 ### Package Updates
 ```
 upkg                → show outdated packages across detected managers
@@ -927,6 +982,7 @@ kill <Tab>          → shows process list with PID, user, command
 upkg <Tab>          → commands, aliases, and flags
 upkg --only=<Tab>   → comma-separated package-manager IDs
 npkg <Tab>          → commands and aliases when Nix is available
+cgm <Tab>           → commands and saved names when secret-tool is available
 extract <Tab>       → supported archive files only
 ```
 

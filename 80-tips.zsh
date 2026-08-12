@@ -83,6 +83,16 @@ if (( $+commands[nix] )); then
   )
 fi
 
+if (( $+functions[cgm] )); then
+  _zsh_tip_pool+=(
+    "Run cgm set OPENAI_KEY to store an API key through Linux Secret Service without putting it in shell history"
+    "Run cgm list to see saved credential names without retrieving their values"
+    "Run cgm env OPENAI_KEY to load one saved credential into the current shell"
+    "Run cgm env --all only when every saved credential should reach future child processes"
+    "cgm delete returns nonzero if a read-only or otherwise unsafe variable cannot be unset from the current shell"
+  )
+fi
+
 if (( $+commands[nix] && $+commands[jq] )); then
   _zsh_tip_pool+=(
     "Run npkg refresh to rebuild the cached nixpkgs picker index (requires jq)"
