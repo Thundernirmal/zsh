@@ -119,7 +119,7 @@ Credential values never enter command arguments, the local catalogue, completion
 
 Credential names follow the conventional uppercase environment format `[A-Z_][A-Z0-9_]*`; CGM also refuses to replace Zsh special, read-only, or non-scalar parameters.
 
-Environment variables are inherited by processes started after loading. They do not alter other open shells or already-running processes, and deleting a credential cannot remove copies already inherited by those processes. Run the environment-changing `env`, `unset`, and `delete` commands directly in the current shell; pipelines, command substitutions, and subshells are rejected to avoid reporting a change that cannot reach the parent shell.
+Environment variables are inherited by processes started after loading. They do not alter other open shells or already-running processes, and deleting a credential cannot remove copies already inherited by those processes. Run the environment-changing `env`, `unset`, and `delete` commands directly in the current shell; pipelines, command substitutions, and subshells are rejected to avoid reporting a change that cannot reach the parent shell. If a variable has become read-only or otherwise unsafe to unset, `cgm delete` still removes its stored value but returns nonzero and warns that the current-shell copy remains set.
 
 ## Package Helpers
 

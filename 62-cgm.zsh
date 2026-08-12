@@ -292,6 +292,7 @@ _cgm_usage() {
     _ui_panel_kv 'Storage' 'Linux Secret Service via secret-tool' muted text
     _ui_panel_kv 'Scope' 'The current shell and child processes started after loading' muted text
     _ui_panel_kv 'Values' 'Never shown by cgm list, help, or completion' muted text
+    _ui_panel_kv 'Delete' 'Returns nonzero if a current-shell variable cannot be unset' muted text
     return 0
   fi
 
@@ -311,6 +312,7 @@ _cgm_usage() {
   print '  cgm list and completion use credential names only; values stay hidden.'
   print '  cgm env changes this shell and child processes started afterward.'
   print '  Other open shells and already-running processes are not changed.'
+  print '  cgm delete returns nonzero if a current-shell variable cannot be unset.'
 }
 
 _cgm_render_saved() {
@@ -617,7 +619,7 @@ _cgm_delete() {
   emulate -L zsh
 
   local name prompt
-  local -a names deleted failed
+  local -a names deleted retained failed
   local -A seen
 
   (( $# > 0 )) || {
@@ -651,8 +653,12 @@ _cgm_delete() {
   for name in "${names[@]}"; do
     if command secret-tool clear application cgm variable "$name"; then
       if _cgm_catalog_remove "$name"; then
-        _cgm_validate_export_name "$name" && _cgm_unset_one "$name" 2>/dev/null
-        deleted+=("$name")
+        if _cgm_validate_export_name "$name" && _cgm_unset_one "$name" 2>/dev/null; then
+          deleted+=("$name")
+        else
+          _cgm_error "deleted $name from Linux Secret Service, but could not unset it from this shell."
+          retained+=("$name")
+        fi
       else
         failed+=("$name")
       fi
@@ -663,10 +669,13 @@ _cgm_delete() {
   done
 
   (( ${#deleted[@]} > 0 )) && _cgm_render_deleted "${deleted[@]}"
+  if (( ${#retained[@]} > 0 )); then
+    _cgm_error "current-shell variables still set: ${(j:, :)retained}"
+  fi
   if (( ${#failed[@]} > 0 )); then
     _cgm_error "delete incomplete; failed: ${(j:, :)failed}"
-    return 1
   fi
+  (( ${#retained[@]} == 0 && ${#failed[@]} == 0 ))
 }
 
 cgm() {

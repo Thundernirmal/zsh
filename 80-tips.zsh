@@ -89,6 +89,7 @@ if (( $+functions[cgm] )); then
     "Run cgm list to see saved credential names without retrieving their values"
     "Run cgm env OPENAI_KEY to load one saved credential into the current shell"
     "Run cgm env --all only when every saved credential should reach future child processes"
+    "cgm delete returns nonzero if a read-only or otherwise unsafe variable cannot be unset from the current shell"
   )
 fi
 

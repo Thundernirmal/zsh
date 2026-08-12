@@ -451,6 +451,7 @@ test_delete() {
   local output_file="$tmp_dir/delete.stdout"
   local error_file="$tmp_dir/delete.stderr"
   local unsafe_target="$tmp_dir/delete-unsafe-target"
+  local -rx READONLY_DELETE_TOKEN=still-exported
   local rc
 
   start_case delete
@@ -481,6 +482,20 @@ test_delete() {
   assert_status "$rc" 1 'delete rejects an unsafe catalogue marker' || return 1
   assert_exists "$CGM_TEST_BACKEND_DIR/PROTECTED_TOKEN" 'unsafe catalogue rejection happens before keyring deletion' || return 1
   assert_equals "$(file_contents "$CGM_TEST_LOG")" '' 'unsafe catalogue rejection never contacts Secret Service' || return 1
+
+  print -nr -- stored-copy > "$CGM_TEST_BACKEND_DIR/READONLY_DELETE_TOKEN"
+  _cgm_catalog_add READONLY_DELETE_TOKEN || return 1
+  : > "$CGM_TEST_LOG"
+  cgm delete READONLY_DELETE_TOKEN >"$output_file" 2>"$error_file"
+  rc=$?
+  assert_status "$rc" 1 'delete reports failure when a current-shell variable cannot be unset' || return 1
+  assert_not_exists "$CGM_TEST_BACKEND_DIR/READONLY_DELETE_TOKEN" 'read-only variable does not prevent deletion from Secret Service' || return 1
+  assert_not_exists "$XDG_DATA_HOME/cgm/entries/READONLY_DELETE_TOKEN" 'read-only variable does not leave a stale catalogue marker' || return 1
+  assert_equals "$READONLY_DELETE_TOKEN" still-exported 'failed unset leaves the read-only current-shell value unchanged' || return 1
+  assert_contains "$(file_contents "$error_file")" 'deleted READONLY_DELETE_TOKEN from Linux Secret Service, but could not unset it from this shell' 'partial deletion explains the remaining current-shell value' || return 1
+  assert_contains "$(file_contents "$error_file")" 'current-shell variables still set: READONLY_DELETE_TOKEN' 'partial deletion summarizes variables that remain set' || return 1
+  assert_not_contains "$(file_contents "$output_file")" 'Deleted READONLY_DELETE_TOKEN' 'partial deletion does not render a false success message' || return 1
+  assert_contains "$(file_contents "$CGM_TEST_LOG")" $'clear\tapplication\tcgm\tvariable\tREADONLY_DELETE_TOKEN' 'partial deletion still clears the exact keyring item' || return 1
 }
 
 test_runtime_backend_guard() {
@@ -512,6 +527,7 @@ test_help_and_rich_ui() {
   output=$(file_contents "$output_file")
   assert_contains "$output" 'env --all' 'help documents all-credential loading' || return 1
   assert_contains "$output" 'values stay hidden' 'help states the non-disclosure contract' || return 1
+  assert_contains "$output" 'delete returns nonzero if a current-shell variable cannot be unset' 'help documents partial deletion status' || return 1
 
   cgm unknown >"$output_file" 2>"$error_file"
   rc=$?
