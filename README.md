@@ -29,7 +29,7 @@ tips
 
 - Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning.
 - Guarded `zoxide` and `fzf` integration with Ctrl+R, Ctrl+T, and Alt+C bindings.
-- File, search, Git, network, disk-usage, and process helpers.
+- File, search, Git branch/worktree navigation, network, disk-usage, and process helpers.
 - `upkg` for detected package managers and optional `npkg` helpers for Nix profiles.
 - Optional `cgm` credential storage through Linux Secret Service.
 - Rich terminal dashboards with deterministic plain-text fallbacks.

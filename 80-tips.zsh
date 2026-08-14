@@ -45,7 +45,7 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Press Ctrl+T to insert a selected file path"
     "Press Alt+C to select and enter a directory"
     "Run fkill to select processes and send SIGTERM; use 9 only to force"
-    "Run fbr to select and check out a Git branch"
+    "Run fbr to enter a branch worktree or check out the branch"
   )
 
   if (( $+commands[zoxide] )); then

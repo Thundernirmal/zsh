@@ -1024,7 +1024,55 @@ path() {
 
 }
 
-# Fuzzy-pick and checkout a git branch
+# Emit NUL-delimited branch/path pairs for registered Git worktrees.
+_fbr_worktree_entries() {
+  emulate -L zsh
+
+  local field worktree_path
+
+  while IFS= read -r -d '' field; do
+    case $field in
+      'worktree '*)
+        worktree_path=${field#worktree }
+        ;;
+      'branch refs/heads/'*)
+        print -rn -- "${field#branch refs/heads/}"$'\0'"$worktree_path"$'\0'
+        ;;
+    esac
+  done < <(command git worktree list --porcelain -z)
+}
+
+# Enter a branch's worktree, or check out the branch when it has none.
+_fbr_activate() {
+  emulate -L zsh
+
+  local branch=$1 worktree_path=${2-} local_branch
+
+  if [[ -n $worktree_path ]]; then
+    builtin cd -- "$worktree_path"
+    return
+  fi
+
+  if command git show-ref --verify --quiet "refs/heads/$branch"; then
+    command git checkout "$branch"
+    return
+  fi
+
+  if command git show-ref --verify --quiet "refs/remotes/$branch"; then
+    local_branch=${branch#*/}
+    if command git show-ref --verify --quiet "refs/heads/$local_branch"; then
+      command git checkout "$local_branch"
+    else
+      command git checkout --track "$branch"
+    fi
+    return
+  fi
+
+  echo "Branch '$branch' was not found"
+  return 1
+}
+
+# Fuzzy-pick a Git branch, entering its worktree or checking it out.
 fbr() {
   _zsh_require_fzf || return 1
 
@@ -1033,21 +1081,37 @@ fbr() {
     return 1
   fi
 
-  git rev-parse --git-dir >/dev/null 2>&1 || {
+  command git rev-parse --git-dir >/dev/null 2>&1 || {
     echo "Not in a git repo"
     return 1
   }
 
-  local selection branch local_branch
+  local selection branch ref_line worktree_branch worktree_path worktree_label
+  local -A worktree_paths
   local _fzf_pointer='>' _fzf_marker='+'
   (( $+functions[_ui_has_icons] )) && _ui_has_icons && { _fzf_pointer='󰘳'; _fzf_marker='󰄬'; }
 
+  while IFS= read -r -d '' worktree_branch && IFS= read -r -d '' worktree_path; do
+    worktree_paths[$worktree_branch]=$worktree_path
+  done < <(_fbr_worktree_entries)
+
   selection=$(
-    git for-each-ref --sort=-committerdate \
-      --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \
-      refs/heads refs/remotes |
-      command grep -v $'^[^[:space:]]+/HEAD\t' |
-      fzf --ansi --height=50% --delimiter=$'\t' --with-nth=1,2,3 \
+    while IFS= read -r ref_line; do
+      branch=${ref_line%%$'\t'*}
+      [[ $branch == */HEAD ]] && continue
+
+      worktree_label=''
+      if [[ -n ${worktree_paths[$branch]-} ]]; then
+        worktree_label="[worktree: $(_ui_safe_text "${worktree_paths[$branch]}")]"
+      fi
+
+      print -r -- "$ref_line"$'\t'"$worktree_label"
+    done < <(
+      command git for-each-ref --sort=-committerdate \
+        --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \
+        refs/heads refs/remotes
+    ) |
+      fzf --ansi --height=50% --delimiter=$'\t' --with-nth=1,2,3,4 \
         --prompt='Branch> ' \
         --pointer="$_fzf_pointer" \
         --marker="$_fzf_marker" \
@@ -1057,23 +1121,12 @@ fbr() {
 
   branch=${selection%%$'\t'*}
 
-  if git show-ref --verify --quiet "refs/heads/$branch"; then
-    git checkout "$branch"
-    return
+  worktree_path=${worktree_paths[$branch]-}
+  if [[ -z $worktree_path ]] && command git show-ref --verify --quiet "refs/remotes/$branch"; then
+    worktree_path=${worktree_paths[${branch#*/}]-}
   fi
 
-  if git show-ref --verify --quiet "refs/remotes/$branch"; then
-    local_branch=${branch#*/}
-    if git show-ref --verify --quiet "refs/heads/$local_branch"; then
-      git checkout "$local_branch"
-    else
-      git checkout --track "$branch"
-    fi
-    return
-  fi
-
-  echo "Branch '$branch' was not found"
-  return 1
+  _fbr_activate "$branch" "$worktree_path"
 }
 
 # Unified package check, update, and cleanup wrapper across supported managers.
