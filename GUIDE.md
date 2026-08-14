@@ -380,7 +380,7 @@ The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and inter
 | `croot` | Change to the current Git repository root |
 | `gitcount` | Show non-merge commit counts by contributor |
 | `fkill [signal]` | Select processes and send a signal |
-| `fbr` | Select and check out a Git branch |
+| `fbr` | Select a branch; enter its worktree or check it out |
 
 #### extract
 
@@ -432,7 +432,7 @@ fkill
 fkill 9
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. Selecting a remote branch creates a tracking branch when no local branch with the same short name exists.
+`fbr` lists local and remote branches by recent commit and previews the log. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. This also applies when selecting the corresponding remote branch. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists.
 
 ## Credential manager: cgm
 

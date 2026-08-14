@@ -86,7 +86,7 @@ _zsh_help_register gpr Git 'Pull with rebase' 'gpr' 'gpr' git alias git
 _zsh_help_register gun Git 'Undo the latest commit; keep changes staged' 'gun' 'gun' git alias git
 _zsh_help_register gitcount Git 'Count non-merge commits by contributor' 'gitcount' 'gitcount' git function git
 _zsh_help_register gcount Git 'Alias for gitcount' 'gcount' 'gcount' git alias git
-_zsh_help_register fbr Git 'Pick and check out a Git branch' 'fbr' 'fbr' 'git and fzf 0.52.0+' function git-fzf
+_zsh_help_register fbr Git 'Pick a branch; enter its worktree or check it out' 'fbr' 'fbr' 'git and fzf 0.52.0+' function git-fzf
 
 # System
 _zsh_help_register weather System 'Show the default HTTPS forecast' 'weather' 'weather' curl alias curl

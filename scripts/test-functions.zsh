@@ -276,6 +276,56 @@ test_fkill_default_signal() {
   assert_contains "${functions[fkill]}" 'local signal=${1:-15}' 'fkill defaults to SIGTERM' || return 1
 }
 
+test_fbr_worktree_navigation() {
+  local fixture_repo="$tmp_dir/fbr-repo"
+  local worktree_dir="$tmp_dir/fbr worktree"
+  local original_dir=$PWD branch current_branch worktree_path
+  local -A worktree_paths
+
+  command git init -q "$fixture_repo" || return 1
+  print -r -- 'fixture' >"$fixture_repo/tracked.txt"
+  command git -C "$fixture_repo" add tracked.txt || return 1
+  command git -C "$fixture_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
+    commit -qm 'Initial commit' || return 1
+  command git -C "$fixture_repo" worktree add -q -b worktree-test "$worktree_dir" || return 1
+
+  builtin cd -- "$fixture_repo" || return 1
+  while IFS= read -r -d '' branch && IFS= read -r -d '' worktree_path; do
+    worktree_paths[$branch]=$worktree_path
+  done < <(_fbr_worktree_entries)
+
+  assert_equals "${worktree_paths[worktree-test]-}" "$worktree_dir" 'fbr maps a checked-out branch to its worktree path' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+
+  current_branch=$(command git symbolic-ref --short HEAD) || return 1
+  worktree_paths=()
+  while IFS= read -r -d '' branch && IFS= read -r -d '' worktree_path; do
+    worktree_paths[$branch]=$worktree_path
+  done < <(_fbr_worktree_entries "$fixture_repo")
+  assert_equals "${worktree_paths[$current_branch]-}" '' 'fbr does not mark the branch in the current checkout as another worktree' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  assert_equals "${worktree_paths[worktree-test]-}" "$worktree_dir" 'fbr still maps branches in other worktrees' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+
+  _fbr_activate worktree-test "${worktree_paths[worktree-test]}"
+  assert_status "$?" 0 'fbr can activate a branch attached to a worktree' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  assert_equals "$PWD" "$worktree_dir" 'fbr enters the selected branch worktree, including paths with spaces' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+
+  builtin cd -- "$original_dir"
+}
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -287,6 +337,7 @@ main() {
   test_control_character_paths || return 1
   test_alias_probes_are_quiet || return 1
   test_fkill_default_signal || return 1
+  test_fbr_worktree_navigation || return 1
 }
 
 main "$@"
