@@ -279,7 +279,7 @@ test_fkill_default_signal() {
 test_fbr_worktree_navigation() {
   local fixture_repo="$tmp_dir/fbr-repo"
   local worktree_dir="$tmp_dir/fbr worktree"
-  local original_dir=$PWD branch worktree_path
+  local original_dir=$PWD branch current_branch worktree_path
   local -A worktree_paths
 
   command git init -q "$fixture_repo" || return 1
@@ -295,6 +295,20 @@ test_fbr_worktree_navigation() {
   done < <(_fbr_worktree_entries)
 
   assert_equals "${worktree_paths[worktree-test]-}" "$worktree_dir" 'fbr maps a checked-out branch to its worktree path' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+
+  current_branch=$(command git symbolic-ref --short HEAD) || return 1
+  worktree_paths=()
+  while IFS= read -r -d '' branch && IFS= read -r -d '' worktree_path; do
+    worktree_paths[$branch]=$worktree_path
+  done < <(_fbr_worktree_entries "$fixture_repo")
+  assert_equals "${worktree_paths[$current_branch]-}" '' 'fbr does not mark the branch in the current checkout as another worktree' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  assert_equals "${worktree_paths[worktree-test]-}" "$worktree_dir" 'fbr still maps branches in other worktrees' || {
     builtin cd -- "$original_dir"
     return 1
   }

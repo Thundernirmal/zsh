@@ -1028,7 +1028,9 @@ path() {
 _fbr_worktree_entries() {
   emulate -L zsh
 
-  local field worktree_path
+  local excluded_path=${1-} field worktree_path
+
+  [[ -n $excluded_path ]] && excluded_path=${excluded_path:A}
 
   while IFS= read -r -d '' field; do
     case $field in
@@ -1036,6 +1038,9 @@ _fbr_worktree_entries() {
         worktree_path=${field#worktree }
         ;;
       'branch refs/heads/'*)
+        if [[ -n $excluded_path && ${worktree_path:A} == $excluded_path ]]; then
+          continue
+        fi
         print -rn -- "${field#branch refs/heads/}"$'\0'"$worktree_path"$'\0'
         ;;
     esac
@@ -1086,32 +1091,41 @@ fbr() {
     return 1
   }
 
-  local selection branch ref_line worktree_branch worktree_path worktree_label
+  local selection branch branch_label current_worktree ref_details ref_line worktree_branch worktree_display worktree_path
+  local worktree_badge_color='' worktree_badge_reset=''
   local -A worktree_paths
   local _fzf_pointer='>' _fzf_marker='+'
   (( $+functions[_ui_has_icons] )) && _ui_has_icons && { _fzf_pointer='󰘳'; _fzf_marker='󰄬'; }
+  if ! _ui_plain_mode; then
+    worktree_badge_color=$'\e[1;38;5;116m'
+    worktree_badge_reset=$'\e[0m'
+  fi
 
+  current_worktree=$(command git rev-parse --show-toplevel 2>/dev/null) || current_worktree=''
   while IFS= read -r -d '' worktree_branch && IFS= read -r -d '' worktree_path; do
     worktree_paths[$worktree_branch]=$worktree_path
-  done < <(_fbr_worktree_entries)
+  done < <(_fbr_worktree_entries "$current_worktree")
 
   selection=$(
     while IFS= read -r ref_line; do
       branch=${ref_line%%$'\t'*}
       [[ $branch == */HEAD ]] && continue
 
-      worktree_label=''
+      branch_label=$branch
+      worktree_display=''
       if [[ -n ${worktree_paths[$branch]-} ]]; then
-        worktree_label="[worktree: $(_ui_safe_text "${worktree_paths[$branch]}")]"
+        branch_label="${worktree_badge_color}[WT]${worktree_badge_reset} $branch"
+        worktree_display=$(_ui_safe_text "${worktree_paths[$branch]}")
       fi
 
-      print -r -- "$ref_line"$'\t'"$worktree_label"
+      ref_details=${ref_line#*$'\t'}
+      print -r -- "$branch"$'\t'"$branch_label"$'\t'"$ref_details"$'\t'"$worktree_display"
     done < <(
       command git for-each-ref --sort=-committerdate \
         --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \
         refs/heads refs/remotes
     ) |
-      fzf --ansi --height=50% --delimiter=$'\t' --with-nth=1,2,3,4 \
+      fzf --ansi --height=50% --delimiter=$'\t' --with-nth=2,3,4,5 \
         --prompt='Branch> ' \
         --pointer="$_fzf_pointer" \
         --marker="$_fzf_marker" \
