@@ -32,7 +32,7 @@ tips
 - File, search, Git branch navigation with labeled alternate worktrees, network, disk-usage, and process helpers.
 - `upkg` for detected package managers and optional `npkg` helpers for Nix profiles.
 - Optional `cgm` credential storage through Linux Secret Service.
-- Theme-aware rich terminal dashboards with deterministic plain-text fallbacks.
+- Shared themes for rich dashboards and every fzf entry point, with deterministic plain-text fallbacks.
 
 ## Requirements
 
@@ -40,7 +40,7 @@ The dependency checker treats these as required for the intended setup:
 
 - `zsh`, `git`, `curl`, and `ss`
 - `lsd` and `zoxide`
-- stable `fzf` 0.52.0 or newer
+- stable `fzf` 0.68.0 or newer
 
 Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
 

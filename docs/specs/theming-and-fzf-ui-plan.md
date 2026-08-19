@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T3 complete
+**Status:** In progress — T4 complete; PF-01 scheduled
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -480,6 +480,8 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T4. Refactor fzf option generation
 
+**Status:** Completed 2026-08-19
+
 **Depends on:** T2
 
 **Primary files:** `30-zoxide.zsh`, `40-fzf.zsh`, `scripts/check-deps.sh`, shared minimum diagnostics in `60-functions.zsh` and `65-help.zsh`, fzf/zoxide portions of `scripts/test-init.zsh`
@@ -611,6 +613,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Compatibility:** `55-ui-helpers.zsh` can load the pure theme module when tested directly; `NO_COLOR`, redirected output, narrow terminals, dumb terminals, and non-UTF-8 locales remain plain and ASCII-safe. README, GUIDE, and tips describe the dashboard behavior now in effect.
 - **Verification:** theme tests prove live palette changes, absence of the legacy palette functions, Unicode fallback, and colorless plain output. All ordered repository checks passed.
 - **Performance:** first sample was command 25.111 ms and interactive 31.607 ms; the required confirmation sample was command 25.757 ms (+0.947 ms, +3.8% from baseline) and interactive 30.195 ms (+1.324 ms, +4.6%). The confirmation did not cross 5%, so no slowdown follow-up was created.
+
+### T4 ledger — fzf and zoxide option generation
+
+- **Commit:** task-scoped commit `feat(fzf): add theme-aware structured UI`
+- **Outcome:** raised the hard floor to 0.68.0; replaced the path-only presentation guard with a theme/layout/glyph/width signature; added full semantic color/chrome compilation; themed Ctrl+T, Ctrl+R, Alt+C, generated completion overlays, and zoxide; and made inherited options idempotent with `NO_COLOR` final.
+- **Security and compatibility:** integration generation, syntax validation, private cache checks, command-mode silence, runtime guards, and separate-shell `command -v` preview guards remain intact. Theme refresh does not rerun validation or generated integration.
+- **Verification:** boundary fixtures accept 0.68/0.68.0 and reject 0.67.9; option tests cover all seven fzf option surfaces plus `_ZO_FZF_OPTS`, inherited precedence, re-source idempotence, theme/layout refresh, no-color previews, and no integration regeneration. Installed fzf accepts every compiled layout. All ordered repository checks passed.
+- **Performance:** sample one was command 26.363 ms and interactive 32.391 ms; confirmation was command 32.227 ms (+7.417 ms, +29.9% from baseline) and interactive 35.700 ms (+6.829 ms, +23.7%). The regression is confirmed and tracked as PF-01.
 
 ## Automated acceptance criteria
 

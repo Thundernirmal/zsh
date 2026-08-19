@@ -448,6 +448,142 @@ _zsh_theme_glyph() {
   esac
 }
 
+_zsh_theme_join_shell_args() {
+  emulate -L zsh
+
+  local arg output=''
+  for arg in "$@"; do
+    [[ -n $output ]] && output+=' '
+    output+=${(qq)arg}
+  done
+  REPLY=$output
+}
+
+_zsh_theme_fzf_color_args() {
+  emulate -L zsh
+
+  local depth=${_ZSH_UI_COLOR_DEPTH:-ansi}
+  local theme=${_ZSH_FZF_ACTIVE_THEME:-catppuccin-mocha}
+  local role target value
+  local -a mappings args
+
+  if [[ -n ${NO_COLOR:-} || $depth == none ]]; then
+    reply=( --no-color )
+    return 0
+  fi
+
+  local -a target_roles=(
+    bg base list-bg base preview-bg base
+    input-bg surface header-bg surface footer-bg surface
+    fg text list-fg text preview-fg text current-fg text selected-fg text
+    current-bg selected selected-bg surface
+    query query prompt accent ghost muted info muted spinner info
+    hl match current-hl match selected-hl match
+    header muted footer muted
+    border border label accent
+    list-border border list-label accent
+    input-border border input-label accent
+    header-border border header-label muted
+    footer-border border footer-label muted
+    preview-border border preview-label accent
+    pointer focus marker success gutter gutter scrollbar border separator border
+  )
+  [[ ${ZSH_FZF_LAYOUT:-compact} == roomy ]] && target_roles+=( alt-bg surface )
+
+  integer index
+  for (( index = 1; index <= ${#target_roles}; index += 2 )); do
+    target=${target_roles[$index]}
+    role=${target_roles[$(( index + 1 ))]}
+    _zsh_theme_color_value "$role" fzf "$depth" || return 1
+    value=$REPLY
+    mappings+=( "${target}:${value}" )
+  done
+
+  args=( "--color=${(j:,:)mappings}" )
+  reply=( "${args[@]}" )
+}
+
+_zsh_theme_fzf_chrome_args() {
+  emulate -L zsh
+
+  local layout=${ZSH_FZF_LAYOUT:-compact}
+  local pointer marker gutter scrollbar separator wrap
+  local -a args color_args
+
+  case $layout in
+    compact)
+      args=( '--height=~60%' --layout=reverse --style=full:line --info=inline-right )
+      ;;
+    roomy)
+      args=( '--height=80%' --layout=reverse --style=full:rounded --info=inline-right )
+      ;;
+    minimal)
+      args=( '--height=~45%' --layout=reverse --style=minimal --info=inline-right )
+      ;;
+    *) return 1 ;;
+  esac
+
+  _zsh_theme_glyph pointer; pointer=$REPLY
+  _zsh_theme_glyph marker; marker=$REPLY
+  _zsh_theme_glyph gutter; gutter=$REPLY
+  _zsh_theme_glyph scrollbar; scrollbar=$REPLY
+  _zsh_theme_glyph separator; separator=$REPLY
+  _zsh_theme_glyph wrap; wrap=$REPLY
+  args+=(
+    --border
+    --highlight-line
+    --cycle
+    --scroll-off=3
+    "--pointer=$pointer"
+    "--marker=$marker"
+    "--gutter=$gutter"
+    "--scrollbar=$scrollbar"
+    "--separator=$separator"
+    "--wrap-sign=$wrap"
+    "--preview-wrap-sign=$wrap"
+  )
+
+  _zsh_theme_fzf_color_args || return 1
+  color_args=( "${reply[@]}" )
+  reply=( "${args[@]}" "${color_args[@]}" )
+}
+
+_zsh_theme_fzf_preview_window() {
+  emulate -L zsh
+
+  integer width=${COLUMNS:-80}
+  local layout=${ZSH_FZF_LAYOUT:-compact}
+  local wide narrow
+
+  case $width in
+    ''|*[!0-9]*) width=80 ;;
+  esac
+  case $layout in
+    compact) wide=50; narrow=40 ;;
+    roomy) wide=55; narrow=45 ;;
+    minimal) wide=45; narrow=35 ;;
+    *) return 1 ;;
+  esac
+
+  if (( width >= 100 )); then
+    REPLY="right,${wide}%,border-left,wrap-word,<100(down,${narrow}%,border-top,wrap-word)"
+  else
+    REPLY="down,${narrow}%,border-top,wrap-word"
+  fi
+}
+
+_zsh_theme_fzf_context_args() {
+  emulate -L zsh
+
+  local list_label=$1 ghost=$2 footer=$3
+  reply=(
+    "--list-label=$list_label"
+    --input-label=Search
+    "--ghost=$ghost"
+    "--footer=$footer"
+  )
+}
+
 _zsh_theme_signature() {
   REPLY="${_ZSH_UI_ACTIVE_THEME:-}:${_ZSH_FZF_ACTIVE_THEME:-}:${_ZSH_UI_COLOR_DEPTH:-}:${_ZSH_UI_GLYPH_TIER:-}:${ZSH_FZF_LAYOUT:-}:${ZSH_FZF_EXTRA_OPTS:-}"
 }

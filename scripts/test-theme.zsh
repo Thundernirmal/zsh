@@ -141,6 +141,40 @@ print -r -- "${#color}|$icon"')
   assert_equals "$output" '0|x' 'plain dashboard mode remains colorless and ASCII-safe' || return 1
 }
 
+test_fzf_compiler() {
+  local output
+  output=$(run_theme_case '' '
+for layout in compact roomy minimal; do
+  ZSH_FZF_LAYOUT=$layout
+  _zsh_theme_resolve_settings
+  _zsh_theme_fzf_chrome_args || exit 15
+  _zsh_theme_join_shell_args "${reply[@]}"
+  [[ $REPLY == *current-bg* && $REPLY == *selected-bg* && $REPLY == *footer-border* && $REPLY == *ghost* && $REPLY == *gutter* ]] || exit 16
+  print -r -- "$layout:${#reply}"
+done
+NO_COLOR=1
+_zsh_theme_detect_color_depth; _ZSH_UI_COLOR_DEPTH=$REPLY
+_zsh_theme_fzf_color_args || exit 17
+print -r -- "nocolor=${(j:,:)reply}"')
+  assert_equals "$output" $'compact:16\nroomy:16\nminimal:16\nnocolor=--no-color' 'fzf compiler covers every layout, semantic target, and no-color mode' || return 1
+
+  if (( $+commands[fzf] )); then
+    (
+      unset NO_COLOR
+      export TERM=xterm-256color COLORTERM=truecolor COLUMNS=120
+      source "$repo_dir/25-theme.zsh"
+      local layout
+      for layout in compact roomy minimal; do
+        ZSH_FZF_LAYOUT=$layout
+        _zsh_theme_resolve_settings
+        _zsh_theme_fzf_chrome_args || exit 18
+        print -r -- alpha | command fzf --filter alpha "${reply[@]}" >/dev/null || exit 19
+      done
+    )
+    assert_status "$?" 0 'installed fzf accepts every compiled layout at the supported floor' || return 1
+  fi
+}
+
 test_idempotence_and_safety() {
   local output marker="$test_tmp/executed"
   output=$(run_theme_case "typeset -g ZSH_UI_THEME='\$(touch ${(q)marker})'" '
@@ -172,6 +206,7 @@ main() {
   test_custom_palette || return 1
   test_fallbacks_and_modes || return 1
   test_dashboard_renderer || return 1
+  test_fzf_compiler || return 1
   test_idempotence_and_safety || return 1
 }
 

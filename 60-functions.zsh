@@ -97,7 +97,7 @@ ft() {
 
 _zsh_require_fzf() {
   if (( ! $+functions[_fzf_require_ready] )); then
-    print -u2 -r -- 'zsh config: fzf 0.52.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
+    print -u2 -r -- 'zsh config: fzf 0.68.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
     return 1
   fi
   _fzf_require_ready
@@ -3780,7 +3780,7 @@ if command -v nix >/dev/null 2>&1; then
     print '  - Bare install names are expanded to nixpkgs#<name>'
     print '  - npkg find searches a cached list of nixpkgs attribute names'
     print '  - npkg refresh and outdated need jq'
-    print '  - Interactive add/find/remove needs jq and fzf 0.52.0+'
+    print '  - Interactive add/find/remove needs jq and fzf 0.68.0+'
     print '  - Advanced nix flags can be passed through by calling nix directly'
   }
 

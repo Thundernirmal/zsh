@@ -141,7 +141,7 @@ test_plain_rendering_and_availability() {
   assert_contains " ${(j: :)reply} " ' npkg ' '--all results include unavailable commands' || return 1
 
   output=$(zhelp --plain --all package)
-  assert_contains "$output" 'Manage the current Nix profile [needs nix; jq and fzf 0.52.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
+  assert_contains "$output" 'Manage the current Nix profile [needs nix; jq and fzf 0.68.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
 
   output=$(zhelp --plain --all upkg)
   assert_contains "$output" 'upkg: Check, search, upgrade, and clean detected managers' 'exact lookup renders a concise command summary' || return 1
@@ -154,7 +154,7 @@ test_plain_rendering_and_availability() {
   assert_contains "$output" "Run 'zhelp --all npkg'" 'unavailable exact lookup explains how to include the command' || return 1
 
   output=$(zhelp --plain --all npkg)
-  assert_contains "$output" 'Status:  unavailable (needs nix; jq and fzf 0.52.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
+  assert_contains "$output" 'Status:  unavailable (needs nix; jq and fzf 0.68.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
 
   output=$(zhelp --plain --all cgm)
   assert_contains "$output" 'cgm: Store and load shell credentials securely' 'cgm has a concise help record' || return 1

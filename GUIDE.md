@@ -64,6 +64,7 @@ Unreadable module files are skipped. The optional credential module is skipped e
 |---|---|
 | `10-history.zsh` | Shared 100,000-entry history |
 | `20-aliases.zsh` | Navigation, file, Git, and weather aliases |
+| `25-theme.zsh` | Semantic palette registry, validation, color depth, and glyph policy |
 | `30-zoxide.zsh` | Guarded zoxide initialization and `zi` fzf gate |
 | `40-fzf.zsh` | fzf validation, cache, theme, previews, and bindings |
 | `50-completion.zsh` | Lightweight global completion styles |
@@ -95,7 +96,7 @@ $HOME/.config/zsh/scripts/check-deps.sh
 | `ss` | `ports` |
 | `lsd` | Preferred file listing |
 | `zoxide` | `z` and `zi` navigation |
-| `fzf` 0.52.0+ | Keybindings and every fuzzy picker |
+| `fzf` 0.68.0+ | Keybindings and every fuzzy picker |
 
 `fzf` must report a stable numeric version. Missing, malformed, prerelease, and older builds fail the dependency check and hard-block fuzzy workflows.
 
@@ -132,14 +133,17 @@ Pipes, redirects, narrow terminals, non-UTF-8 locales, and dumb terminals receiv
 | Setting | Effect |
 |---|---|
 | `ZSH_UI_THEME=catppuccin-mocha` | Select the dashboard palette; built-ins are `catppuccin-mocha`, `catppuccin-latte`, `nord`, `gruvbox-dark`, and `terminal` |
+| `ZSH_FZF_THEME=` | Inherit `ZSH_UI_THEME`; set a built-in name or `custom` for an fzf-only override |
+| `ZSH_FZF_LAYOUT=compact` | Select the `compact`, `roomy`, or `minimal` finder layout |
+| `ZSH_FZF_EXTRA_OPTS=` | Append an intentional final user option layer to shared fzf defaults |
 | `ZSH_UI_GLYPHS=auto` | Select `auto`, `nerd`, `unicode`, or `ascii` dashboard glyphs independently of color |
 | `NO_COLOR=1` | Force shared dashboards to plain, uncoloured output |
 | `NO_NERD_FONT=1` | Keep colour but use ordinary Unicode rather than private-use Nerd Font glyphs |
 | `zhelp --plain` | Force the stable plain help view |
 
-Set theme variables before sourcing `init.zsh`. `catppuccin-mocha` remains the default. Invalid names and incomplete or malformed custom palettes fall back to Mocha without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents. Fzf keeps its existing fixed palette until the finder migration described in the active theming specification is complete.
+Set theme variables before sourcing `init.zsh`. `catppuccin-mocha` remains the default. Invalid names and incomplete or malformed custom palettes fall back to Mocha without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents.
 
-`NO_COLOR` does not disable fuzzy interaction: the `zhelp` palette stays interactive with colour disabled, while other fzf workflows retain fzf's own options.
+`NO_COLOR` does not disable fuzzy interaction. It removes repository-managed fzf colors, prevents color-forced file previews, and remains the final option even when inherited or extra options request colors.
 
 `dusage`, `bigfiles`, and `path` sanitize filesystem- or environment-controlled labels before rendering. Named controls such as newline, tab, escape, and bell become visible escapes; other C0, DEL, and C1 bytes use forms such as `\x7f`. Sanitization happens before measuring or truncating, keeps each value on one logical line, and preserves printable Unicode.
 
@@ -337,9 +341,11 @@ zi projects
 
 `z` performs ranked directory jumps. `zi` uses zoxide's interactive picker but is wrapped by the shared fzf version gate.
 
+The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets without replacing zoxide's scoring or candidate generation.
+
 ### fzf requirement and startup
 
-Every fuzzy workflow requires stable `fzf` 0.52.0 or newer. At the first normal prompt for a new fzf executable, the configuration:
+Every fuzzy workflow requires stable `fzf` 0.68.0 or newer. At the first normal prompt for a new fzf executable, the configuration:
 
 1. validates the version;
 2. captures non-empty `fzf --zsh` output;
@@ -351,6 +357,8 @@ The cache is stored below `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` and is keye
 
 Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows and print an actionable diagnostic. Non-interactive sourcing and `zsh -i -c ...` remain silent and do not initialize ZLE bindings.
 
+Finder presentation is compiled separately from the trusted integration cache. Changing theme, layout, glyph mode, terminal width class, or `NO_COLOR` refreshes future launches without rerunning `fzf --version` or regenerating `fzf --zsh`. Existing `FZF_DEFAULT_OPTS`, widget options, completion options, and `_ZO_FZF_OPTS` are captured once and appended after managed presentation. `ZSH_FZF_EXTRA_OPTS` follows the inherited global layer; `--no-color` is always final when requested.
+
 ### Keybindings
 
 | Binding | Action |
@@ -360,6 +368,8 @@ Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows
 | Alt+C | Select a directory and change to it |
 
 Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R uses `?` to toggle its full-command preview.
+
+Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
 The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths.
 
@@ -657,7 +667,7 @@ These are the cross-cutting rules most likely to surprise a new user:
 7. **Global aliases expand anywhere.** Unquoted tokens such as `G` or `NUL` can change a command far from its first word. Quote literal occurrences.
 8. **An empty PATH component means the current directory.** `path` preserves and exposes it because silently normalizing PATH would change command lookup.
 9. **Completion needs compinit.** Without `compdef`, command-specific completion quietly does nothing.
-10. **fzf is all-or-nothing at 0.52.0+.** An unsupported build blocks fuzzy workflows instead of enabling a reduced theme or partial bindings. Plain `zhelp` remains available.
+10. **fzf is all-or-nothing at 0.68.0+.** An unsupported build blocks fuzzy workflows instead of enabling a reduced theme or partial bindings. Plain `zhelp` remains available.
 11. **Ctrl+R does not execute the selection.** It inserts history into the command buffer for review and editing.
 12. **`fkill` defaults to SIGTERM.** `fkill 9` is a force-kill and should be the exception.
 13. **CGM is startup-optional.** Installing `secret-tool` mid-session does not define `cgm` until the module is sourced again or the shell restarts.
@@ -702,8 +712,10 @@ Run these in order:
 
 ```sh
 zsh -n *.zsh
+zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh
 sh -n scripts/check-deps.sh
 zsh scripts/test-init.zsh
+zsh scripts/test-theme.zsh
 zsh scripts/test-functions.zsh
 zsh scripts/test-cgm.zsh
 zsh scripts/test-upkg.zsh

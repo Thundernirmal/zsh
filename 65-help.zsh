@@ -57,7 +57,7 @@ _zsh_help_register '...' Navigation 'Move up two directories' '...' '...' none a
 _zsh_help_register '....' Navigation 'Move up three directories' '....' '....' none alias none
 _zsh_help_register '-' Navigation 'Return to the previous directory' '-' '-' none alias none
 _zsh_help_register z Navigation 'Jump with zoxide' 'z <query>' 'z projects' zoxide function zoxide
-_zsh_help_register zi Navigation 'Pick a zoxide directory' 'zi [query]' 'zi projects' 'zoxide and fzf 0.52.0+' function zoxide-fzf
+_zsh_help_register zi Navigation 'Pick a zoxide directory' 'zi [query]' 'zi projects' 'zoxide and fzf 0.68.0+' function zoxide-fzf
 _zsh_help_register mkcd Navigation 'Create a directory and enter it' 'mkcd <directory>' 'mkcd new-project' none function none
 _zsh_help_register croot Navigation 'Enter the Git repository root' 'croot' 'croot' git function git
 
@@ -86,11 +86,11 @@ _zsh_help_register gpr Git 'Pull with rebase' 'gpr' 'gpr' git alias git
 _zsh_help_register gun Git 'Undo the latest commit; keep changes staged' 'gun' 'gun' git alias git
 _zsh_help_register gitcount Git 'Count non-merge commits by contributor' 'gitcount' 'gitcount' git function git
 _zsh_help_register gcount Git 'Alias for gitcount' 'gcount' 'gcount' git alias git
-_zsh_help_register fbr Git 'Pick a branch; enter its worktree or check it out' 'fbr' 'fbr' 'git and fzf 0.52.0+' function git-fzf
+_zsh_help_register fbr Git 'Pick a branch; enter its worktree or check it out' 'fbr' 'fbr' 'git and fzf 0.68.0+' function git-fzf
 
 # System
 _zsh_help_register weather System 'Show the default HTTPS forecast' 'weather' 'weather' curl alias curl
-_zsh_help_register fkill System 'Pick processes and send a signal' 'fkill [signal]' 'fkill 15' 'ps and fzf 0.52.0+' function process-fzf
+_zsh_help_register fkill System 'Pick processes and send a signal' 'fkill [signal]' 'fkill 15' 'ps and fzf 0.68.0+' function process-fzf
 _zsh_help_register headers System 'Print response headers after redirects' 'headers <url>' 'headers https://example.com' curl function curl
 _zsh_help_register fanprofile System 'Show the laptop performance profile' 'fanprofile' 'fanprofile' 'Linux ACPI or ASUS WMI profile interface' function fan-profile
 _zsh_help_register ports System 'Show listening sockets and processes' 'ports' 'ports' ss function ss
@@ -102,7 +102,7 @@ _zsh_help_register cgm Security 'Store and load shell credentials securely' 'cgm
 
 # Packages and meta helpers
 _zsh_help_register upkg Packages 'Check, search, upgrade, and clean detected managers' 'upkg [command] [args] [flags]' 'upkg search ripgrep --only=apt,nix' 'a supported package manager' function package-manager
-_zsh_help_register npkg Packages 'Manage the current Nix profile' 'npkg <command> [args]' 'npkg search ripgrep' 'nix; jq and fzf 0.52.0+ for optional workflows' function nix
+_zsh_help_register npkg Packages 'Manage the current Nix profile' 'npkg <command> [args]' 'npkg search ripgrep' 'nix; jq and fzf 0.68.0+ for optional workflows' function nix
 _zsh_help_register G Meta 'Pipe command output to grep' '<command> G <pattern>' 'git log --oneline G fix' grep alias grep
 _zsh_help_register L Meta 'Pipe command output to less' '<command> L' 'git diff L' less alias less
 _zsh_help_register W Meta 'Pipe command output to a line count' '<command> W' 'git log --oneline W' wc alias wc
@@ -111,7 +111,7 @@ _zsh_help_register T Meta 'Pipe command output to tail' '<command> T' 'git log -
 _zsh_help_register NE Meta 'Suppress stderr for one command' '<command> NE' 'optional-command NE' none alias none
 _zsh_help_register NUL Meta 'Suppress stdout and stderr for one command' '<command> NUL' 'noisy-command NUL' none alias none
 _zsh_help_register tips Meta 'Print one short usage tip' 'tips' 'tips' none function none
-_zsh_help_register zhelp Meta 'Find commands and queue an example' 'zhelp [--all] [--plain] [query]' 'zhelp package' 'fzf 0.52.0+ for the optional interactive palette' function none
+_zsh_help_register zhelp Meta 'Find commands and queue an example' 'zhelp [--all] [--plain] [query]' 'zhelp package' 'fzf 0.68.0+ for the optional interactive palette' function none
 
 _zsh_help_entry_exists() {
   emulate -L zsh
@@ -293,7 +293,7 @@ _zsh_help_palette() {
   local -a ids rows fields fzf_args
 
   if (( ! $+functions[_fzf_require_ready] )); then
-    print -u2 -r -- 'zsh config: fzf 0.52.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
+    print -u2 -r -- 'zsh config: fzf 0.68.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
     return 1
   fi
   _fzf_require_ready || return 1
