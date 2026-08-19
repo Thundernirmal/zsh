@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T6 complete; startup follow-up required
+**Status:** In progress — T6 complete; PF-01 and PF-02 scheduled
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -777,3 +777,21 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 - add a regression assertion or a documented benchmark comparison that remains stable enough for this repository's environment.
 
 **Exit criterion:** two consecutive 50-run samples must put both medians below the T1 slowdown threshold (command at or below 26.051 ms and interactive at or below 30.315 ms), with the full ordered suite passing. If host variance prevents that absolute target, document the profile evidence and demonstrate that the optimized task is not more than 5% slower than an immediately adjacent checkout of the T1 commit under interleaved measurements.
+
+### PF-02. Remove `ztheme` command startup parsing overhead
+
+**Status:** Open; execute with PF-01 after T8 and before the final audit
+
+**Introduced by:** T6 (`bc8ad5b`)
+
+**Evidence:** the confirmation benchmark measured command startup at 27.198 ms and interactive startup at 32.169 ms. Both are approximately 6.0% slower than the immediately preceding T5 tree, as well as above the T1 threshold.
+
+**Plan:**
+
+- profile parsing and definition cost separately from runtime switching to confirm how much of the regression comes from the new command helpers;
+- keep only a small, source-time-safe public entry point on the startup path and defer swatch rendering, serialization, and other command-only implementation until the first `ztheme` invocation if profiling confirms that is cheaper;
+- preserve help availability, static completion, atomic rollback, custom export, zero source-time subprocesses, and current-session fzf/zoxide refresh behavior;
+- avoid an eager extra module source or any filesystem scan during normal shell initialization;
+- cover first invocation, repeated invocation, re-sourcing, and missing/blocked fzf states after optimization.
+
+**Exit criterion:** two consecutive 50-run samples must show that T6 is not more than 1.0 ms and 5% slower than T5 on either startup path. The stricter PF-01 baseline exit criterion still governs completion of the combined optimization work.
