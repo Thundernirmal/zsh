@@ -151,7 +151,7 @@ for layout in compact roomy minimal; do
   _zsh_theme_resolve_settings
   _zsh_theme_fzf_chrome_args || exit 15
   _zsh_theme_join_shell_args "${reply[@]}"
-  [[ $REPLY == *current-bg* && $REPLY == *selected-bg* && $REPLY == *footer-border* && $REPLY == *ghost* && $REPLY == *gutter* ]] || exit 16
+  [[ $REPLY == *current-bg* && $REPLY == *selected-bg* && $REPLY == *input-bg:\#1e1e2e* && $REPLY != *input-bg:\#313244* && $REPLY == *footer-border* && $REPLY == *ghost* && $REPLY == *gutter* ]] || exit 16
   [[ $REPLY == *--border=rounded* && $REPLY == *--list-border=none* && $REPLY == *--input-border=bottom* && $REPLY == *--header-border=bottom* && $REPLY == *--footer-border=top* ]] || exit 20
   [[ $REPLY != *--style=full:line* && $REPLY != *--style=full:rounded* ]] || exit 21
   [[ $REPLY != *--separator=* ]] || exit 22

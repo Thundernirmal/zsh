@@ -46,6 +46,7 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Press Ctrl+R to insert a history entry for editing"
     "Press Ctrl+T to insert a selected file path"
     "Press Alt+C to select and enter a directory"
+    "Type in the unfilled fzf input row to filter; use the footer for keys"
     "Press Ctrl+P in preview pickers to toggle the preview; use Ctrl+/ to wrap"
     "Run fkill to select processes and send SIGTERM; use 9 only to force"
     "Run fbr to select the underlying branch, enter its worktree, or check it out"

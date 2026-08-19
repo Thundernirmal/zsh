@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** Implementation complete and audited through T10 — Nix-host visual signoff remains blocked
+**Status:** Implementation complete — T11 input-fill follow-up complete; final hash audit pending
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -253,7 +253,7 @@ Once implemented, this decision supersedes only the **minimum version value** in
 
 ### 5.1 Use a consistent section hierarchy
 
-Every layout uses one restrained rounded outer frame rather than a rounded box around every section. The list has no nested border; input and optional header sections use one lower divider, and the footer uses one upper divider. The picker label lives in the outer border and the input divider owns the `Search` label. The info separator is left implicit so fzf suppresses it when the input border already provides separation.
+Every layout uses one restrained rounded outer frame rather than a rounded box around every section. The input and list share the `base` background so the input does not read as another filled box. The list has no nested border; input and optional header sections use one lower divider, and the footer uses one upper divider. The picker label lives in the outer border and the input divider owns the `Search` label. The info separator is left implicit so fzf suppresses it when the input border already provides separation.
 
 The first implementation freezes these layout values:
 
@@ -609,13 +609,29 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 **Done when:** a real 100-column PTY shows exactly one rounded outer frame, one input divider, and one footer divider, with no stacked top rule.
 
+### T11. Remove the input-section background fill
+
+**Status:** Completed 2026-08-19
+
+**Depends on:** T10 and post-implementation visual feedback
+
+**Primary files:** `25-theme.zsh`, `scripts/test-theme.zsh`, synchronized user documentation
+
+**Size:** small
+
+- Resolve `input-bg` from the theme's `base` role instead of `surface` so the query area blends into the single outer frame.
+- Preserve query, prompt, ghost, divider, current-row, and selected-row semantics.
+- Freeze the Mocha mapping in the compiler regression without introducing palette-specific picker code.
+
+**Done when:** the input and list backgrounds match while focus and selection remain independently visible.
+
 ### Dependency graph
 
 ```text
 T1 -> T2 -> T3 ----\
           \-> T4 ----> T5 ----\
               \------> T6 ----+--> T7 --> T8
-                                     T8 --> T9 --> T10
+                                     T8 --> T9 --> T10 --> T11
 ```
 
 T3 and T4 are the main parallel lane. T6 may begin after the resolver and fzf refresh API stabilize. T7 intentionally waits until public names and behavior stop moving.
@@ -721,6 +737,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Outcome:** every layout now uses one rounded outer border, an unboxed list, lower input/header dividers, and an upper footer divider. Compact and minimal use `0,1` padding; roomy uses `1,2`. Picker identity labels moved to the outer border, and the redundant explicit info separator was removed.
 - **Verification:** compiler tests freeze every border shape and reject `full:line`, `full:rounded`, and an explicit separator; installed fzf accepts every profile; real-PTY rendering at 100 columns shows one rounded frame and exactly the intended dividers. The full ordered suite passed.
 - **Performance:** the first 50-run sample measured command/interactive medians of 26.342/30.181 ms. The required confirmation measured 25.833/30.133 ms; both confirmation medians pass the frozen 26.051/30.315 ms limits, so the apparent command variance is not a confirmed slowdown and no performance follow-up was added.
+
+### T11 ledger — unfilled fzf input row
+
+- **Commit:** task-scoped commit `fix(fzf): blend input into the picker frame`
+- **Cause:** after T10 removed the nested borders, the semantic `surface` fill on `input-bg` still made the query section appear to be a separate rectangular box.
+- **Outcome:** `input-bg` now consumes the same `base` role as the outer finder and list. The selected row, query, prompt, ghost, divider, header, and footer retain their existing roles.
+- **Verification:** the compiler regression asserts Mocha emits `input-bg:#1e1e2e` and rejects the previous `input-bg:#313244`; every layout remains accepted by installed fzf, and the complete ordered suite passed.
+- **Performance:** the 50-run command/interactive medians were 25.879/30.256 ms, both within the frozen 26.051/30.315 ms limits. No slowdown follow-up was added.
 
 ## Final audit — 2026-08-19
 
