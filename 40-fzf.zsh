@@ -276,6 +276,36 @@ _fzf_require_ready() {
   return 1
 }
 
+_fzf_picker_context_args() {
+  emulate -L zsh
+
+  local list_label=$1 ghost=$2 footer=$3
+  _zsh_theme_fzf_context_args "$list_label" "$ghost" "$footer" || return 1
+}
+
+_fzf_picker_preview_args() {
+  emulate -L zsh
+
+  local label=$1
+  _zsh_theme_fzf_preview_window || return 1
+  reply=(
+    "--preview-label=$label"
+    "--preview-window=$REPLY"
+    '--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word'
+  )
+}
+
+_fzf_picker_multi_args() {
+  emulate -L zsh
+
+  local action=${1:-select}
+  REPLY="Enter ${action}  Tab mark  Selected 0  Esc close"
+  reply=(
+    --multi
+    "--bind=multi:transform-footer:printf 'Enter ${action}  Tab mark  Selected %s  Esc close\\n' \"\$FZF_SELECT_COUNT\""
+  )
+}
+
 _fzf_wrap_generated_entry_points() {
   if (( $+functions[fzf-file-widget] )); then
     functions[_fzf_generated_file_widget]=${functions[fzf-file-widget]}

@@ -485,13 +485,19 @@ done
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
 
-  functions[_ui_term_width]='print -r -- 120'
-  output=$(_npkg_fzf_preview_window 45)
-  assert_contains "$output" 'right,45%,border-left,wrap' 'npkg picker uses side preview on wide terminals' || return 1
+  assert_contains "${functions[_npkg_pick_installables]}" '_fzf_picker_multi_args add' 'Nix install picker uses the shared live multi-selection footer' || return 1
+  assert_contains "${functions[_npkg_remove_picker]}" '--accept-nth=4' 'Nix remove picker asks fzf to return targets directly' || return 1
+  assert_contains "${functions[_npkg_remove_picker]}" '_fzf_picker_preview_args Package' 'Nix remove picker uses shared responsive previews' || return 1
+  assert_not_contains "${functions[_npkg_pick_installables]}" '245;224;220' 'Nix install preview no longer embeds the fixed RGB palette' || return 1
+  assert_not_contains "${functions[_npkg_remove_picker]}" '137;180;250' 'Nix remove preview no longer embeds the fixed RGB palette' || return 1
 
-  functions[_ui_term_width]='print -r -- 80'
+  COLUMNS=120
+  output=$(_npkg_fzf_preview_window 45)
+  assert_contains "$output" 'right,50%,border-left,wrap-word' 'npkg picker uses the shared compact side preview on wide terminals' || return 1
+
+  COLUMNS=80
   output=$(_npkg_fzf_preview_window 60)
-  assert_contains "$output" 'down,45%,border-top,wrap' 'npkg picker moves preview below on narrow terminals' || return 1
+  assert_contains "$output" 'down,40%,border-top,wrap-word' 'npkg picker uses the shared compact lower preview on narrow terminals' || return 1
 
   functions[_ui_has_icons]='return 1'
   output=$(_ui_status_icon 'matches found')

@@ -250,7 +250,7 @@ zhelp --help
 
 The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. Exact names show usage, an example, and live availability.
 
-In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
+In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
 Sourcing `65-help.zsh` only registers data. Availability checks and subprocesses are deferred until `zhelp` is called.
 
@@ -367,11 +367,13 @@ Finder presentation is compiled separately from the trusted integration cache. C
 | Ctrl+R | Select a history entry and insert it for editing |
 | Alt+C | Select a directory and change to it |
 
-Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R uses `?` to toggle its full-command preview.
+Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R uses `?` to toggle its full-command preview. In preview pickers, Ctrl+P toggles the preview and Ctrl+/ toggles word wrapping; the established Ctrl+R `?` binding remains available.
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
-The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths.
+The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths. Every picker uses the same list/search/footer hierarchy and contextual ghost hint. At 100 columns and wider, textual previews sit beside the list; below 100 columns they move underneath. `fkill` and the Nix multi-select pickers show a live selected-item count in the footer. Git and Nix table pickers keep the visible identity column frozen, while `--accept-nth` returns undecorated branch, PID, example, or profile-target fields to the calling workflow.
+
+Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` sends the requested signal after selection, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.
 
 ## Function reference
 
@@ -636,7 +638,7 @@ Bare install names become `nixpkgs#<name>`. Flake references, paths, and argumen
 
 `npkg refresh` and `npkg outdated` require `jq`. Interactive add, find, and remove also require a real terminal and supported fzf.
 
-The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. Building it evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns.
+The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. Building it evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns. Tab marks multiple packages, and the footer updates the selected count before Enter confirms the add or remove operation.
 
 ### Outdated semantics
 

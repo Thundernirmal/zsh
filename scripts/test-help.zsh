@@ -193,6 +193,9 @@ test_palette_queue_and_cancel() {
   local dangerous_example="print -r -- executed > ${(q)marker_file}"
   local queued old_path=$PATH rc
 
+  assert_contains "${functions[_zsh_help_palette]}" '--accept-nth=5' 'zhelp asks fzf to return only the editable example' || return 1
+  assert_contains "${functions[_zsh_help_palette]}" '_fzf_picker_preview_args Usage' 'zhelp uses the shared responsive preview policy' || return 1
+
   command mkdir -p -- "$fakebin"
   _zsh_help_register test-palette Meta 'Palette safety fixture' 'test-palette' "$dangerous_example" none function none || return 1
   functions[_fzf_require_ready]='return 0'
@@ -201,7 +204,11 @@ test_palette_queue_and_cancel() {
 while IFS= read -r line; do
   case "$line" in
     "$ZSH_HELP_TEST_ID	"*)
-      printf "%s\n" "$line"
+      tab=$(printf "\t")
+      IFS="$tab" read -r id category summary usage example availability <<EOF
+$line
+EOF
+      printf "%s\n" "$example"
       exit 0
       ;;
   esac
@@ -278,6 +285,8 @@ test_tips_are_concise() {
 }
 
 main() {
+  source "$repo_dir/25-theme.zsh"
+  source "$repo_dir/40-fzf.zsh"
   source "$repo_dir/65-help.zsh"
 
   test_catalogue || return 1

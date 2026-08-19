@@ -274,6 +274,9 @@ exit 2' >"$fakebin/diff"
 
 test_fkill_default_signal() {
   assert_contains "${functions[fkill]}" 'local signal=${1:-15}' 'fkill defaults to SIGTERM' || return 1
+  assert_contains "${functions[fkill]}" '--accept-nth=1' 'fkill asks fzf to return PIDs directly' || return 1
+  assert_contains "${functions[fkill]}" '_fzf_picker_multi_args kill' 'fkill uses the shared live multi-selection footer' || return 1
+  assert_not_contains "${functions[fkill]}" '_fzf_pointer' 'fkill no longer duplicates pointer presentation' || return 1
 }
 
 test_fbr_worktree_navigation() {
@@ -281,6 +284,10 @@ test_fbr_worktree_navigation() {
   local worktree_dir="$tmp_dir/fbr worktree"
   local original_dir=$PWD branch current_branch worktree_path
   local -A worktree_paths
+
+  assert_contains "${functions[fbr]}" '--accept-nth=4' 'fbr asks fzf to return the branch field directly' || return 1
+  assert_contains "${functions[fbr]}" '_fzf_picker_preview_args Log' 'fbr uses the shared responsive preview policy' || return 1
+  assert_not_contains "${functions[fbr]}" '38;5;116' 'fbr worktree badges no longer embed a raw palette color' || return 1
 
   command git init -q "$fixture_repo" || return 1
   print -r -- 'fixture' >"$fixture_repo/tracked.txt"

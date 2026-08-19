@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T4 complete; PF-01 scheduled
+**Status:** In progress — T5 complete; PF-01 scheduled
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -504,6 +504,8 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T5. Build and migrate shared picker presentation
 
+**Status:** Completed 2026-08-19
+
 **Depends on:** T3 and T4
 
 **Primary files:** `40-fzf.zsh`, fzf call sites in `60-functions.zsh` and `65-help.zsh`, related function/help tests
@@ -621,6 +623,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Security and compatibility:** integration generation, syntax validation, private cache checks, command-mode silence, runtime guards, and separate-shell `command -v` preview guards remain intact. Theme refresh does not rerun validation or generated integration.
 - **Verification:** boundary fixtures accept 0.68/0.68.0 and reject 0.67.9; option tests cover all seven fzf option surfaces plus `_ZO_FZF_OPTS`, inherited precedence, re-source idempotence, theme/layout refresh, no-color previews, and no integration regeneration. Installed fzf accepts every compiled layout. All ordered repository checks passed.
 - **Performance:** sample one was command 26.363 ms and interactive 32.391 ms; confirmation was command 32.227 ms (+7.417 ms, +29.9% from baseline) and interactive 35.700 ms (+6.829 ms, +23.7%). The regression is confirmed and tracked as PF-01.
+
+### T5 ledger — shared direct-picker presentation
+
+- **Commit:** task-scoped commit `feat(fzf): unify direct picker presentation`
+- **Outcome:** added shared array-returning context, responsive-preview, and live multi-selection helpers; migrated `fkill`, `fbr`, `zhelp`, and both Nix pickers to labeled sections, contextual ghost hints, stable footers, semantic preview text, and consistent preview controls. Previously generated Ctrl+T, Ctrl+R, Alt+C, completion, and zoxide entry points continue to consume the same T4 presentation compiler.
+- **Selection safety:** `--accept-nth` now returns raw PIDs, branch names, help examples, and Nix profile targets directly. Git and Nix rows place visible identity first before applying `--freeze-left=1`; cancellation and downstream signal, checkout/worktree, command-queueing, and Nix mutation behavior remain unchanged.
+- **Verification:** tests cover the exact 99/100-column preview boundary, combined context/preview/multi arguments against installed fzf, stable result projection, live-count footer wiring, semantic badge/preview colors, and absence of duplicated pointer/marker policy. All ordered repository checks passed.
+- **Performance:** sample one was command 25.615 ms and interactive 30.625 ms; confirmation was command 25.652 ms (+0.842 ms, +3.4% from baseline) and interactive 30.337 ms (+1.466 ms, +5.1%). Both medians improved materially from T4, so T5 introduced no new follow-up; the small remaining confirmed interactive baseline regression remains covered by PF-01.
 
 ## Automated acceptance criteria
 

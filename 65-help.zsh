@@ -288,9 +288,8 @@ _zsh_help_palette() {
 
   local query=${1-}
   local include_all=${2:-0}
-  local id selection example preview_window='right,55%,border-left,wrap'
-  local pointer='>' marker='+'
-  local -a ids rows fields fzf_args
+  local id selection example
+  local -a ids rows fzf_args context_args preview_args
 
   if (( ! $+functions[_fzf_require_ready] )); then
     print -u2 -r -- 'zsh config: fzf 0.68.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
@@ -307,37 +306,27 @@ _zsh_help_palette() {
     rows+=("${id}"$'\t'"${_ZSH_HELP_CATEGORY[$id]}"$'\t'"${_ZSH_HELP_SUMMARY[$id]}"$'\t'"${_ZSH_HELP_USAGE[$id]}"$'\t'"${_ZSH_HELP_EXAMPLE[$id]}"$'\t'"$REPLY")
   done
 
-  if (( $+functions[_ui_term_width] )) && (( $(_ui_term_width) < 100 )); then
-    preview_window='down,45%,border-top,wrap'
-  fi
-
-  if (( $+functions[_ui_has_icons] )) && _ui_has_icons; then
-    pointer='󰘳'
-    marker='󰄬'
-  fi
-
+  _fzf_picker_context_args Commands 'Type to filter commands' 'Enter edit example  Ctrl-P preview  Ctrl-/ wrap  Esc close'
+  context_args=( "${reply[@]}" )
+  _fzf_picker_preview_args Usage
+  preview_args=( "${reply[@]}" )
   fzf_args=(
-    --height=70%
-    --layout=reverse
-    --border=rounded
+    "${context_args[@]}"
+    "${preview_args[@]}"
     --delimiter=$'\t'
     --with-nth=1,2,3
     --nth=1,2,3,4,5
-    --prompt='zhelp> '
-    --header='Enter: edit example | Esc: close'
-    --pointer="$pointer"
-    --marker="$marker"
+    --accept-nth=5
+    --freeze-left=1
+    --wrap=word
     --preview='printf "Usage:   %s\nExample: %s\nStatus:  %s\n" {4} {5} {6}'
-    --preview-window="$preview_window"
   )
   [[ -n $query ]] && fzf_args+=(--query="$query")
-  [[ -n ${NO_COLOR:-} ]] && fzf_args+=(--no-color)
 
   selection=$(print -l -- "${rows[@]}" | command fzf "${fzf_args[@]}") || return 0
   [[ -n $selection ]] || return 0
 
-  fields=( "${(@ps:\t:)selection}" )
-  example=${fields[5]-}
+  example=$selection
   [[ -n $example ]] || return 0
 
   print -z -- "$example"

@@ -175,6 +175,46 @@ print -r -- "nocolor=${(j:,:)reply}"')
   fi
 }
 
+test_picker_presentation() {
+  local output
+  output=$(run_theme_case '' '
+source '"${repo_dir}"'/40-fzf.zsh
+for width in 99 100; do
+  COLUMNS=$width
+  _fzf_picker_preview_args Usage || exit 20
+  print -r -- "$width:${reply[1]}:${reply[2]}:${reply[3]}"
+done
+_fzf_picker_multi_args remove || exit 21
+print -r -- "$REPLY"
+print -r -- "${(j:|:)reply}"')
+  assert_equals "${${(f)output}[1]}" '99:--preview-label=Usage:--preview-window=down,40%,border-top,wrap-word:--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word' 'picker previews move below at 99 columns' || return 1
+  assert_equals "${${(f)output}[2]}" '100:--preview-label=Usage:--preview-window=right,50%,border-left,wrap-word,<100(down,40%,border-top,wrap-word):--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word' 'picker previews move right at 100 columns' || return 1
+  assert_equals "${${(f)output}[3]}" 'Enter remove  Tab mark  Selected 0  Esc close' 'multi-picker footer starts at zero selected items' || return 1
+  [[ ${${(f)output}[4]} == *'--multi'* && ${${(f)output}[4]} == *'transform-footer'* && ${${(f)output}[4]} == *'$FZF_SELECT_COUNT'* ]]
+  assert_status "$?" 0 'multi-picker footer updates from the fzf selection count' || return 1
+
+  if (( $+commands[fzf] )); then
+    (
+      unset NO_COLOR
+      export TERM=xterm-256color COLORTERM=truecolor COLUMNS=100
+      source "$repo_dir/25-theme.zsh"
+      source "$repo_dir/40-fzf.zsh"
+      local -a args
+      _fzf_picker_context_args Packages 'Type to filter packages' 'Enter add  Esc close'
+      args=( "${reply[@]}" )
+      _fzf_picker_preview_args Package
+      args+=( "${reply[@]}" '--preview=printf %s {}' )
+      _fzf_picker_multi_args add
+      args+=( "${reply[@]}" )
+      print -r -- alpha | command fzf --filter alpha "${args[@]}" >/dev/null
+      projected=$(print -r -- $'visible\tmetadata\tdetail\traw-value' |
+        command fzf --filter visible --delimiter=$'\t' --accept-nth=4)
+      [[ $projected == raw-value ]]
+    )
+    assert_status "$?" 0 'installed fzf accepts shared arguments and projects stable result fields' || return 1
+  fi
+}
+
 test_idempotence_and_safety() {
   local output marker="$test_tmp/executed"
   output=$(run_theme_case "typeset -g ZSH_UI_THEME='\$(touch ${(q)marker})'" '
@@ -207,6 +247,7 @@ main() {
   test_fallbacks_and_modes || return 1
   test_dashboard_renderer || return 1
   test_fzf_compiler || return 1
+  test_picker_presentation || return 1
   test_idempotence_and_safety || return 1
 }
 
