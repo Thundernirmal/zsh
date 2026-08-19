@@ -112,6 +112,35 @@ print -r -- "$glyphs"')
   assert_equals "$output" '>,+,|,|,-,>,' 'ASCII glyph mode contains only the frozen ASCII symbols' || return 1
 }
 
+test_dashboard_renderer() {
+  local output
+  output=$(run_theme_case '' '
+source '"${repo_dir}"'/55-ui-helpers.zsh
+functions[_ui_is_rich_terminal]="return 0"
+mocha=$(_ui_color accent)
+ZSH_UI_THEME=nord
+_zsh_theme_resolve_settings
+nord=$(_ui_color accent)
+print -r -- "${(V)mocha}|${(V)nord}|${+functions[_ui_palette_hex]}|${+functions[_ui_palette_256]}"')
+  assert_equals "$output" '^[[38;2;203;166;247m|^[[38;2;180;142;173m|0|0' 'dashboard colors follow the active semantic theme without private palettes' || return 1
+
+  output=$(run_theme_case 'typeset -g ZSH_UI_GLYPHS=unicode' '
+source '"${repo_dir}"'/55-ui-helpers.zsh
+functions[_ui_is_rich_terminal]="return 0"
+icon=$(_ui_icon "󰄬" "*")
+_ui_ascii_mode; ascii_rc=$?
+print -r -- "$icon|$ascii_rc|$_ZSH_UI_GLYPH_TIER"')
+  assert_equals "$output" '✓|1|unicode' 'Unicode mode uses ordinary Unicode rather than Nerd or ASCII glyphs' || return 1
+
+  output=$(run_theme_case 'typeset -g ZSH_UI_GLYPHS=nerd' '
+source '"${repo_dir}"'/55-ui-helpers.zsh
+functions[_ui_is_rich_terminal]="return 1"
+color=$(_ui_color danger)
+icon=$(_ui_icon "󰅚" "x")
+print -r -- "${#color}|$icon"')
+  assert_equals "$output" '0|x' 'plain dashboard mode remains colorless and ASCII-safe' || return 1
+}
+
 test_idempotence_and_safety() {
   local output marker="$test_tmp/executed"
   output=$(run_theme_case "typeset -g ZSH_UI_THEME='\$(touch ${(q)marker})'" '
@@ -142,6 +171,7 @@ main() {
   test_color_resolution || return 1
   test_custom_palette || return 1
   test_fallbacks_and_modes || return 1
+  test_dashboard_renderer || return 1
   test_idempotence_and_safety || return 1
 }
 

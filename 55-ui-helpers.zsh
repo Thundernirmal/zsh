@@ -1,5 +1,11 @@
 # Shared terminal UI helpers.
 
+if (( ! $+functions[_zsh_theme_sgr] )); then
+  typeset _ui_theme_module=${${(%):-%x}:A:h}/25-theme.zsh
+  [[ -r $_ui_theme_module ]] && source "$_ui_theme_module"
+  unset _ui_theme_module
+fi
+
 _ui_term_width() {
   emulate -L zsh
 
@@ -35,9 +41,12 @@ _ui_term_height() {
 _ui_locale_is_utf8() {
   emulate -L zsh
 
-  local locale=${LC_ALL:-${LC_CTYPE:-${LANG:-}}}
-  locale=${(L)locale}
+  if (( $+functions[_zsh_theme_locale_is_utf8] )); then
+    _zsh_theme_locale_is_utf8
+    return
+  fi
 
+  local locale=${(L)${LC_ALL:-${LC_CTYPE:-${LANG:-}}}}
   [[ $locale == *utf-8* || $locale == *utf8* ]]
 }
 
@@ -67,64 +76,15 @@ _ui_ascii_mode() {
     return 0
   fi
 
-  [[ -n ${NO_NERD_FONT:-} ]]
+  [[ ${_ZSH_UI_GLYPH_TIER:-ascii} == ascii ]]
 }
 
 _ui_has_truecolor() {
-  emulate -L zsh
-
-  local colorterm=${(L)${COLORTERM:-}}
-  [[ $colorterm == truecolor || $colorterm == 24bit ]]
+  [[ ${_ZSH_UI_COLOR_DEPTH:-ansi} == truecolor ]]
 }
 
 _ui_has_icons() {
-  _ui_is_rich_terminal && [[ -z ${NO_NERD_FONT:-} ]]
-}
-
-_ui_palette_hex() {
-  case $1 in
-    accent|rosewater) print -r -- 'f5e0dc' ;;
-    base) print -r -- '1e1e2e' ;;
-    surface|surface0) print -r -- '313244' ;;
-    surface1) print -r -- '45475a' ;;
-    border|overlay|overlay0) print -r -- '6c7086' ;;
-    text) print -r -- 'cdd6f4' ;;
-    muted|subtext0) print -r -- 'a6adc8' ;;
-    subtext1) print -r -- 'bac2de' ;;
-    success|green) print -r -- 'a6e3a1' ;;
-    warning|yellow) print -r -- 'f9e2af' ;;
-    danger|red) print -r -- 'f38ba8' ;;
-    info|blue) print -r -- '89b4fa' ;;
-    lavender) print -r -- 'b4befe' ;;
-    mauve) print -r -- 'cba6f7' ;;
-    peach) print -r -- 'fab387' ;;
-    teal) print -r -- '94e2d5' ;;
-    sky) print -r -- '89dceb' ;;
-    *) return 1 ;;
-  esac
-}
-
-_ui_palette_256() {
-  case $1 in
-    accent|rosewater) print -r -- '224' ;;
-    base) print -r -- '235' ;;
-    surface|surface0) print -r -- '237' ;;
-    surface1) print -r -- '238' ;;
-    border|overlay|overlay0) print -r -- '60' ;;
-    text) print -r -- '189' ;;
-    muted|subtext0) print -r -- '145' ;;
-    subtext1) print -r -- '152' ;;
-    success|green) print -r -- '151' ;;
-    warning|yellow) print -r -- '223' ;;
-    danger|red) print -r -- '210' ;;
-    info|blue) print -r -- '111' ;;
-    lavender) print -r -- '147' ;;
-    mauve) print -r -- '183' ;;
-    peach) print -r -- '216' ;;
-    teal) print -r -- '116' ;;
-    sky) print -r -- '117' ;;
-    *) return 1 ;;
-  esac
+  _ui_is_rich_terminal && [[ ${_ZSH_UI_GLYPH_TIER:-ascii} == nerd ]]
 }
 
 _ui_color() {
@@ -132,27 +92,38 @@ _ui_color() {
 
   local role=$1
   local layer=${2:-fg}
-  local prefix=38
-  local hex code r g b
 
   _ui_is_rich_terminal || return 0
-  [[ $layer == bg ]] && prefix=48
-
-  if _ui_has_truecolor; then
-    hex=$(_ui_palette_hex "$role") || return 0
-    r=$(( 16#${hex[1,2]} ))
-    g=$(( 16#${hex[3,4]} ))
-    b=$(( 16#${hex[5,6]} ))
-    printf '\033[%s;2;%s;%s;%sm' "$prefix" "$r" "$g" "$b"
-    return 0
-  fi
-
-  code=$(_ui_palette_256 "$role") || return 0
-  printf '\033[%s;5;%sm' "$prefix" "$code"
+  (( $+functions[_zsh_theme_sgr] )) || return 0
+  _zsh_theme_sgr "$role" "$layer" ui || return 0
+  print -nr -- "$REPLY"
 }
 
 _ui_reset() {
   _ui_is_rich_terminal && printf '\033[0m'
+}
+
+_ui_unicode_icon() {
+  local glyph=$1 fallback=$2
+
+  case $glyph in
+    '󰄬') REPLY='✓' ;;
+    '󰚰') REPLY='↑' ;;
+    '󰍉') REPLY='⌕' ;;
+    '󰋼'|'󰘥'|'󰍹') REPLY='›' ;;
+    '󰀦') REPLY='!' ;;
+    '󰍛') REPLY='−' ;;
+    '󰅚') REPLY='×' ;;
+    '󰒭') REPLY='~' ;;
+    '󰏖'|'󰈔'|'󰈐'|'') REPLY='◇' ;;
+    '󰮯'|'󰣇') REPLY='△' ;;
+    '󰂚') REPLY='●' ;;
+    '󱄅') REPLY='❄' ;;
+    '󰌷') REPLY='↗' ;;
+    '󰉋') REPLY='▣' ;;
+    '󰔟') REPLY='◌' ;;
+    *) REPLY=$fallback ;;
+  esac
 }
 
 _ui_icon() {
@@ -160,12 +131,23 @@ _ui_icon() {
 
   local glyph=$1
   local fallback=$2
+  local unicode=${3:-}
 
-  if _ui_has_icons; then
-    print -nr -- "$glyph"
-  else
+  if _ui_plain_mode || [[ ${_ZSH_UI_GLYPH_TIER:-ascii} == ascii ]]; then
     print -nr -- "$fallback"
+    return
   fi
+
+  if [[ ${_ZSH_UI_GLYPH_TIER:-ascii} == nerd ]]; then
+    print -nr -- "$glyph"
+    return
+  fi
+
+  if [[ -z $unicode ]]; then
+    _ui_unicode_icon "$glyph" "$fallback"
+    unicode=$REPLY
+  fi
+  print -nr -- "$unicode"
 }
 
 _ui_status_metadata() {

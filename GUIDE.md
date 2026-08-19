@@ -119,7 +119,7 @@ On Debian and Ubuntu, the distribution may expose `bat` as `batcat`. This reposi
 
 ## Terminal output modes
 
-Dashboards use the shared Catppuccin-themed renderer only when all of these are true:
+Dashboards use the shared semantic theme renderer only when all of these are true:
 
 - stdout is a terminal
 - `TERM` is set and is not `dumb`
@@ -131,9 +131,13 @@ Pipes, redirects, narrow terminals, non-UTF-8 locales, and dumb terminals receiv
 
 | Setting | Effect |
 |---|---|
+| `ZSH_UI_THEME=catppuccin-mocha` | Select the dashboard palette; built-ins are `catppuccin-mocha`, `catppuccin-latte`, `nord`, `gruvbox-dark`, and `terminal` |
+| `ZSH_UI_GLYPHS=auto` | Select `auto`, `nerd`, `unicode`, or `ascii` dashboard glyphs independently of color |
 | `NO_COLOR=1` | Force shared dashboards to plain, uncoloured output |
-| `NO_NERD_FONT=1` | Keep colour but use ASCII-safe icons and bars |
+| `NO_NERD_FONT=1` | Keep colour but use ordinary Unicode rather than private-use Nerd Font glyphs |
 | `zhelp --plain` | Force the stable plain help view |
+
+Set theme variables before sourcing `init.zsh`. `catppuccin-mocha` remains the default. Invalid names and incomplete or malformed custom palettes fall back to Mocha without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents. Fzf keeps its existing fixed palette until the finder migration described in the active theming specification is complete.
 
 `NO_COLOR` does not disable fuzzy interaction: the `zhelp` palette stays interactive with colour disabled, while other fzf workflows retain fzf's own options.
 

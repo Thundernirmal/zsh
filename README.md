@@ -32,7 +32,7 @@ tips
 - File, search, Git branch navigation with labeled alternate worktrees, network, disk-usage, and process helpers.
 - `upkg` for detected package managers and optional `npkg` helpers for Nix profiles.
 - Optional `cgm` credential storage through Linux Secret Service.
-- Rich terminal dashboards with deterministic plain-text fallbacks.
+- Theme-aware rich terminal dashboards with deterministic plain-text fallbacks.
 
 ## Requirements
 

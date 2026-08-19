@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T2 complete
+**Status:** In progress — T3 complete
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -463,6 +463,8 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T3. Migrate the dashboard renderer
 
+**Status:** Completed 2026-08-19
+
 **Depends on:** T2
 
 **Primary files:** `55-ui-helpers.zsh`, theme/UI portions of `scripts/test-functions.zsh`, `scripts/test-upkg.zsh`, and `scripts/test-cgm.zsh`
@@ -601,6 +603,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Safety:** invalid names and custom values remain data; module sourcing uses no external commands; invalid startup settings are quiet outside a normal interactive prompt; re-sourcing is idempotent.
 - **Verification:** `scripts/test-theme.zsh` covers built-ins, custom validation, fallback atomicity, depth and glyph modes, terminal defaults, unsafe input, idempotence, and zero source-time subprocesses. All ordered repository checks passed.
 - **Performance:** command median 25.743 ms (+0.933 ms, +3.8% from baseline); interactive median 29.921 ms (+1.050 ms, +3.6%); 50 runs, warm cache. The change does not cross the combined 1 ms and 5% threshold, so no slowdown follow-up was created.
+
+### T3 ledger — dashboard renderer migration
+
+- **Commit:** task-scoped commit `feat(theming): migrate dashboard renderer`
+- **Outcome:** removed the private dashboard palettes, routed all rich SGR output through semantic theme roles, kept deterministic plain output, and added a three-tier Nerd/Unicode/ASCII icon fallback without changing dashboard data or sanitization.
+- **Compatibility:** `55-ui-helpers.zsh` can load the pure theme module when tested directly; `NO_COLOR`, redirected output, narrow terminals, dumb terminals, and non-UTF-8 locales remain plain and ASCII-safe. README, GUIDE, and tips describe the dashboard behavior now in effect.
+- **Verification:** theme tests prove live palette changes, absence of the legacy palette functions, Unicode fallback, and colorless plain output. All ordered repository checks passed.
+- **Performance:** first sample was command 25.111 ms and interactive 31.607 ms; the required confirmation sample was command 25.757 ms (+0.947 ms, +3.8% from baseline) and interactive 30.195 ms (+1.324 ms, +4.6%). The confirmation did not cross 5%, so no slowdown follow-up was created.
 
 ## Automated acceptance criteria
 
