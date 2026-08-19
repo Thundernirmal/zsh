@@ -740,4 +740,20 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 
 ## Performance follow-ups
 
-None. Add only confirmed regressions that cross the performance protocol threshold, together with an owner task and measurable exit criterion.
+### PF-01. Recover theme/fzf startup overhead
+
+**Status:** Open; execute after T8 and before the final audit
+
+**Introduced by:** T4 (`a8b8e09`)
+
+**Evidence:** the confirmation benchmark measured command startup at 32.227 ms versus the 24.810 ms baseline and interactive startup at 35.700 ms versus 28.871 ms. Both exceed the combined 1 ms and 5% threshold.
+
+**Plan:**
+
+- profile command and interactive startup separately to distinguish module parsing, semantic color compilation, zoxide initialization, and fzf export composition;
+- cache or precompute repeated role-to-fzf mappings by theme/depth/layout/glyph signature and avoid rebuilding identical chrome for zoxide and fzf;
+- reduce work on the command-mode path while preserving the requirement that `_ZO_FZF_OPTS` exists before `zoxide init`;
+- keep version validation, generated-integration cache safety, option precedence, `NO_COLOR`, and all presentation acceptance criteria unchanged;
+- add a regression assertion or a documented benchmark comparison that remains stable enough for this repository's environment.
+
+**Exit criterion:** two consecutive 50-run samples must put both medians below the T1 slowdown threshold (command at or below 26.051 ms and interactive at or below 30.315 ms), with the full ordered suite passing. If host variance prevents that absolute target, document the profile evidence and demonstrate that the optimized task is not more than 5% slower than an immediately adjacent checkout of the T1 commit under interleaved measurements.
