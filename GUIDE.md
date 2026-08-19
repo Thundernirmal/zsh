@@ -145,6 +145,23 @@ Set theme variables before sourcing `init.zsh`. `catppuccin-mocha` remains the d
 
 `NO_COLOR` does not disable fuzzy interaction. It removes repository-managed fzf colors, prevents color-forced file previews, and remains the final option even when inherited or extra options request colors.
 
+### Theme discovery and session switching
+
+`ztheme` inspects or switches the shared dashboard and finder palette without invoking an external program:
+
+```zsh
+ztheme list                 # list built-ins and mark active/default themes
+ztheme current              # show theme, layout, glyph, depth, and option layers
+ztheme show nord            # show semantic role values or terminal swatches
+ztheme use nord             # switch dashboards and future fzf launches now
+ztheme reset                # restore Catppuccin Mocha now
+ztheme export nord          # print settings to copy into ~/.zshrc
+```
+
+`use` and `reset` affect only the current shell session. They set fzf back to inheriting the selected UI theme and refresh future fzf and zoxide picker launches; a picker that is already open is unchanged. Invalid names and invalid custom palettes return nonzero without changing the active theme or finder exports.
+
+To persist a built-in choice, copy the output of `ztheme export <name>` above the `source init.zsh` line in the machine-local `~/.zshrc`. The command prints text only and never edits that file. Exporting a validated `custom` theme also prints its complete role array in stable order.
+
 `dusage`, `bigfiles`, and `path` sanitize filesystem- or environment-controlled labels before rendering. Named controls such as newline, tab, escape, and bell become visible escapes; other C0, DEL, and C1 bytes use forms such as `\x7f`. Sanitization happens before measuring or truncating, keeps each value on one logical line, and preserves printable Unicode.
 
 Rich output is for people, not parsers. Pipe a command or use its explicit plain option when output will be consumed by another program.

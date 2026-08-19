@@ -29,6 +29,17 @@ if (( $+functions[compdef] )); then
   typeset -ga _ZSH_EXTRACT_EXTENSIONS=(
     tar.bz2 tar.gz tar.xz tar.zst bz2 rar gz tar tbz2 tgz tzst zip Z 7z
   )
+  typeset -ga _ZSH_ZTHEME_COMMAND_SPECS=(
+    'list:List built-in themes'
+    'current:Show active session settings'
+    'show:Show semantic role values'
+    'use:Apply a theme to this shell session'
+    'reset:Restore Catppuccin Mocha for this session'
+    'export:Print safe settings for ~/.zshrc'
+  )
+  typeset -ga _ZSH_ZTHEME_NAMES=(
+    catppuccin-mocha catppuccin-latte nord gruvbox-dark terminal
+  )
   typeset -ga _ZSH_NPKG_COMMAND_SPECS=(
     'add:Add packages or open the package picker'
     'install:Alias for add'
@@ -274,6 +285,33 @@ if (( $+functions[compdef] )); then
       '*:additional search term:'
   }
 
+  _zsh_ztheme() {
+    local context state state_descr line
+    typeset -A opt_args
+
+    _arguments -C \
+      '(-h --help)'{-h,--help}'[show ztheme usage]' \
+      '1:ztheme command:->command' \
+      '2:theme:->theme' \
+      '*: :_message "no additional arguments"' && return 0
+
+    case $state in
+      command)
+        _describe -t commands 'ztheme command' _ZSH_ZTHEME_COMMAND_SPECS
+        ;;
+      theme)
+        case ${line[1]-} in
+          show|use|export)
+            _describe -t themes 'built-in theme' _ZSH_ZTHEME_NAMES
+            ;;
+          *)
+            _message 'no theme argument'
+            ;;
+        esac
+        ;;
+    esac
+  }
+
   _zsh_no_arguments() {
     _message 'no arguments'
   }
@@ -288,6 +326,7 @@ if (( $+functions[compdef] )); then
   compdef _zsh_fkill fkill
   compdef _zsh_headers headers
   compdef _zsh_zhelp zhelp
+  compdef _zsh_ztheme ztheme
   compdef _zsh_no_arguments fbr croot path ports myip gitcount fanprofile tips
 
   if (( $+functions[npkg] )); then

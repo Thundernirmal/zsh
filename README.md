@@ -21,6 +21,7 @@ exec zsh
 $HOME/.config/zsh/scripts/check-deps.sh
 zhelp
 tips
+ztheme list
 ```
 
 `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example.
@@ -34,7 +35,7 @@ Fuzzy pickers share labeled sections, concise footer hints, responsive previews,
 - File, search, Git branch navigation with labeled alternate worktrees, network, disk-usage, and process helpers.
 - `upkg` for detected package managers and optional `npkg` helpers for Nix profiles.
 - Optional `cgm` credential storage through Linux Secret Service.
-- Shared themes for rich dashboards and every fzf entry point, with deterministic plain-text fallbacks.
+- Shared themes for rich dashboards and every fzf entry point, with safe session switching through `ztheme` and deterministic plain-text fallbacks.
 
 ## Requirements
 

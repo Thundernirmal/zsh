@@ -215,6 +215,64 @@ print -r -- "${(j:|:)reply}"')
   fi
 }
 
+test_ztheme_command() {
+  local output marker="$test_tmp/ztheme-executed"
+  output=$(run_theme_case '' '
+source '"${repo_dir}"'/55-ui-helpers.zsh
+source '"${repo_dir}"'/60-functions.zsh
+typeset -gi ZTHEME_REFRESHES=0 ZTHEME_FAIL=0
+typeset -g _FZF_STATE=ready FZF_DEFAULT_OPTS=""
+_fzf_export_config() {
+  (( ZTHEME_REFRESHES++ ))
+  typeset -g FZF_DEFAULT_OPTS="theme=$ZSH_UI_THEME"
+  (( ! ZTHEME_FAIL ))
+}
+ztheme use nord >/dev/null || exit 22
+print -r -- "$ZSH_UI_THEME|${ZSH_FZF_THEME-}|$_ZSH_UI_ACTIVE_THEME|$_ZSH_FZF_ACTIVE_THEME|$FZF_DEFAULT_OPTS|$ZTHEME_REFRESHES"
+before=$ZTHEME_REFRESHES
+ztheme use '\''$(touch '"${(q)marker}"')'\'' >/dev/null 2>&1
+invalid_rc=$?
+print -r -- "$invalid_rc|$ZSH_UI_THEME|$FZF_DEFAULT_OPTS|$(( ZTHEME_REFRESHES - before ))"
+ZTHEME_FAIL=1
+ztheme use catppuccin-latte >/dev/null 2>&1
+failed_refresh_rc=$?
+print -r -- "$failed_refresh_rc|$ZSH_UI_THEME|$_ZSH_UI_ACTIVE_THEME|$FZF_DEFAULT_OPTS"
+ZTHEME_FAIL=0
+ztheme reset >/dev/null || exit 23
+print -r -- "$ZSH_UI_THEME|$_ZSH_FZF_ACTIVE_THEME"
+functions[_ui_is_rich_terminal]="return 1"
+shown=$(ztheme show nord) || exit 24
+esc=$(printf '\033')
+[[ $shown == *$esc* ]] && ansi=1 || ansi=0
+print -r -- "${${(f)shown}[1]}|${${(f)shown}[3]}|ansi=$ansi|active=$ZSH_UI_THEME"
+_FZF_INHERITED_DEFAULT_OPTS="--color=fg:red"
+current=$(ztheme current)
+print -r -- "${${(f)current}[1]}|${${(f)current}[2]}|${${(f)current}[6]}"
+exported=$(ztheme export gruvbox-dark) || exit 25
+print -r -- "${(j:|:)${(f)exported}}"
+listed=$(ztheme list)
+print -r -- "${(j:|:)${(f)listed}}"
+typeset -gA ZSH_UI_CUSTOM_COLORS
+for role in "${_ZSH_UI_THEME_ROLES[@]}"; do
+  ZSH_UI_CUSTOM_COLORS[$role]=101010
+done
+custom_export=$(ztheme export custom) || exit 26
+custom_lines=( "${(f)custom_export}" )
+print -r -- "$custom_lines[1]|$custom_lines[2]|$custom_lines[16]|$custom_lines[17]|$custom_lines[18]|$custom_lines[19]"')
+
+  assert_equals "${${(f)output}[1]}" 'nord||nord|nord|theme=nord|1' 'ztheme use applies UI and inherited fzf themes and refreshes exports' || return 1
+  assert_equals "${${(f)output}[2]}" '1|nord|theme=nord|0' 'invalid ztheme input leaves settings and integrations untouched' || return 1
+  [[ ! -e $marker ]]
+  assert_status "$?" 0 'ztheme names cannot execute shell syntax' || return 1
+  assert_equals "${${(f)output}[3]}" '1|nord|nord|theme=nord' 'failed finder refresh rolls the active theme and exports back' || return 1
+  assert_equals "${${(f)output}[4]}" 'catppuccin-mocha|catppuccin-mocha' 'ztheme reset restores the compatibility default' || return 1
+  assert_equals "${${(f)output}[5]}" 'Theme: nord|base        #2e3440|ansi=0|active=catppuccin-mocha' 'ztheme show has stable plain output and does not switch themes' || return 1
+  assert_equals "${${(f)output}[6]}" 'UI theme: catppuccin-mocha|fzf theme: catppuccin-mocha (inherits UI)|external fzf options: yes' 'ztheme current reports inheritance and external option layers' || return 1
+  assert_equals "${${(f)output}[7]}" "typeset -g ZSH_UI_THEME=gruvbox-dark|typeset -g ZSH_FZF_THEME=''" 'ztheme export prints safe machine-local assignments' || return 1
+  assert_equals "${${(f)output}[8]}" 'Theme|catppuccin-mocha [ui fzf default]|catppuccin-latte|nord|gruvbox-dark|terminal' 'ztheme list is stable and marks active and default themes' || return 1
+  assert_equals "${${(f)output}[9]}" "typeset -gA ZSH_UI_CUSTOM_COLORS=(|  base 101010|  danger 101010|)|typeset -g ZSH_UI_THEME=custom|typeset -g ZSH_FZF_THEME=''" 'ztheme export serializes a validated custom palette in stable role order' || return 1
+}
+
 test_idempotence_and_safety() {
   local output marker="$test_tmp/executed"
   output=$(run_theme_case "typeset -g ZSH_UI_THEME='\$(touch ${(q)marker})'" '
@@ -248,6 +306,7 @@ main() {
   test_dashboard_renderer || return 1
   test_fzf_compiler || return 1
   test_picker_presentation || return 1
+  test_ztheme_command || return 1
   test_idempotence_and_safety || return 1
 }
 

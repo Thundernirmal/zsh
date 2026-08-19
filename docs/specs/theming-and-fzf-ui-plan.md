@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T5 complete; PF-01 scheduled
+**Status:** In progress — T6 complete; startup follow-up required
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -524,6 +524,8 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T6. Add theme discovery and completion
 
+**Status:** Completed 2026-08-19
+
 **Depends on:** T2; use T4 for runtime fzf refresh
 
 **Primary files:** command implementation location, `65-help.zsh`, `66-compdefs.zsh`, `scripts/test-help.zsh`, `scripts/test-completions.zsh`
@@ -631,6 +633,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Selection safety:** `--accept-nth` now returns raw PIDs, branch names, help examples, and Nix profile targets directly. Git and Nix rows place visible identity first before applying `--freeze-left=1`; cancellation and downstream signal, checkout/worktree, command-queueing, and Nix mutation behavior remain unchanged.
 - **Verification:** tests cover the exact 99/100-column preview boundary, combined context/preview/multi arguments against installed fzf, stable result projection, live-count footer wiring, semantic badge/preview colors, and absence of duplicated pointer/marker policy. All ordered repository checks passed.
 - **Performance:** sample one was command 25.615 ms and interactive 30.625 ms; confirmation was command 25.652 ms (+0.842 ms, +3.4% from baseline) and interactive 30.337 ms (+1.466 ms, +5.1%). Both medians improved materially from T4, so T5 introduced no new follow-up; the small remaining confirmed interactive baseline regression remains covered by PF-01.
+
+### T6 ledger — theme discovery and completion
+
+- **Commit:** task-scoped commit `feat(theming): add session theme command`
+- **Outcome:** added `ztheme list`, `current`, `show`, `use`, `reset`, and `export`; safe plain tables and terminal swatches; atomic current-session switching; complete custom-palette export; one terse help record; and static subcommand/built-in completion.
+- **Safety and refresh:** theme names remain validated data, invalid input changes nothing, and an fzf refresh failure rolls the public settings, resolved themes, and finder exports back. Successful switching refreshes future fzf and zoxide launches without subprocesses or persistent writes; exported settings are printed for deliberate placement in the machine-local `.zshrc`.
+- **Verification:** tests cover switching, reset, refresh rollback, shell-like input, stable list/current/show output, external-option reporting, built-in and custom export, help coverage, static completion, and live fzf/zoxide export changes. All ordered repository checks passed.
+- **Performance:** sample one was command 28.402 ms and interactive 32.181 ms; confirmation was command 27.198 ms (+2.388 ms, +9.6% from baseline; +1.546 ms, +6.0% from T5) and interactive 32.169 ms (+3.298 ms, +11.4% from baseline; +1.832 ms, +6.0% from T5). The new regression is confirmed and requires a dedicated performance follow-up.
 
 ## Automated acceptance criteria
 

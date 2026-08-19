@@ -111,6 +111,7 @@ _zsh_help_register T Meta 'Pipe command output to tail' '<command> T' 'git log -
 _zsh_help_register NE Meta 'Suppress stderr for one command' '<command> NE' 'optional-command NE' none alias none
 _zsh_help_register NUL Meta 'Suppress stdout and stderr for one command' '<command> NUL' 'noisy-command NUL' none alias none
 _zsh_help_register tips Meta 'Print one short usage tip' 'tips' 'tips' none function none
+_zsh_help_register ztheme Meta 'Inspect or switch shared terminal themes' 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme use nord' none function none
 _zsh_help_register zhelp Meta 'Find commands and queue an example' 'zhelp [--all] [--plain] [query]' 'zhelp package' 'fzf 0.68.0+ for the optional interactive palette' function none
 
 _zsh_help_entry_exists() {
