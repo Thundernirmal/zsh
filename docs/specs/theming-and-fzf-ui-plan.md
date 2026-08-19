@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** Implementation complete — final audit in progress; Nix-host visual signoff remains blocked
+**Status:** Implementation complete and audited — Nix-host visual signoff remains blocked
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -696,6 +696,37 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Outcome:** `fbr` now previews and accepts field five, which is the undecorated branch identity; visible labels, `[WT]` badges, frozen columns, sorting, checkout, and worktree navigation stay unchanged.
 - **Verification:** an installed-fzf regression fixture now exercises the exact five-field projection. The full ordered suite and a real-PTY current-branch selection passed.
 - **Performance:** command median 25.701 ms and interactive median 29.953 ms over 50 runs. Both pass the frozen T1 thresholds of 26.051 ms and 30.315 ms, so T9 introduced no performance follow-up.
+
+## Final audit — 2026-08-19
+
+The implementation, automated verification, available-host visual QA, and performance remediation are complete. The tracked working tree is clean at the audit boundary; `qa-features.csv` is the only ignored working artifact. Its 39 rows record 37 `Pass` results and two `Blocked` Nix picker checks because this host has no Nix installation. The fake-Nix regression suite still covers their projection, cancellation, and mutation boundaries, but a Nix-equipped host remains required before claiming full stable-release visual signoff.
+
+### Exact commit ledger
+
+| Boundary | Commit | Subject |
+|---|---|---|
+| Approved plan | `adedcb2d9f39217390b970378ae435c95f56ff78` | `feat(theming): introduce shared theming and fzf UI plan with customizable palettes` |
+| T1 | `8c7e043e2b344dc39e06a8c2cebcbabbb84f106d` | `chore(theming): freeze contract and startup baseline` |
+| T2 | `6e8fb8698ff9d3070f1356fe5ce615db71a8ecab` | `feat(theming): add semantic theme registry` |
+| T3 | `659a9806d3c368a1d6ef3aa53c05510062394f34` | `feat(theming): migrate dashboard renderer` |
+| T4 | `a8b8e096869e1832b4ea5acd801bc07ebe243810` | `feat(fzf): add theme-aware structured UI` |
+| T4 slowdown ledger | `6f10afbd0abe6f30d9778d46d4a9e557fb569bc4` | `docs(theming): track startup performance regression` |
+| T5 | `4628da4067cde5e10ffc010668e67d88c149a1ca` | `feat(fzf): unify direct picker presentation` |
+| T6 | `bc8ad5b0eed0fe924f85cebb3a308f07ee2fc28d` | `feat(theming): add session theme command` |
+| T6 slowdown ledger | `cf6d8803a61e703dc905b89550de8f7b2d723fd1` | `docs(theming): track ztheme startup regression` |
+| T7 | `36f9e22ba3e6634ce34614176bb66dae92bd7cb8` | `docs(theming): document themes and picker UX` |
+| T8 | `2649b48ea95f16776854b4afcc6fcf2293e6a14f` | `ci(theming): run theme regression suite` |
+| PF-01/PF-02 | `5f3a18a5837bc2395620959bcccc10034bb97ab8` | `perf(theming): defer command-only theme helpers` |
+| T9 | `e71f829f88b9233f650a88a7de311af08b7a4d59` | `fix(fbr): return the raw branch field` |
+
+### Audit result
+
+- The complete ordered verification suite passed after T9, including the installed-fzf five-field `fbr` projection regression.
+- Real-PTY QA passed cold/warm startup, every built-in swatch, session switching and rollback, custom palettes, all layouts, color/glyph fallbacks, 59/60 and 99/100 boundaries, generated widgets and completion, zoxide, `fkill`, `fbr`, and `zhelp`.
+- The optional dependency audit passed with only Nix absent; installed fzf is 0.74.3 against the 0.68.0 floor.
+- The final executable benchmark measured 25.701 ms command-mode and 29.953 ms interactive medians over 50 runs, below the frozen 26.051/30.315 ms limits.
+- Current user/help/dependency surfaces consistently require fzf 0.68.0. The older 0.52.0 decision remains only in its explicitly superseded historical specification.
+- Semantic palettes are centralized in the theme registry; no fixed RGB or 256-color palette remains in picker or dashboard call sites.
 
 ## Automated acceptance criteria
 
