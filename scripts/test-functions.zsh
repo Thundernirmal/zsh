@@ -282,12 +282,19 @@ test_fkill_default_signal() {
 test_fbr_worktree_navigation() {
   local fixture_repo="$tmp_dir/fbr-repo"
   local worktree_dir="$tmp_dir/fbr worktree"
-  local original_dir=$PWD branch current_branch worktree_path
+  local original_dir=$PWD branch current_branch projected worktree_path
   local -A worktree_paths
 
-  assert_contains "${functions[fbr]}" '--accept-nth=4' 'fbr asks fzf to return the branch field directly' || return 1
+  assert_contains "${functions[fbr]}" '--accept-nth=5' 'fbr asks fzf to return the branch field directly' || return 1
+  assert_contains "${functions[fbr]}" "git log --oneline --decorate --color=always -20 {5}" 'fbr previews the undecorated branch field' || return 1
   assert_contains "${functions[fbr]}" '_fzf_picker_preview_args Log' 'fbr uses the shared responsive preview policy' || return 1
   assert_not_contains "${functions[fbr]}" '38;5;116' 'fbr worktree badges no longer embed a raw palette color' || return 1
+
+  if (( $+commands[fzf] )); then
+    projected=$(print -r -- $'visible\tdate\tsubject\t/worktree path\traw-branch' |
+      command fzf --filter visible --delimiter=$'\t' --with-nth=1,2,3 --nth=1,2,3 --accept-nth=5)
+    assert_equals "$projected" 'raw-branch' 'fbr five-field rows project the raw branch identity' || return 1
+  fi
 
   command git init -q "$fixture_repo" || return 1
   print -r -- 'fixture' >"$fixture_repo/tracked.txt"

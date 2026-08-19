@@ -1117,9 +1117,9 @@ fbr() {
   fi
 
   if [[ -n ${NO_COLOR:-} ]]; then
-    preview_command='git log --oneline --decorate --color=never -20 {1}'
+    preview_command='git log --oneline --decorate --color=never -20 {5}'
   else
-    preview_command='git log --oneline --decorate --color=always -20 {1}'
+    preview_command='git log --oneline --decorate --color=always -20 {5}'
   fi
   _fzf_picker_context_args Branches 'Type to filter branches' 'Enter checkout  Ctrl-P preview  Ctrl-/ wrap  Esc close'
   context_args=( "${reply[@]}" )
@@ -1132,7 +1132,7 @@ fbr() {
     --delimiter=$'\t'
     --with-nth=1,2,3
     --nth=1,2,3
-    --accept-nth=4
+    --accept-nth=5
     --freeze-left=1
     --no-multi
     "--preview=$preview_command"

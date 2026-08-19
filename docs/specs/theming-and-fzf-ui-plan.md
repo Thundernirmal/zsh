@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — implementation and performance work complete; manual visual QA remains
+**Status:** Implementation complete — final audit in progress; Nix-host visual signoff remains blocked
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -561,7 +561,7 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T8. CI, integration, and manual visual QA
 
-**Status:** Automation completed 2026-08-19; full local visual checklist remains open
+**Status:** Available-host QA completed 2026-08-19; Nix install/remove visual checks are host-blocked
 
 **Depends on:** T3-T7
 
@@ -576,12 +576,29 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 **Done when:** all release gates below pass and the spec can be marked Implemented.
 
+### T9. Correct interactive `fbr` result projection
+
+**Status:** Completed 2026-08-19
+
+**Depends on:** T5 and T8 interactive audit
+
+**Primary files:** `60-functions.zsh`, `scripts/test-functions.zsh`, synchronized user documentation
+
+**Size:** small
+
+- Correct the five-field branch row so Enter returns and previews the undecorated branch field rather than the empty worktree-display field.
+- Add an installed-fzf projection regression test using the same delimiter and field layout as `fbr`.
+- Re-run the real-PTY current-branch selection and prove the checkout/worktree action receives the raw branch identity.
+
+**Done when:** selecting the current branch returns cleanly, preserves the checkout, and no longer reports `Branch '' was not found`.
+
 ### Dependency graph
 
 ```text
 T1 -> T2 -> T3 ----\
           \-> T4 ----> T5 ----\
               \------> T6 ----+--> T7 --> T8
+                                     T8 --> T9
 ```
 
 T3 and T4 are the main parallel lane. T6 may begin after the resolver and fzf refresh API stabilize. T7 intentionally waits until public names and behavior stop moving.
@@ -659,7 +676,7 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Commit:** task-scoped commit `ci(theming): run theme regression suite`
 - **Outcome:** added dedicated theme-test syntax and execution steps to GitHub Actions. Created the required 39-row `qa-features.csv` locally with the exact `cmd,expected behavior,Status` contract; `.gitignore` already keeps it out of Git history.
 - **Integration audit:** real PTY cold and warm prompt launches both reached a ready fzf state and retained exactly one private integration cache file. The startup fixture independently confirms one cold version probe and integration generation, no warm regeneration or syntax validation, and no repeat validation when theme, layout, or no-color presentation changes.
-- **Manual QA:** all five built-in `ztheme show` swatch sets and cold/warm prompt presentation passed. The local checklist currently records 7 `Pass` and 32 `Not Run`; those remaining interactive picker, width, glyph, layout, custom, and unavailable-Nix cases stay an explicit final release gate rather than being reported as automated coverage.
+- **Manual QA:** the local 39-row checklist records 37 `Pass` and two `Blocked`. Real-PTY checks covered cold/warm startup, all built-in swatches, theme commands, custom validation, layout/color/glyph modes, both responsive boundaries, generated widgets and completions, zoxide, `fkill`, `fbr`, and `zhelp`. The `fbr` Enter-path defect found here is corrected in T9. Only `npkg add` and `npkg remove` remain blocked because this host has no Nix installation; their data, projection, cancellation, and mutation boundaries retain automated fake-Nix coverage.
 - **Verification:** the CSV parses as 39 complete rows with only allowed statuses. All ordered repository checks passed with the new CI commands.
 - **Performance:** sample one was command 25.905 ms and interactive 31.036 ms; confirmation was command 26.165 ms and interactive 31.173 ms. T8 changes CI and ledger files only, so it introduces no executable startup path; the remaining interactive baseline regression stays covered by PF-01 and PF-02, with no T8-specific follow-up.
 
@@ -671,6 +688,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Safety and compatibility:** startup still registers `ztheme`, help, and static completion; first and repeated command use, re-source, custom startup, truecolor, 256-color, terminal, no-color, failed refresh rollback, inherited options, and generated cache behavior remain covered. Lazy helpers perform no discovery, download, or subprocess and add their private function path only once.
 - **Verification:** all ordered checks plus explicit truecolor and 256-color first-use smoke tests passed. CI and maintainer syntax checks now include `functions/ztheme` and every `lib/*.zsh` helper.
 - **Performance exit:** after one near-threshold probe and further palette/registry deferral, two consecutive 50-run samples passed the absolute T1 criteria: command/interactive medians were 25.530/29.928 ms and 25.638/30.254 ms. Both are at or below the required 26.051/30.315 ms limits, closing PF-01 and PF-02.
+
+### T9 ledger — interactive `fbr` projection correction
+
+- **Commit:** task-scoped commit `fix(fbr): return the raw branch field`
+- **Discovery:** the real-PTY T8 audit showed that the row rendered correctly but Enter returned field four, the intentionally empty current-worktree display column, and `_fbr_activate` consequently reported `Branch '' was not found`.
+- **Outcome:** `fbr` now previews and accepts field five, which is the undecorated branch identity; visible labels, `[WT]` badges, frozen columns, sorting, checkout, and worktree navigation stay unchanged.
+- **Verification:** an installed-fzf regression fixture now exercises the exact five-field projection. The full ordered suite and a real-PTY current-branch selection passed.
+- **Performance:** command median 25.701 ms and interactive median 29.953 ms over 50 runs. Both pass the frozen T1 thresholds of 26.051 ms and 30.315 ms, so T9 introduced no performance follow-up.
 
 ## Automated acceptance criteria
 
