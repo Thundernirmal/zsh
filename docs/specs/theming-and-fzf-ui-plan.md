@@ -1,12 +1,12 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T6 complete; PF-01 and PF-02 scheduled
+**Status:** In progress — T7 complete; PF-01 and PF-02 scheduled
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
 **Last revised:** 2026-08-19; minimum fzf version raised to 0.68.0 after upstream capability review
 
-**Current usage:** Until this plan is implemented, [`GUIDE.md`](../../GUIDE.md) remains the authoritative description of the fixed Catppuccin UI and current fzf behavior.
+**Current usage:** [`GUIDE.md`](../../GUIDE.md) is the authoritative reference for the implemented theme settings, `ztheme`, and fzf workflows. This specification remains the task ledger until the final release gates and performance follow-ups are complete.
 
 ## Summary
 
@@ -543,6 +543,8 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T7. Synchronize user and maintainer documentation
 
+**Status:** Completed 2026-08-19
+
 **Depends on:** T5 and T6 interfaces frozen
 
 **Primary files:** `README.md`, `GUIDE.md`, `80-tips.zsh`, `AGENTS.md`
@@ -641,6 +643,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Safety and refresh:** theme names remain validated data, invalid input changes nothing, and an fzf refresh failure rolls the public settings, resolved themes, and finder exports back. Successful switching refreshes future fzf and zoxide launches without subprocesses or persistent writes; exported settings are printed for deliberate placement in the machine-local `.zshrc`.
 - **Verification:** tests cover switching, reset, refresh rollback, shell-like input, stable list/current/show output, external-option reporting, built-in and custom export, help coverage, static completion, and live fzf/zoxide export changes. All ordered repository checks passed.
 - **Performance:** sample one was command 28.402 ms and interactive 32.181 ms; confirmation was command 27.198 ms (+2.388 ms, +9.6% from baseline; +1.546 ms, +6.0% from T5) and interactive 32.169 ms (+3.298 ms, +11.4% from baseline; +1.832 ms, +6.0% from T5). The new regression is confirmed and requires a dedicated performance follow-up.
+
+### T7 ledger — documentation synchronization
+
+- **Commit:** task-scoped commit `docs(theming): document themes and picker UX`
+- **Outcome:** kept README as the short setup surface; made GUIDE authoritative for built-ins, all 15 custom roles, depth and glyph fallbacks, exact layout boundaries, option precedence, `ztheme`, picker controls, accessibility, persistence, and external-theme boundaries; and updated maintainer ownership and fzf upgrade guidance. The existing theme and picker tips were reviewed and remain concise and current.
+- **Attribution:** GUIDE records canonical Catppuccin, Nord, and Gruvbox sources and their MIT licensing without adding startup-path metadata or executable work.
+- **Verification:** documentation claims were checked against the live registry, option composition, command help, and generated exports. `zhelp --plain ztheme` reports the complete interface as available, and all ordered repository checks passed.
+- **Performance:** sample one was command 26.053 ms and interactive 30.979 ms; confirmation was command 32.376 ms and interactive 31.223 ms. T7 changes documentation files only, so the executable startup tree is byte-identical to T6; the wide command-mode spread in the confirmation (p95 43.402 ms, max 48.823 ms) is host variance, while the remaining baseline regression is already covered by PF-01 and PF-02. No T7-specific follow-up was added.
 
 ## Automated acceptance criteria
 

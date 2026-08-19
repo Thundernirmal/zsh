@@ -9,6 +9,9 @@ A portable, versioned Zsh layer for GNU/Linux. It adds safer interactive default
 This repository expects to live at `~/.config/zsh`. Source it near the end of `~/.zshrc`, after Oh My Zsh if the shared aliases should take precedence:
 
 ```zsh
+# Optional: choose a built-in palette before loading the shared layer.
+typeset -g ZSH_UI_THEME=nord
+
 if [ -r "$HOME/.config/zsh/init.zsh" ]; then
   source "$HOME/.config/zsh/init.zsh"
 fi
@@ -46,6 +49,8 @@ The dependency checker treats these as required for the intended setup:
 - stable `fzf` 0.68.0 or newer
 
 Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
+
+If the packaged fzf is older than 0.68.0, upgrade it through a current package source or follow the upstream installation link printed by `scripts/check-deps.sh`.
 
 The configuration targets GNU/Linux. Some commands and flags are not portable to BSD or macOS userlands without adjustment.
 
