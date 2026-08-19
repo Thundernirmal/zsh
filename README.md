@@ -29,7 +29,7 @@ ztheme list
 
 `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example.
 
-Fuzzy pickers share labeled sections, concise footer hints, responsive previews, and theme-aware focus and selection cues. Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
+Fuzzy pickers share one rounded frame with restrained section dividers, concise footer hints, responsive previews, and theme-aware focus and selection cues. Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
 
 ## What it provides
 

@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** Implementation complete and audited — Nix-host visual signoff remains blocked
+**Status:** Implementation complete — T10 rounded-frame follow-up complete; final hash audit pending
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -85,7 +85,7 @@ These capabilities and their release boundaries are documented in the [official 
 The project intentionally stops at 0.68. Later releases add useful capabilities, but none is required for the target workflows:
 
 - 0.71 adds tmux/Zellij popup integration, which is environment-specific and remains outside the shared default.
-- 0.72 adds inline sections and dashed borders, which are mostly decorative once clean `line` section borders are available.
+- 0.72 adds inline sections and dashed borders. Raising the floor is unnecessary for a cohesive frame: on 0.68, one rounded outer border plus explicit input/header/footer dividers provides the same hierarchy without nested boxes or the height-mode top rule produced by `full:line`.
 - 0.73 adds the `next` preview position, but the established responsive side/bottom layout already works across supported terminals.
 
 Additional design conclusions:
@@ -253,15 +253,15 @@ Once implemented, this decision supersedes only the **minimum version value** in
 
 ### 5.1 Use a consistent section hierarchy
 
-The default `compact` layout should use a restrained `full:line` treatment rather than drawing a rounded box around every section. The `roomy` layout may use rounded section borders and more padding; `minimal` uses fzf's minimal preset while retaining essential labels, focus cues, and footer hints.
+Every layout uses one restrained rounded outer frame rather than a rounded box around every section. The list has no nested border; input and optional header sections use one lower divider, and the footer uses one upper divider. The picker label lives in the outer border and the input divider owns the `Search` label. The info separator is left implicit so fzf suppresses it when the input border already provides separation.
 
 The first implementation freezes these layout values:
 
 | Profile | Finder frame | Wide preview (at least 100 columns) | Narrow preview |
 |---|---|---|---|
-| `compact` | adaptive `~60%`, `reverse`, `full:line`, inline-right info | right `50%` | down `40%` |
-| `roomy` | fixed `80%`, `reverse`, `full:rounded`, inline-right info | right `55%` | down `45%` |
-| `minimal` | adaptive `~45%`, `reverse`, `minimal`, inline-right info | right `45%`, labels retained | down `35%`, labels retained |
+| `compact` | adaptive `~60%`, `reverse`, rounded frame, `0,1` padding, inline-right info | right `50%` | down `40%` |
+| `roomy` | fixed `80%`, `reverse`, rounded frame, `1,2` padding, inline-right info | right `55%` | down `45%` |
+| `minimal` | adaptive `~45%`, `reverse`, rounded frame, `0,1` padding, inline-right info | right `45%`, labels retained | down `35%`, labels retained |
 
 The breakpoint is exactly 100 columns. Picker-specific preview defaults may hide a preview, but when shown they use these proportions. Layout switching changes presentation only; candidate generation, selection, and actions are invariant.
 
@@ -592,13 +592,30 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 **Done when:** selecting the current branch returns cleanly, preserves the checkout, and no longer reports `Branch '' was not found`.
 
+### T10. Replace stacked fzf rules with one rounded frame
+
+**Status:** Completed 2026-08-19
+
+**Depends on:** T4, T5, and post-implementation visual feedback
+
+**Primary files:** `25-theme.zsh`, fzf theme/integration tests, synchronized user documentation
+
+**Size:** small
+
+- Replace the `full:line`/nested-section presets with one explicit rounded outer border supported by the 0.68 floor.
+- Keep only useful input, optional header, and footer dividers; remove the explicit info separator that duplicated the input divider.
+- Move each picker identity label from the removed list border to the outer frame.
+- Preserve height profiles, responsive previews, theme roles, selection behavior, option precedence, and generated-integration caching.
+
+**Done when:** a real 100-column PTY shows exactly one rounded outer frame, one input divider, and one footer divider, with no stacked top rule.
+
 ### Dependency graph
 
 ```text
 T1 -> T2 -> T3 ----\
           \-> T4 ----> T5 ----\
               \------> T6 ----+--> T7 --> T8
-                                     T8 --> T9
+                                     T8 --> T9 --> T10
 ```
 
 T3 and T4 are the main parallel lane. T6 may begin after the resolver and fzf refresh API stabilize. T7 intentionally waits until public names and behavior stop moving.
@@ -696,6 +713,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Outcome:** `fbr` now previews and accepts field five, which is the undecorated branch identity; visible labels, `[WT]` badges, frozen columns, sorting, checkout, and worktree navigation stay unchanged.
 - **Verification:** an installed-fzf regression fixture now exercises the exact five-field projection. The full ordered suite and a real-PTY current-branch selection passed.
 - **Performance:** command median 25.701 ms and interactive median 29.953 ms over 50 runs. Both pass the frozen T1 thresholds of 26.051 ms and 30.315 ms, so T9 introduced no performance follow-up.
+
+### T10 ledger — cohesive rounded fzf frame
+
+- **Commit:** task-scoped commit `fix(fzf): use one rounded picker frame`
+- **Cause:** fzf documents that `line` on an outer border under `--height` becomes a single top separator. Combined with the input border and an explicitly forced info separator, the compact preset rendered stacked horizontal rules and no coherent outer box.
+- **Outcome:** every layout now uses one rounded outer border, an unboxed list, lower input/header dividers, and an upper footer divider. Compact and minimal use `0,1` padding; roomy uses `1,2`. Picker identity labels moved to the outer border, and the redundant explicit info separator was removed.
+- **Verification:** compiler tests freeze every border shape and reject `full:line`, `full:rounded`, and an explicit separator; installed fzf accepts every profile; real-PTY rendering at 100 columns shows one rounded frame and exactly the intended dividers. The full ordered suite passed.
+- **Performance:** the first 50-run sample measured command/interactive medians of 26.342/30.181 ms. The required confirmation measured 25.833/30.133 ms; both confirmation medians pass the frozen 26.051/30.315 ms limits, so the apparent command variance is not a confirmed slowdown and no performance follow-up was added.
 
 ## Final audit — 2026-08-19
 

@@ -719,7 +719,7 @@ typeset -g ZSH_FZF_EXTRA_OPTS="--tabstop=4"
 source "$HOME/.config/zsh/init.zsh"
 
 structured=0
-[[ $FZF_DEFAULT_OPTS == *--style=full:line* && $FZF_DEFAULT_OPTS == *current-bg* && $FZF_DEFAULT_OPTS == *footer-border* ]] && structured=1
+[[ $FZF_DEFAULT_OPTS == *--style=default* && $FZF_DEFAULT_OPTS == *--border=rounded* && $FZF_DEFAULT_OPTS == *--input-border=bottom* && $FZF_DEFAULT_OPTS == *--footer-border=top* && $FZF_DEFAULT_OPTS == *current-bg* && $FZF_DEFAULT_OPTS == *footer-border* ]] && structured=1
 contexts=0
 [[ $FZF_CTRL_T_OPTS == *Files* && $FZF_CTRL_R_OPTS == *History* && $FZF_ALT_C_OPTS == *Directories* ]] && contexts=1
 completion=0
@@ -733,7 +733,7 @@ ZSH_FZF_LAYOUT=roomy
 _zsh_theme_resolve_settings
 _fzf_require_ready
 refreshed=0
-[[ $FZF_DEFAULT_OPTS != "$first_default" && $FZF_DEFAULT_OPTS == *--style=full:rounded* && $FZF_DEFAULT_OPTS == *b48ead* ]] && refreshed=1
+[[ $FZF_DEFAULT_OPTS != "$first_default" && $FZF_DEFAULT_OPTS == *--style=default* && $FZF_DEFAULT_OPTS == *--padding=1,2* && $FZF_DEFAULT_OPTS == *b48ead* ]] && refreshed=1
 
 typeset -gA ZSH_UI_CUSTOM_COLORS
 for role in "${_ZSH_UI_THEME_ROLES[@]}"; do

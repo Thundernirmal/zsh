@@ -246,18 +246,18 @@ _zsh_theme_fzf_chrome_args() {
   emulate -L zsh
 
   local layout=${ZSH_FZF_LAYOUT:-compact}
-  local pointer marker gutter scrollbar separator wrap
+  local pointer marker gutter scrollbar wrap
   local -a args color_args
 
   case $layout in
     compact)
-      args=( '--height=~60%' --layout=reverse --style=full:line --info=inline-right )
+      args=( '--height=~60%' --layout=reverse --style=default --info=inline-right --padding=0,1 )
       ;;
     roomy)
-      args=( '--height=80%' --layout=reverse --style=full:rounded --info=inline-right )
+      args=( '--height=80%' --layout=reverse --style=default --info=inline-right --padding=1,2 )
       ;;
     minimal)
-      args=( '--height=~45%' --layout=reverse --style=minimal --info=inline-right )
+      args=( '--height=~45%' --layout=reverse --style=minimal --info=inline-right --padding=0,1 )
       ;;
     *) return 1 ;;
   esac
@@ -266,10 +266,13 @@ _zsh_theme_fzf_chrome_args() {
   _zsh_theme_glyph marker; marker=$REPLY
   _zsh_theme_glyph gutter; gutter=$REPLY
   _zsh_theme_glyph scrollbar; scrollbar=$REPLY
-  _zsh_theme_glyph separator; separator=$REPLY
   _zsh_theme_glyph wrap; wrap=$REPLY
   args+=(
-    --border
+    --border=rounded
+    --list-border=none
+    --input-border=bottom
+    --header-border=bottom
+    --footer-border=top
     --highlight-line
     --cycle
     --scroll-off=3
@@ -277,7 +280,6 @@ _zsh_theme_fzf_chrome_args() {
     "--marker=$marker"
     "--gutter=$gutter"
     "--scrollbar=$scrollbar"
-    "--separator=$separator"
     "--wrap-sign=$wrap"
     "--preview-wrap-sign=$wrap"
   )
@@ -333,7 +335,7 @@ _zsh_theme_fzf_context_args() {
 
   local list_label=$1 ghost=$2 footer=$3
   reply=(
-    "--list-label=$list_label"
+    "--border-label=$list_label"
     --input-label=Search
     "--ghost=$ghost"
     "--footer=$footer"

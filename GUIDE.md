@@ -205,9 +205,11 @@ All 15 keys are required, extra keys are rejected, and every value must be exact
 
 | Layout | Frame | Preview at 100+ columns | Preview below 100 columns |
 |---|---|---|---|
-| `compact` | adaptive `~60%`, `full:line` | right `50%` | down `40%` |
-| `roomy` | fixed `80%`, `full:rounded` | right `55%` | down `45%` |
-| `minimal` | adaptive `~45%`, `minimal` | right `45%` | down `35%` |
+| `compact` | adaptive `~60%`, one rounded frame, `0,1` padding | right `50%` | down `40%` |
+| `roomy` | fixed `80%`, one rounded frame, `1,2` padding | right `55%` | down `45%` |
+| `minimal` | adaptive `~45%`, one rounded frame, `0,1` padding | right `45%` | down `35%` |
+
+Every profile uses a single rounded outer box. The input and optional header have one lower divider, the footer has one upper divider, and the list does not draw a nested box. The picker label sits in the outer border and `Search` sits in the input divider, avoiding the stacked top rules produced by fzf's `full:line` height-mode preset.
 
 The 100-column boundary affects presentation only. Candidate generation, selected values, and actions do not change. Palette, layout, glyphs, and the secure generated-integration cache are separate: changing presentation refreshes exported options without regenerating `fzf --zsh`.
 

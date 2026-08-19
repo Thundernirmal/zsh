@@ -9,7 +9,7 @@ _zsh_tip_pool=(
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
   "Run ztheme use nord to switch dashboard and finder colors for this session"
-  "Use ZSH_FZF_LAYOUT=roomy before sourcing init.zsh for a larger finder"
+  "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"
   "Run ft <pattern> [path] to search file contents"
