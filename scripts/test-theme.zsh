@@ -44,10 +44,12 @@ for theme in catppuccin-mocha catppuccin-latte nord gruvbox-dark; do
     _zsh_theme_role_hex "$theme" "$role" || exit 11
     _zsh_theme_validate_hex "$REPLY" || exit 12
   done
-done')
+done
+print -r -- "loaded=$_ZSH_THEME_BUILTIN_PALETTES_LOADED colors=${#_ZSH_THEME_COLORS}"')
   assert_status "$?" 0 'every fixed built-in defines valid RGB values' || return 1
   assert_equals "${${(f)output}[1]}" 'catppuccin-mocha||catppuccin-mocha|catppuccin-mocha|truecolor|nerd' 'defaults resolve to Mocha, truecolor, and Nerd glyphs' || return 1
-  assert_equals "${${(f)output}[2]}" 'themes=5 roles=15 colors=60' 'registry exposes five themes and fifteen semantic roles' || return 1
+  assert_equals "${${(f)output}[2]}" 'themes=5 roles=15 colors=0' 'startup defers fixed palette data until a color is requested' || return 1
+  assert_equals "${${(f)output}[3]}" 'loaded=1 colors=60' 'first fixed-color lookup loads every built-in palette' || return 1
 }
 
 test_color_resolution() {
@@ -227,6 +229,7 @@ _fzf_export_config() {
   typeset -g FZF_DEFAULT_OPTS="theme=$ZSH_UI_THEME"
   (( ! ZTHEME_FAIL ))
 }
+
 ztheme use nord >/dev/null || exit 22
 print -r -- "$ZSH_UI_THEME|${ZSH_FZF_THEME-}|$_ZSH_UI_ACTIVE_THEME|$_ZSH_FZF_ACTIVE_THEME|$FZF_DEFAULT_OPTS|$ZTHEME_REFRESHES"
 before=$ZTHEME_REFRESHES
@@ -273,13 +276,37 @@ print -r -- "$custom_lines[1]|$custom_lines[2]|$custom_lines[16]|$custom_lines[1
   assert_equals "${${(f)output}[9]}" "typeset -gA ZSH_UI_CUSTOM_COLORS=(|  base 101010|  danger 101010|)|typeset -g ZSH_UI_THEME=custom|typeset -g ZSH_FZF_THEME=''" 'ztheme export serializes a validated custom palette in stable role order' || return 1
 }
 
+test_lazy_loading() {
+  local output
+  output=$(run_theme_case '' '
+source '"${repo_dir}"'/55-ui-helpers.zsh
+source '"${repo_dir}"'/60-functions.zsh
+print -r -- "ztheme=${+functions[ztheme]} helpers=${+functions[_ztheme_usage]} colors=$_ZSH_THEME_COLOR_HELPERS_LOADED registry=$_ZSH_THEME_REGISTRY_LOADED palettes=$_ZSH_THEME_BUILTIN_PALETTES_LOADED"
+ztheme current >/dev/null || exit 27
+_zsh_theme_sgr accent fg ui || exit 28
+print -r -- "helpers=${+functions[_ztheme_usage]} colors=$_ZSH_THEME_COLOR_HELPERS_LOADED registry=$_ZSH_THEME_REGISTRY_LOADED palettes=$_ZSH_THEME_BUILTIN_PALETTES_LOADED sgr=${(V)REPLY}"
+source '"${repo_dir}"'/25-theme.zsh
+_zsh_theme_sgr accent fg ui || exit 29
+source '"${repo_dir}"'/60-functions.zsh
+function_path='"${repo_dir}"'/functions
+integer function_path_count=0
+for directory in "${fpath[@]}"; do
+  [[ $directory == "$function_path" ]] && (( function_path_count++ ))
+done
+print -r -- "resourced=${(V)REPLY} paths=$function_path_count"')
+
+  assert_equals "${${(f)output}[1]}" 'ztheme=1 helpers=0 colors=0 registry=0 palettes=0' 'startup registers ztheme without parsing command-only or color registry helpers' || return 1
+  assert_equals "${${(f)output}[2]}" 'helpers=1 colors=1 registry=1 palettes=1 sgr=^[[38;2;203;166;247m' 'first color use loads trusted command, registry, palette, and SGR helpers' || return 1
+  assert_equals "${${(f)output}[3]}" 'resourced=^[[38;2;203;166;247m paths=1' 're-sourcing preserves lazy helpers and one private function path' || return 1
+}
+
 test_idempotence_and_safety() {
   local output marker="$test_tmp/executed"
   output=$(run_theme_case "typeset -g ZSH_UI_THEME='\$(touch ${(q)marker})'" '
 _zsh_theme_signature; first=$REPLY
 source '"${repo_dir}"'/25-theme.zsh
 _zsh_theme_signature; print -r -- "$first|$REPLY|${#_ZSH_UI_THEME_NAMES}|${#_ZSH_THEME_COLORS}"')
-  assert_equals "$output" 'catppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:|catppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:|5|60' 're-sourcing is idempotent after an unsafe theme name fallback' || return 1
+  assert_equals "$output" 'catppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:|catppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:|5|0' 're-sourcing is idempotent after an unsafe theme name fallback' || return 1
   [[ ! -e $marker ]]
   assert_status "$?" 0 'theme names are data and cannot execute shell syntax' || return 1
 
@@ -307,6 +334,7 @@ main() {
   test_fzf_compiler || return 1
   test_picker_presentation || return 1
   test_ztheme_command || return 1
+  test_lazy_loading || return 1
   test_idempotence_and_safety || return 1
 }
 

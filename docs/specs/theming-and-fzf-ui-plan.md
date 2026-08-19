@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T8 automation complete; manual visual QA, PF-01, and PF-02 remain
+**Status:** In progress — implementation and performance work complete; manual visual QA remains
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -663,6 +663,15 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Verification:** the CSV parses as 39 complete rows with only allowed statuses. All ordered repository checks passed with the new CI commands.
 - **Performance:** sample one was command 25.905 ms and interactive 31.036 ms; confirmation was command 26.165 ms and interactive 31.173 ms. T8 changes CI and ledger files only, so it introduces no executable startup path; the remaining interactive baseline regression stays covered by PF-01 and PF-02, with no T8-specific follow-up.
 
+### Performance remediation ledger — PF-01 and PF-02
+
+- **Commit:** task-scoped commit `perf(theming): defer command-only theme helpers`
+- **Profile:** before optimization, the new theme module averaged 1.351 ms to source, while the T1-to-current deltas in zoxide, fzf, and the functions module were approximately 0.379 ms, 0.227 ms, and 0.384 ms. Function execution inside initial theme resolution was only about 0.14 ms, identifying parsing and repeated presentation composition as the useful targets.
+- **Outcome:** cached one shell-quoted common fzf chrome scalar across zoxide and fzf; made unchanged zoxide composition signature-aware; autoloaded the session-only `ztheme` implementation; and lazily loaded palette data, validation, conversion, and SGR helpers from fixed repo-local paths. Custom palette values are part of the fzf/zoxide signatures, so changing custom colors refreshes future finders without weakening the generated-integration cache.
+- **Safety and compatibility:** startup still registers `ztheme`, help, and static completion; first and repeated command use, re-source, custom startup, truecolor, 256-color, terminal, no-color, failed refresh rollback, inherited options, and generated cache behavior remain covered. Lazy helpers perform no discovery, download, or subprocess and add their private function path only once.
+- **Verification:** all ordered checks plus explicit truecolor and 256-color first-use smoke tests passed. CI and maintainer syntax checks now include `functions/ztheme` and every `lib/*.zsh` helper.
+- **Performance exit:** after one near-threshold probe and further palette/registry deferral, two consecutive 50-run samples passed the absolute T1 criteria: command/interactive medians were 25.530/29.928 ms and 25.638/30.254 ms. Both are at or below the required 26.051/30.315 ms limits, closing PF-01 and PF-02.
+
 ## Automated acceptance criteria
 
 ### Registry and safety
@@ -783,7 +792,7 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 
 ### PF-01. Recover theme/fzf startup overhead
 
-**Status:** Open; execute after T8 and before the final audit
+**Status:** Completed 2026-08-19; see the performance remediation ledger
 
 **Introduced by:** T4 (`a8b8e09`)
 
@@ -799,9 +808,11 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 
 **Exit criterion:** two consecutive 50-run samples must put both medians below the T1 slowdown threshold (command at or below 26.051 ms and interactive at or below 30.315 ms), with the full ordered suite passing. If host variance prevents that absolute target, document the profile evidence and demonstrate that the optimized task is not more than 5% slower than an immediately adjacent checkout of the T1 commit under interleaved measurements.
 
+**Result:** Passed with consecutive command/interactive medians of 25.530/29.928 ms and 25.638/30.254 ms; the full ordered suite passed.
+
 ### PF-02. Remove `ztheme` command startup parsing overhead
 
-**Status:** Open; execute with PF-01 after T8 and before the final audit
+**Status:** Completed 2026-08-19; see the performance remediation ledger
 
 **Introduced by:** T6 (`bc8ad5b`)
 
@@ -816,3 +827,5 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 - cover first invocation, repeated invocation, re-sourcing, and missing/blocked fzf states after optimization.
 
 **Exit criterion:** two consecutive 50-run samples must show that T6 is not more than 1.0 ms and 5% slower than T5 on either startup path. The stricter PF-01 baseline exit criterion still governs completion of the combined optimization work.
+
+**Result:** The stricter PF-01 criterion passed. Normal startup autoloads only the public command entry; first use loads the trusted implementation and repeated use remains in memory.

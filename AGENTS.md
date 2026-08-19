@@ -4,6 +4,7 @@
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
 - `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `25-theme.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
+- `functions/ztheme` and `lib/theme-*.zsh` are trusted repo-local lazy helpers. Normal startup registers `ztheme` and lightweight registry/color stubs; command-only rendering, palette, validation, and conversion code is parsed on first use.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Documentation Ownership
@@ -23,7 +24,8 @@
   - Guards inside function bodies keep `command -v ... >/dev/null 2>&1`. `$commands` is a cached hash, so it can go stale mid-session and it defeats the `PATH`-stubbed fake binaries in `scripts/test-upkg.zsh`.
 - `40-fzf.zsh` also embeds `command -v` inside the exported `FZF_*_OPTS` preview strings. Those run in a separate shell that fzf spawns, so they must stay `command -v`.
 - `25-theme.zsh` is the single palette and glyph source of truth. Keep its startup path pure Zsh: no executable probes, terminal queries, filesystem theme discovery, downloaded palettes, arbitrary theme sourcing, or `eval`. Renderer and picker code consume semantic roles instead of palette-specific names or raw colors.
-- `60-functions.zsh` owns the session-only `ztheme` command. It may print safe assignments but must not edit `.zshrc`; invalid settings and failed finder refreshes must remain atomic.
+- `60-functions.zsh` owns registration of the session-only `ztheme` command, and `functions/ztheme` owns its implementation. It may print safe assignments but must not edit `.zshrc`; invalid settings and failed finder refreshes must remain atomic.
+- Keep the private `functions/` path idempotent and keep lazy helper sources fixed to the repository directory. Do not replace them with user-controlled discovery or runtime downloads.
 - IMPORTANT: whenever you change a user-facing alias, function, completion behavior, or workflow in this repo, update `80-tips.zsh`, `README.md`, and `GUIDE.md` in the same change so all documentation stays accurate and consistent. Keep each update within the ownership boundaries above; synchronization does not mean duplicating the same prose.
 - If you add or remove a shared external dependency, update `scripts/check-deps.sh` too.
 - `scripts/check-deps.sh` is POSIX `sh`, not Zsh. Keep it portable.
@@ -38,7 +40,7 @@
 
 Run these in order after edits:
 
-1. `zsh -n *.zsh`
+1. `zsh -n *.zsh lib/*.zsh functions/ztheme`
 2. `zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh`
 3. `sh -n scripts/check-deps.sh`
 4. `zsh scripts/test-init.zsh`

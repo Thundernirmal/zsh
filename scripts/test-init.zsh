@@ -735,6 +735,22 @@ _fzf_require_ready
 refreshed=0
 [[ $FZF_DEFAULT_OPTS != "$first_default" && $FZF_DEFAULT_OPTS == *--style=full:rounded* && $FZF_DEFAULT_OPTS == *b48ead* ]] && refreshed=1
 
+typeset -gA ZSH_UI_CUSTOM_COLORS
+for role in "${_ZSH_UI_THEME_ROLES[@]}"; do
+  ZSH_UI_CUSTOM_COLORS[$role]=101010
+done
+ZSH_UI_CUSTOM_COLORS[accent]=abcdef
+ZSH_UI_THEME=custom
+ZSH_FZF_LAYOUT=compact
+_zsh_theme_resolve_settings
+_fzf_require_ready
+first_custom=$FZF_DEFAULT_OPTS
+ZSH_UI_CUSTOM_COLORS[accent]=112233
+_zsh_theme_resolve_settings
+_fzf_require_ready
+custom_refreshed=0
+[[ $FZF_DEFAULT_OPTS != "$first_custom" && $FZF_DEFAULT_OPTS == *112233* && $_ZO_FZF_OPTS == *112233* ]] && custom_refreshed=1
+
 NO_COLOR=1
 _fzf_require_ready
 nocolor=0
@@ -745,7 +761,7 @@ preview_plain=0
 source "$HOME/.config/zsh/40-fzf.zsh"
 duplicates=0
 [[ $FZF_DEFAULT_OPTS == *--user-default*--user-default* || $FZF_COMPLETION_PATH_OPTS == *--user-paths*--user-paths* || $_ZO_FZF_OPTS == *--user-zoxide*--user-zoxide* ]] && duplicates=1
-print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed nocolor=$nocolor preview_plain=$preview_plain duplicates=$duplicates"' > "$script_file"
+print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain duplicates=$duplicates"' > "$script_file"
 
   HOME="$tmp_home" \
     XDG_CACHE_HOME="$case_dir/cache" \
@@ -761,7 +777,7 @@ print -r -- "structured=$structured contexts=$contexts completion=$completion pr
   diagnostics=$(file_contents "$stderr_file")
 
   assert_status "$cmd_status" 0 'theme-aware fzf option fixture completes' || return 1
-  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 nocolor=1 preview_plain=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
+  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
   assert_equals "$diagnostics" '' 'theme-aware fzf option refresh stays quiet' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 1 'theme/layout/no-color refresh does not repeat version validation' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 1 'theme/layout/no-color refresh does not regenerate integration' || return 1

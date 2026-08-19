@@ -68,9 +68,7 @@ _fzf_export_config() {
   signature="${theme_signature}|${width_class}|${_FZF_INHERITED_DEFAULT_OPTS}|${_FZF_INHERITED_CTRL_T_OPTS}|${_FZF_INHERITED_CTRL_R_OPTS}|${_FZF_INHERITED_ALT_C_OPTS}|${_FZF_INHERITED_COMPLETION_OPTS}|${_FZF_INHERITED_COMPLETION_PATH_OPTS}|${_FZF_INHERITED_COMPLETION_DIR_OPTS}|${NO_COLOR:-}"
   [[ ${_FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]-} == "$signature" ]] && return 0
 
-  _zsh_theme_fzf_chrome_args || return 1
-  args=( "${reply[@]:#--no-color}" )
-  _zsh_theme_join_shell_args "${args[@]}"
+  _zsh_theme_fzf_chrome_opts || return 1
   managed=$REPLY
   export FZF_DEFAULT_OPTS=$managed
   [[ -n $_FZF_INHERITED_DEFAULT_OPTS ]] && FZF_DEFAULT_OPTS+=" $_FZF_INHERITED_DEFAULT_OPTS"
