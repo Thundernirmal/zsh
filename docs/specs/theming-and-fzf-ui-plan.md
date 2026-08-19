@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** Proposed
+**Status:** In progress — T1 complete
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -255,6 +255,16 @@ Once implemented, this decision supersedes only the **minimum version value** in
 
 The default `compact` layout should use a restrained `full:line` treatment rather than drawing a rounded box around every section. The `roomy` layout may use rounded section borders and more padding; `minimal` uses fzf's minimal preset while retaining essential labels, focus cues, and footer hints.
 
+The first implementation freezes these layout values:
+
+| Profile | Finder frame | Wide preview (at least 100 columns) | Narrow preview |
+|---|---|---|---|
+| `compact` | adaptive `~60%`, `reverse`, `full:line`, inline-right info | right `50%` | down `40%` |
+| `roomy` | fixed `80%`, `reverse`, `full:rounded`, inline-right info | right `55%` | down `45%` |
+| `minimal` | adaptive `~45%`, `reverse`, `minimal`, inline-right info | right `45%`, labels retained | down `35%`, labels retained |
+
+The breakpoint is exactly 100 columns. Picker-specific preview defaults may hide a preview, but when shown they use these proportions. Layout switching changes presentation only; candidate generation, selection, and actions are invariant.
+
 Each picker uses the same information hierarchy:
 
 1. **List label:** what is being selected, such as `Files`, `Branches`, or `Packages`.
@@ -363,6 +373,14 @@ Use three glyph tiers:
 
 `auto` selects `nerd` unless `NO_NERD_FONT` is set, in which case it selects `unicode`; non-UTF-8 locales select `ascii`. No workflow may communicate success, warning, selection, or danger through color alone.
 
+The shared fzf glyph contract is fixed as follows:
+
+| Tier | Pointer | Selected marker | Gutter | Scrollbar | Separator | Wrap sign |
+|---|---|---|---|---|---|---|
+| `nerd` | `󰘳` | `󰄬` | `│` | `┃` | `─` | `↳` |
+| `unicode` | `›` | `✓` | `│` | `┃` | `─` | `↳` |
+| `ascii` | `>` | `+` | `|` | `|` | `-` | `>` |
+
 ## Public `ztheme` command
 
 Add a small function with no external dependency:
@@ -410,6 +428,8 @@ For every built-in:
 The work is divided so file ownership stays narrow and parallel tasks do not edit the same surfaces.
 
 ### T1. Freeze the contract and visual baseline
+
+**Status:** Completed 2026-08-19
 
 **Depends on:** none
 
@@ -552,6 +572,26 @@ T1 -> T2 -> T3 ----\
 
 T3 and T4 are the main parallel lane. T6 may begin after the resolver and fzf refresh API stabilize. T7 intentionally waits until public names and behavior stop moving.
 
+## Implementation ledger
+
+This section is updated inside each task commit. Git history is the authoritative task boundary; the final audit records the exact hashes for all task commits.
+
+### Performance protocol
+
+- Run `scripts/benchmark-startup.zsh 50` after the ordered automated checks for every task.
+- The benchmark uses 3 warmups and 50 measured fresh Zsh processes for both command-mode sourcing and normal interactive startup with a warm fzf integration cache.
+- Compare each median with the T1 baseline and the immediately preceding task. Treat a change as a slowdown only when the median is both more than 1.0 ms and more than 5% above the T1 baseline, then confirm it with a second 50-run sample.
+- If confirmed, append a concrete remediation item under **Performance follow-ups** at the end of this specification and commit that plan update before beginning the next task.
+- Record medians rather than one-off wall times; p95 remains diagnostic because it is more sensitive to unrelated host load.
+
+### T1 ledger — contract and baseline
+
+- **Commit:** task-scoped commit `chore(theming): freeze contract and startup baseline`
+- **Outcome:** froze the 0.68 capability tier, exact layout profiles, 100-column preview breakpoint, glyph tiers, option precedence, theme safety boundaries, and all picker/completion/zoxide surfaces.
+- **Capability probe:** fzf 0.74.3 accepted `full:line`, `full:rounded`, `minimal`, section labels, ghost text, footer, custom gutter, word-level list wrapping, and word-level preview wrapping.
+- **Verification:** benchmark script syntax check and all ordered repository checks passed.
+- **Performance:** command median 24.810 ms; interactive median 28.871 ms; 50 runs, warm cache. This is the baseline, so no slowdown follow-up was created.
+
 ## Automated acceptance criteria
 
 ### Registry and safety
@@ -667,3 +707,7 @@ The implementation should be landed in task-sized commits so failures can be iso
 - A problematic non-default built-in can be removed while retaining Mocha and the registry contract.
 
 Never roll back by weakening fzf validation, evaluating generated code earlier, deleting a picker, removing plain fallbacks, or silently ignoring `NO_COLOR`.
+
+## Performance follow-ups
+
+None. Add only confirmed regressions that cross the performance protocol threshold, together with an owner task and measurable exit criterion.
