@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** Implementation complete — T11 input-fill follow-up complete; final hash audit pending
+**Status:** Implementation complete and audited through T11 — Nix-host visual signoff remains blocked
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -768,13 +768,14 @@ The implementation, automated verification, available-host visual QA, and perfor
 | PF-01/PF-02 | `5f3a18a5837bc2395620959bcccc10034bb97ab8` | `perf(theming): defer command-only theme helpers` |
 | T9 | `e71f829f88b9233f650a88a7de311af08b7a4d59` | `fix(fbr): return the raw branch field` |
 | T10 | `ab1a6f0785e257e0df24af5b98f5d9f65eccf4a2` | `fix(fzf): use one rounded picker frame` |
+| T11 | `287bf17ac09745660ae7e152c9876af155555510` | `fix(fzf): blend input into the picker frame` |
 
 ### Audit result
 
 - The complete ordered verification suite passed after T9, including the installed-fzf five-field `fbr` projection regression.
-- Real-PTY QA passed cold/warm startup, every built-in swatch, session switching and rollback, custom palettes, all layouts, color/glyph fallbacks, 59/60 and 99/100 boundaries, generated widgets and completion, zoxide, `fkill`, `fbr`, and `zhelp`. The T10 follow-up additionally verified one rounded 100-column frame with one input divider, one footer divider, and no duplicate info rule.
+- Real-PTY QA passed cold/warm startup, every built-in swatch, session switching and rollback, custom palettes, all layouts, color/glyph fallbacks, 59/60 and 99/100 boundaries, generated widgets and completion, zoxide, `fkill`, `fbr`, and `zhelp`. The T10 follow-up additionally verified one rounded 100-column frame with one input divider, one footer divider, and no duplicate info rule; T11 verified the input and list resolve the same semantic background while the selected row remains distinct.
 - The optional dependency audit passed with only Nix absent; installed fzf is 0.74.3 against the 0.68.0 floor.
-- The latest confirmed executable benchmark after T10 measured 25.833 ms command-mode and 30.133 ms interactive medians over 50 runs, below the frozen 26.051/30.315 ms limits.
+- The latest executable benchmark after T11 measured 25.879 ms command-mode and 30.256 ms interactive medians over 50 runs, below the frozen 26.051/30.315 ms limits.
 - Current user/help/dependency surfaces consistently require fzf 0.68.0. The older 0.52.0 decision remains only in its explicitly superseded historical specification.
 - Semantic palettes are centralized in the theme registry; no fixed RGB or 256-color palette remains in picker or dashboard call sites.
 
