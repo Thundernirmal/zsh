@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T1 complete
+**Status:** In progress — T2 complete
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -446,6 +446,8 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T2. Implement the registry and resolver
 
+**Status:** Completed 2026-08-19
+
 **Depends on:** T1
 
 **Primary files:** new `25-theme.zsh`, `init.zsh`, new `scripts/test-theme.zsh`
@@ -591,6 +593,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Capability probe:** fzf 0.74.3 accepted `full:line`, `full:rounded`, `minimal`, section labels, ghost text, footer, custom gutter, word-level list wrapping, and word-level preview wrapping.
 - **Verification:** benchmark script syntax check and all ordered repository checks passed.
 - **Performance:** command median 24.810 ms; interactive median 28.871 ms; 50 runs, warm cache. This is the baseline, so no slowdown follow-up was created.
+
+### T2 ledger — registry and resolver
+
+- **Commit:** task-scoped commit `feat(theming): add semantic theme registry`
+- **Outcome:** added `25-theme.zsh` before zoxide with five built-ins, fifteen semantic roles, atomically validated custom palettes, truecolor/256/ANSI/terminal-default resolution, independent glyph resolution, safe fallbacks, cached active state, SGR/fzf-ready lookup APIs, and deterministic signatures.
+- **Safety:** invalid names and custom values remain data; module sourcing uses no external commands; invalid startup settings are quiet outside a normal interactive prompt; re-sourcing is idempotent.
+- **Verification:** `scripts/test-theme.zsh` covers built-ins, custom validation, fallback atomicity, depth and glyph modes, terminal defaults, unsafe input, idempotence, and zero source-time subprocesses. All ordered repository checks passed.
+- **Performance:** command median 25.743 ms (+0.933 ms, +3.8% from baseline); interactive median 29.921 ms (+1.050 ms, +3.6%); 50 runs, warm cache. The change does not cross the combined 1 ms and 5% threshold, so no slowdown follow-up was created.
 
 ## Automated acceptance criteria
 
