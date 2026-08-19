@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** In progress — T7 complete; PF-01 and PF-02 scheduled
+**Status:** In progress — T8 automation complete; manual visual QA, PF-01, and PF-02 remain
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -561,6 +561,8 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 ### T8. CI, integration, and manual visual QA
 
+**Status:** Automation completed 2026-08-19; full local visual checklist remains open
+
 **Depends on:** T3-T7
 
 **Primary files:** `.github/workflows/checks.yml`; local-only `qa-features.csv` for a stable-release pass
@@ -651,6 +653,15 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Attribution:** GUIDE records canonical Catppuccin, Nord, and Gruvbox sources and their MIT licensing without adding startup-path metadata or executable work.
 - **Verification:** documentation claims were checked against the live registry, option composition, command help, and generated exports. `zhelp --plain ztheme` reports the complete interface as available, and all ordered repository checks passed.
 - **Performance:** sample one was command 26.053 ms and interactive 30.979 ms; confirmation was command 32.376 ms and interactive 31.223 ms. T7 changes documentation files only, so the executable startup tree is byte-identical to T6; the wide command-mode spread in the confirmation (p95 43.402 ms, max 48.823 ms) is host variance, while the remaining baseline regression is already covered by PF-01 and PF-02. No T7-specific follow-up was added.
+
+### T8 ledger — CI and integration audit
+
+- **Commit:** task-scoped commit `ci(theming): run theme regression suite`
+- **Outcome:** added dedicated theme-test syntax and execution steps to GitHub Actions. Created the required 39-row `qa-features.csv` locally with the exact `cmd,expected behavior,Status` contract; `.gitignore` already keeps it out of Git history.
+- **Integration audit:** real PTY cold and warm prompt launches both reached a ready fzf state and retained exactly one private integration cache file. The startup fixture independently confirms one cold version probe and integration generation, no warm regeneration or syntax validation, and no repeat validation when theme, layout, or no-color presentation changes.
+- **Manual QA:** all five built-in `ztheme show` swatch sets and cold/warm prompt presentation passed. The local checklist currently records 7 `Pass` and 32 `Not Run`; those remaining interactive picker, width, glyph, layout, custom, and unavailable-Nix cases stay an explicit final release gate rather than being reported as automated coverage.
+- **Verification:** the CSV parses as 39 complete rows with only allowed statuses. All ordered repository checks passed with the new CI commands.
+- **Performance:** sample one was command 25.905 ms and interactive 31.036 ms; confirmation was command 26.165 ms and interactive 31.173 ms. T8 changes CI and ledger files only, so it introduces no executable startup path; the remaining interactive baseline regression stays covered by PF-01 and PF-02, with no T8-specific follow-up.
 
 ## Automated acceptance criteria
 

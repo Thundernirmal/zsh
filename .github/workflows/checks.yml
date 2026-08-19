@@ -30,8 +30,14 @@ jobs:
       - name: Check init smoke test syntax
         run: zsh -n scripts/test-init.zsh
 
+      - name: Check theme regression test syntax
+        run: zsh -n scripts/test-theme.zsh
+
       - name: Run init smoke test
         run: zsh scripts/test-init.zsh
+
+      - name: Run theme regression tests
+        run: zsh scripts/test-theme.zsh
 
       - name: Check function regression test syntax
         run: zsh -n scripts/test-functions.zsh
