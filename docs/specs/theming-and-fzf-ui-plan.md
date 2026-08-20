@@ -1,10 +1,10 @@
 # Shared theming and fzf UI plan
 
-**Status:** T12 visual follow-up and PF-03 remediation complete — final hash audit pending
+**Status:** Implementation complete and audited through PF-03 — Nix-host visual signoff remains blocked
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
-**Last revised:** 2026-08-19; minimum fzf version raised to 0.68.0 after upstream capability review
+**Last revised:** 2026-08-20; T12 alignment follow-up and PF-03 startup remediation audited
 
 **Current usage:** [`GUIDE.md`](../../GUIDE.md) is the authoritative reference for the implemented theme settings, `ztheme`, and fzf workflows. This specification remains the task ledger until the final release gates and performance follow-ups are complete.
 
@@ -779,7 +779,7 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Verification:** formatter tests cover deferred startup, first and repeated invocation, re-sourcing, aligned/control-safe rows, worktree projection, and checkout behavior. CI and contributor syntax checks include the new autoload file, and the complete ordered suite passed.
 - **Performance exit:** absolute samples remained noisy at 29.246/30.692 ms and 26.765/30.256 ms. The specified adjacent-checkout fallback then alternated 50 samples per path against T11: optimized command startup was 28.917 ms versus 29.235 ms (-0.318 ms, -1.09%), and optimized interactive startup was 34.172 ms versus 33.876 ms (+0.296 ms, +0.87%). Both are within the 1.0 ms and 5% limits, closing PF-03.
 
-## Final audit — 2026-08-19
+## Final audit — 2026-08-20
 
 The implementation, automated verification, available-host visual QA, and performance remediation are complete. The tracked working tree is clean at the audit boundary; `qa-features.csv` is the only ignored working artifact. Its 39 rows record 37 `Pass` results and two `Blocked` Nix picker checks because this host has no Nix installation. The fake-Nix regression suite still covers their projection, cancellation, and mutation boundaries, but a Nix-equipped host remains required before claiming full stable-release visual signoff.
 
@@ -800,15 +800,21 @@ The implementation, automated verification, available-host visual QA, and perfor
 | T8 | `2649b48ea95f16776854b4afcc6fcf2293e6a14f` | `ci(theming): run theme regression suite` |
 | PF-01/PF-02 | `5f3a18a5837bc2395620959bcccc10034bb97ab8` | `perf(theming): defer command-only theme helpers` |
 | T9 | `e71f829f88b9233f650a88a7de311af08b7a4d59` | `fix(fbr): return the raw branch field` |
+| T9 audit | `5a57c48a0943df382babc8035610d79af82963a4` | `docs(theming): finalize implementation audit` |
 | T10 | `ab1a6f0785e257e0df24af5b98f5d9f65eccf4a2` | `fix(fzf): use one rounded picker frame` |
+| T10 audit | `1b2eb03e3ffbae94dec554a0da378b3bf23fe37d` | `docs(theming): audit rounded-frame follow-up` |
 | T11 | `287bf17ac09745660ae7e152c9876af155555510` | `fix(fzf): blend input into the picker frame` |
+| T11 audit | `56bc9e2ddc648820d842fe107c5e08f3916e13ad` | `docs(theming): audit input-fill follow-up` |
+| T12 | `e4562cd7d49e7e4a27646eb6072f78c1afb815ad` | `fix(fbr): align branch rows and footer` |
+| PF-03 slowdown ledger | `d0c6d73c5f43a29e4223cd4af498f5a4d38f2cea` | `docs(perf): track fbr formatting startup regression` |
+| PF-03 | `14fcf6b1d06f2335678da5d38229d68f36b445fb` | `perf(fbr): defer row formatter` |
 
 ### Audit result
 
-- The complete ordered verification suite passed after T9, including the installed-fzf five-field `fbr` projection regression.
-- Real-PTY QA passed cold/warm startup, every built-in swatch, session switching and rollback, custom palettes, all layouts, color/glyph fallbacks, 59/60 and 99/100 boundaries, generated widgets and completion, zoxide, `fkill`, `fbr`, and `zhelp`. The T10 follow-up additionally verified one rounded 100-column frame with one input divider, one footer divider, and no duplicate info rule; T11 verified the input and list resolve the same semantic background while the selected row remains distinct.
+- The complete ordered verification suite passed after PF-03, including deferred first/repeated formatter invocation, re-source idempotence, and installed-fzf five-field `fbr` projection regressions.
+- Real-PTY QA passed cold/warm startup, every built-in swatch, session switching and rollback, custom palettes, all layouts, color/glyph fallbacks, 59/60 and 99/100 boundaries, generated widgets and completion, zoxide, `fkill`, `fbr`, and `zhelp`. T10 verified one rounded 100-column frame with one input divider, one footer divider, and no duplicate info rule; T11 verified the input and list resolve the same semantic background while the selected row remains distinct; T12 verified aligned branch/date columns and an unfilled footer at 140 columns.
 - The optional dependency audit passed with only Nix absent; installed fzf is 0.74.3 against the 0.68.0 floor.
-- The latest executable benchmark after T11 measured 25.879 ms command-mode and 30.256 ms interactive medians over 50 runs, below the frozen 26.051/30.315 ms limits.
+- The PF-03 adjacent-checkout performance audit alternated 50 samples per path. The optimized tree measured 28.917 ms versus T11's 29.235 ms in command mode, and 34.172 ms versus 33.876 ms interactively, keeping both deltas within the specified 1.0 ms and 5% fallback limits.
 - Current user/help/dependency surfaces consistently require fzf 0.68.0. The older 0.52.0 decision remains only in its explicitly superseded historical specification.
 - Semantic palettes are centralized in the theme registry; no fixed RGB or 256-color palette remains in picker or dashboard call sites.
 
