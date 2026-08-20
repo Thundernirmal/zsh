@@ -282,11 +282,27 @@ test_fkill_default_signal() {
 test_fbr_worktree_navigation() {
   local fixture_repo="$tmp_dir/fbr-repo"
   local worktree_dir="$tmp_dir/fbr worktree"
-  local original_dir=$PWD branch current_branch projected worktree_path
+  local original_dir=$PWD branch current_branch first_row formatter_body projected second_row worktree_path
+  integer private_fpath_count=0
   local -A worktree_paths
 
+  assert_equals "${(V)functions[_fbr_format_entry]}" 'builtin autoload -XU' 'fbr formatter starts as a deferred repo-local autoload' || return 1
   _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12
-  assert_equals "$REPLY" $'short           \t5 days ago  \tA subject\t\tshort' 'fbr pads branch and relative-date display columns' || return 1
+  first_row=$REPLY
+  assert_equals "$first_row" $'short           \t5 days ago  \tA subject\t\tshort' 'fbr pads branch and relative-date display columns' || return 1
+  formatter_body=${functions[_fbr_format_entry]}
+  assert_not_contains "${(V)formatter_body}" 'builtin autoload -XU' 'first fbr formatting call loads the deferred implementation' || return 1
+
+  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12
+  second_row=$REPLY
+  assert_equals "$second_row" "$first_row" 'repeated fbr formatting stays deterministic' || return 1
+
+  source "$repo_dir/60-functions.zsh"
+  assert_equals "${functions[_fbr_format_entry]}" "$formatter_body" 're-sourcing preserves the loaded fbr formatter' || return 1
+  for worktree_path in "${fpath[@]}"; do
+    [[ $worktree_path == "$repo_dir/functions" ]] && (( private_fpath_count++ ))
+  done
+  assert_equals "$private_fpath_count" 1 're-sourcing keeps one trusted functions path' || return 1
 
   _fbr_format_entry worktree-test '21 hours ago' $'Tabbed\tsubject' '/tmp/work tree' '' '' 16 12
   assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\tworktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1

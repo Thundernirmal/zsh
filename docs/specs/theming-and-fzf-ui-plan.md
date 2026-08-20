@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** T12 visual follow-up complete — PF-03 startup remediation and final hash audit pending
+**Status:** T12 visual follow-up and PF-03 remediation complete — final hash audit pending
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -771,6 +771,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Verification:** row fixtures cover ordinary, truncated worktree, and control-bearing subject data; installed-fzf projection remains stable; a real 140-column PTY showed aligned columns and the complete ordered suite passed.
 - **Performance:** two 50-run samples measured command/interactive medians of 29.190/33.164 ms and 27.379/34.831 ms. Both exceed the frozen slowdown criteria, so the regression is confirmed and tracked as PF-03.
 
+### Performance remediation ledger — PF-03
+
+- **Commit:** task-scoped commit `perf(fbr): defer row formatter`
+- **Cause:** T12 placed `_fbr_format_entry` in eagerly parsed `60-functions.zsh`, although the formatter is needed only after an `fbr` invocation.
+- **Outcome:** startup now registers `_fbr_format_entry` from the existing trusted `functions/` autoload path. Its formatting implementation is parsed on first use and then remains loaded; repeated sourcing preserves the loaded body and the idempotent private `fpath` entry.
+- **Verification:** formatter tests cover deferred startup, first and repeated invocation, re-sourcing, aligned/control-safe rows, worktree projection, and checkout behavior. CI and contributor syntax checks include the new autoload file, and the complete ordered suite passed.
+- **Performance exit:** absolute samples remained noisy at 29.246/30.692 ms and 26.765/30.256 ms. The specified adjacent-checkout fallback then alternated 50 samples per path against T11: optimized command startup was 28.917 ms versus 29.235 ms (-0.318 ms, -1.09%), and optimized interactive startup was 34.172 ms versus 33.876 ms (+0.296 ms, +0.87%). Both are within the 1.0 ms and 5% limits, closing PF-03.
+
 ## Final audit — 2026-08-19
 
 The implementation, automated verification, available-host visual QA, and performance remediation are complete. The tracked working tree is clean at the audit boundary; `qa-features.csv` is the only ignored working artifact. Its 39 rows record 37 `Pass` results and two `Blocked` Nix picker checks because this host has no Nix installation. The fake-Nix regression suite still covers their projection, cancellation, and mutation boundaries, but a Nix-equipped host remains required before claiming full stable-release visual signoff.
@@ -964,7 +972,7 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 
 ### PF-03. Defer `fbr` display formatting from startup
 
-**Status:** Planned 2026-08-20
+**Status:** Completed 2026-08-20; see the PF-03 performance remediation ledger
 
 **Introduced by:** T12 (`e4562cd7d49e7e4a27646eb6072f78c1afb815ad`)
 
@@ -979,3 +987,5 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 - cover first invocation, repeated invocation, re-source behavior, installed-fzf projection, and the full ordered suite.
 
 **Exit criterion:** two consecutive 50-run samples must put command and interactive medians at or below 26.051 ms and 30.315 ms respectively. If host variance prevents the absolute target, use interleaved adjacent-checkout measurements and require the optimized tree to remain within 1.0 ms and 5% of T11 on both paths.
+
+**Result:** Host variance prevented two consecutive absolute passes, so the adjacent-checkout fallback was used. Across 50 interleaved samples per path, the optimized tree was 0.318 ms faster in command mode and 0.296 ms (0.87%) slower interactively than T11. The full ordered suite passed.

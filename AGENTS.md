@@ -4,7 +4,7 @@
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
 - `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `25-theme.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
-- `functions/ztheme` and `lib/theme-*.zsh` are trusted repo-local lazy helpers. Normal startup registers `ztheme` and lightweight registry/color stubs; command-only rendering, palette, validation, and conversion code is parsed on first use.
+- `functions/ztheme`, `functions/_fbr_format_entry`, and `lib/theme-*.zsh` are trusted repo-local lazy helpers. Normal startup registers `ztheme`, the fbr row formatter, and lightweight registry/color stubs; command-only rendering, fbr formatting, palette, validation, and conversion code is parsed on first use.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Documentation Ownership
@@ -40,7 +40,7 @@
 
 Run these in order after edits:
 
-1. `zsh -n *.zsh lib/*.zsh functions/ztheme`
+1. `zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry`
 2. `zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh`
 3. `sh -n scripts/check-deps.sh`
 4. `zsh scripts/test-init.zsh`

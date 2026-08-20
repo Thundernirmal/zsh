@@ -78,7 +78,7 @@ Unreadable module files are skipped. The optional credential module is skipped e
 
 The numbered filenames define load order. `50-completion.zsh` assumes an earlier layer already ran `compinit`; `66-compdefs.zsh` becomes a silent no-op when `compdef` is unavailable.
 
-The repo-local `functions/ztheme` and `lib/theme-*.zsh` files are lazy implementation helpers rather than startup modules. `60-functions.zsh` registers the command path once, while command-only swatch/export logic, palette data, validation, and color conversion code are parsed on first use. A configured custom or colored non-default startup loads the pieces it needs before composing finder options.
+The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, and `lib/theme-*.zsh` files are lazy implementation helpers rather than startup modules. `60-functions.zsh` registers their fixed command paths once, while command-only swatch/export logic, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. A configured custom or colored non-default startup loads the pieces it needs before composing finder options.
 
 ## Dependencies
 
@@ -809,7 +809,7 @@ When user-facing behavior changes, update every affected surface without copying
 Run these in order:
 
 ```sh
-zsh -n *.zsh lib/*.zsh functions/ztheme
+zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry
 zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh
 sh -n scripts/check-deps.sh
 zsh scripts/test-init.zsh
