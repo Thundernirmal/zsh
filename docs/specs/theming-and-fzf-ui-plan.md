@@ -961,3 +961,21 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 **Exit criterion:** two consecutive 50-run samples must show that T6 is not more than 1.0 ms and 5% slower than T5 on either startup path. The stricter PF-01 baseline exit criterion still governs completion of the combined optimization work.
 
 **Result:** The stricter PF-01 criterion passed. Normal startup autoloads only the public command entry; first use loads the trusted implementation and repeated use remains in memory.
+
+### PF-03. Defer `fbr` display formatting from startup
+
+**Status:** Planned 2026-08-20
+
+**Introduced by:** T12 (`e4562cd7d49e7e4a27646eb6072f78c1afb815ad`)
+
+**Evidence:** consecutive post-T12 samples measured command/interactive medians of 29.190/33.164 ms and 27.379/34.831 ms, above the frozen 26.051/30.315 ms thresholds. T12 added a formatter definition to the eagerly parsed functions module; the formatter runs only when `fbr` is invoked.
+
+**Plan:**
+
+- profile the T11 and T12 startup trees to separate host variance from the formatter's parse cost;
+- if the helper accounts for measurable overhead, register it as a repo-local autoload and parse its implementation only on first `fbr` use;
+- keep helper discovery fixed to the existing trusted `functions/` directory and preserve idempotent `fpath` registration;
+- preserve safe text handling, fixed display widths, semantic worktree badges, field-five projection, and checkout/worktree behavior;
+- cover first invocation, repeated invocation, re-source behavior, installed-fzf projection, and the full ordered suite.
+
+**Exit criterion:** two consecutive 50-run samples must put command and interactive medians at or below 26.051 ms and 30.315 ms respectively. If host variance prevents the absolute target, use interleaved adjacent-checkout measurements and require the optimized tree to remain within 1.0 ms and 5% of T11 on both paths.
