@@ -49,7 +49,7 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Type in the unfilled fzf input row to filter; use the footer for keys"
     "Press Ctrl+P in preview pickers to toggle the preview; use Ctrl+/ to wrap"
     "Run fkill to select processes and send SIGTERM; use 9 only to force"
-    "Run fbr to select the underlying branch, enter its worktree, or check it out"
+    "Run fbr to scan aligned branch details and enter or check out the result"
     "Use [WT] in fbr to spot branches checked out in another worktree"
   )
 

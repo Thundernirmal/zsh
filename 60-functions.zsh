@@ -1091,6 +1091,35 @@ _fbr_activate() {
   return 1
 }
 
+# Build one display-aligned fbr row while keeping the raw branch in field five.
+_fbr_format_entry() {
+  emulate -L zsh
+
+  local branch=$1 relative=$2 subject=$3 worktree_path=$4
+  local badge_color=$5 badge_reset=$6
+  integer branch_width=${7:-32} relative_width=${8:-14}
+  local branch_display branch_field relative_field safe_worktree
+
+  if [[ -n $worktree_path ]]; then
+    branch_display="[WT] $branch"
+  else
+    branch_display=$branch
+  fi
+
+  branch_display=$(_ui_safe_text "$branch_display")
+  branch_field=$(_ui_pad left "$branch_width" "$branch_display")
+  if [[ -n $worktree_path && -n $badge_color ]]; then
+    branch_field="${badge_color}[WT]${badge_reset}${branch_field[5,-1]}"
+  fi
+
+  relative=$(_ui_safe_text "$relative")
+  relative_field=$(_ui_pad left "$relative_width" "$relative")
+  subject=$(_ui_safe_text "$subject")
+  safe_worktree=$(_ui_safe_text "$worktree_path")
+
+  REPLY="$branch_field"$'\t'"$relative_field"$'\t'"$subject"$'\t'"$safe_worktree"$'\t'"$branch"
+}
+
 # Fuzzy-pick a Git branch, entering its worktree or checking it out.
 fbr() {
   _zsh_require_fzf || return 1
@@ -1105,7 +1134,7 @@ fbr() {
     return 1
   }
 
-  local selection branch branch_label current_worktree ref_details ref_line worktree_branch worktree_display worktree_path
+  local selection branch current_worktree ref_details ref_line relative subject worktree_branch worktree_path
   local worktree_badge_color='' worktree_badge_reset='' preview_command
   local -A worktree_paths
   local -a fzf_args context_args preview_args
@@ -1148,15 +1177,13 @@ fbr() {
       branch=${ref_line%%$'\t'*}
       [[ $branch == */HEAD ]] && continue
 
-      branch_label=$branch
-      worktree_display=''
-      if [[ -n ${worktree_paths[$branch]-} ]]; then
-        branch_label="${worktree_badge_color}[WT]${worktree_badge_reset} $branch"
-        worktree_display=$(_ui_safe_text "${worktree_paths[$branch]}")
-      fi
-
       ref_details=${ref_line#*$'\t'}
-      print -r -- "$branch_label"$'\t'"$ref_details"$'\t'"$worktree_display"$'\t'"$branch"
+      relative=${ref_details%%$'\t'*}
+      subject=${ref_details#*$'\t'}
+      worktree_path=${worktree_paths[$branch]-}
+      _fbr_format_entry "$branch" "$relative" "$subject" "$worktree_path" \
+        "$worktree_badge_color" "$worktree_badge_reset" 32 14
+      print -r -- "$REPLY"
     done < <(
       command git for-each-ref --sort=-committerdate \
         --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \

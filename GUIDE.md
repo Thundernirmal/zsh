@@ -209,7 +209,7 @@ All 15 keys are required, extra keys are rejected, and every value must be exact
 | `roomy` | fixed `80%`, one rounded frame, `1,2` padding | right `55%` | down `45%` |
 | `minimal` | adaptive `~45%`, one rounded frame, `0,1` padding | right `45%` | down `35%` |
 
-Every profile uses a single rounded outer box. The input shares the base finder background instead of drawing a filled inner box. The input and optional header have one lower divider, the footer has one upper divider, and the list does not draw a nested box. The picker label sits in the outer border and `Search` sits in the input divider, avoiding the stacked top rules produced by fzf's `full:line` height-mode preset.
+Every profile uses a single rounded outer box. The input and footer share the base finder background instead of drawing filled inner boxes. The input and optional header have one lower divider, the footer has one upper divider, and the list does not draw a nested box. The picker label sits in the outer border and `Search` sits in the input divider, avoiding the stacked top rules produced by fzf's `full:line` height-mode preset.
 
 The 100-column boundary affects presentation only. Candidate generation, selected values, and actions do not change. Palette, layout, glyphs, and the secure generated-integration cache are separate: changing presentation refreshes exported options without regenerating `fzf --zsh`.
 
@@ -543,7 +543,7 @@ fkill
 fkill 9
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. This also applies when selecting the corresponding remote branch. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists.
+`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed widths, so subjects begin in one stable column even when branch names differ; long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. This also applies when selecting the corresponding remote branch. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists.
 
 ## Credential manager: cgm
 

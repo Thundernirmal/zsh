@@ -213,7 +213,7 @@ _zsh_theme_fzf_color_args() {
 
   local -a target_roles=(
     bg base list-bg base preview-bg base
-    input-bg base header-bg surface footer-bg surface
+    input-bg base header-bg surface footer-bg base
     fg text list-fg text preview-fg text current-fg text selected-fg text
     current-bg selected selected-bg surface
     query query prompt accent ghost muted info muted spinner info

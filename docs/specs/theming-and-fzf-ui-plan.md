@@ -1,6 +1,6 @@
 # Shared theming and fzf UI plan
 
-**Status:** Implementation complete and audited through T11 — Nix-host visual signoff remains blocked
+**Status:** T12 visual follow-up complete — PF-03 startup remediation and final hash audit pending
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
@@ -253,7 +253,7 @@ Once implemented, this decision supersedes only the **minimum version value** in
 
 ### 5.1 Use a consistent section hierarchy
 
-Every layout uses one restrained rounded outer frame rather than a rounded box around every section. The input and list share the `base` background so the input does not read as another filled box. The list has no nested border; input and optional header sections use one lower divider, and the footer uses one upper divider. The picker label lives in the outer border and the input divider owns the `Search` label. The info separator is left implicit so fzf suppresses it when the input border already provides separation.
+Every layout uses one restrained rounded outer frame rather than a rounded box around every section. The input, list, and footer share the `base` background so hints do not read as filled inner boxes. The list has no nested border; input and optional header sections use one lower divider, and the footer uses one upper divider. The picker label lives in the outer border and the input divider owns the `Search` label. The info separator is left implicit so fzf suppresses it when the input border already provides separation.
 
 The first implementation freezes these layout values:
 
@@ -625,13 +625,30 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 **Done when:** the input and list backgrounds match while focus and selection remain independently visible.
 
+### T12. Align `fbr` rows and remove the footer fill
+
+**Status:** Completed 2026-08-20
+
+**Depends on:** T10, T11, and post-implementation visual feedback
+
+**Primary files:** `25-theme.zsh`, `60-functions.zsh`, fbr/theme tests, synchronized user documentation
+
+**Size:** small
+
+- Resolve `footer-bg` from `base` so key hints blend into the single picker frame.
+- Format visible branch and relative-date fields to fixed widths so commit subjects start in a stable column.
+- Sanitize visible subjects and worktree paths while retaining raw branch field five for preview and checkout.
+- Preserve worktree badges, responsive preview, frozen identity, and activation semantics.
+
+**Done when:** real-PTY `fbr` output has aligned branch/date/subject columns, an unfilled footer, and unchanged raw branch projection.
+
 ### Dependency graph
 
 ```text
 T1 -> T2 -> T3 ----\
           \-> T4 ----> T5 ----\
               \------> T6 ----+--> T7 --> T8
-                                     T8 --> T9 --> T10 --> T11
+                                     T8 --> T9 --> T10 --> T11 --> T12
 ```
 
 T3 and T4 are the main parallel lane. T6 may begin after the resolver and fzf refresh API stabilize. T7 intentionally waits until public names and behavior stop moving.
@@ -745,6 +762,14 @@ This section is updated inside each task commit. Git history is the authoritativ
 - **Outcome:** `input-bg` now consumes the same `base` role as the outer finder and list. The selected row, query, prompt, ghost, divider, header, and footer retain their existing roles.
 - **Verification:** the compiler regression asserts Mocha emits `input-bg:#1e1e2e` and rejects the previous `input-bg:#313244`; every layout remains accepted by installed fzf, and the complete ordered suite passed.
 - **Performance:** the 50-run command/interactive medians were 25.879/30.256 ms, both within the frozen 26.051/30.315 ms limits. No slowdown follow-up was added.
+
+### T12 ledger — aligned `fbr` table and unfilled footer
+
+- **Commit:** task-scoped commit `fix(fbr): align branch rows and footer`
+- **Cause:** `footer-bg` still used `surface`, making the key hints appear in another gray box. `fbr` also passed variable-length tab fields directly to fzf, so branch and relative-date columns expanded at different tab stops.
+- **Outcome:** the footer now consumes `base`. `fbr` pads its visible branch and relative-date fields to fixed widths, sanitizes subject/worktree display data, and continues to preview and accept the undecorated raw branch in field five.
+- **Verification:** row fixtures cover ordinary, truncated worktree, and control-bearing subject data; installed-fzf projection remains stable; a real 140-column PTY showed aligned columns and the complete ordered suite passed.
+- **Performance:** two 50-run samples measured command/interactive medians of 29.190/33.164 ms and 27.379/34.831 ms. Both exceed the frozen slowdown criteria, so the regression is confirmed and tracked as PF-03.
 
 ## Final audit — 2026-08-19
 

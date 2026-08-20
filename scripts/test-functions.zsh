@@ -285,13 +285,19 @@ test_fbr_worktree_navigation() {
   local original_dir=$PWD branch current_branch projected worktree_path
   local -A worktree_paths
 
+  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12
+  assert_equals "$REPLY" $'short           \t5 days ago  \tA subject\t\tshort' 'fbr pads branch and relative-date display columns' || return 1
+
+  _fbr_format_entry worktree-test '21 hours ago' $'Tabbed\tsubject' '/tmp/work tree' '' '' 16 12
+  assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\tworktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1
+
   assert_contains "${functions[fbr]}" '--accept-nth=5' 'fbr asks fzf to return the branch field directly' || return 1
   assert_contains "${functions[fbr]}" "git log --oneline --decorate --color=always -20 {5}" 'fbr previews the undecorated branch field' || return 1
   assert_contains "${functions[fbr]}" '_fzf_picker_preview_args Log' 'fbr uses the shared responsive preview policy' || return 1
   assert_not_contains "${functions[fbr]}" '38;5;116' 'fbr worktree badges no longer embed a raw palette color' || return 1
 
   if (( $+commands[fzf] )); then
-    projected=$(print -r -- $'visible\tdate\tsubject\t/worktree path\traw-branch' |
+    projected=$(print -r -- $'visible padded                  \tdate padded   \tsubject\t/worktree path\traw-branch' |
       command fzf --filter visible --delimiter=$'\t' --with-nth=1,2,3 --nth=1,2,3 --accept-nth=5)
     assert_equals "$projected" 'raw-branch' 'fbr five-field rows project the raw branch identity' || return 1
   fi
