@@ -199,7 +199,7 @@ typeset -g ZSH_UI_THEME=custom
 typeset -g ZSH_FZF_THEME=''
 ```
 
-All 15 keys are required, extra keys are rejected, and every value must be exactly six hexadecimal digits without `#`. Validation is atomic: a missing, extra, or malformed value makes startup fall back to Mocha rather than partially applying the palette. Theme names and values are data only; the configuration does not evaluate them, source a theme directory, scan the filesystem, or download palettes.
+All 15 keys are required, extra keys are rejected, and every value must be exactly six hexadecimal digits without `#`. Validation is atomic: a missing, extra, or malformed value makes startup fall back to the terminal theme rather than partially applying the palette. Theme names and values are data only; the configuration does not evaluate them, source a theme directory, scan the filesystem, or download palettes.
 
 ### Finder layout and option precedence
 
@@ -232,7 +232,7 @@ ztheme list                 # list built-ins and mark active/default themes
 ztheme current              # show theme, layout, glyph, depth, and option layers
 ztheme show nord            # show semantic role values or terminal swatches
 ztheme use nord             # switch dashboards and future fzf launches now
-ztheme reset                # restore Catppuccin Mocha now
+ztheme reset                # restore the terminal theme now
 ztheme export nord          # print settings to copy into ~/.zshrc
 ```
 
