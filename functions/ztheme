@@ -8,7 +8,7 @@ _ztheme_usage() {
   print '  current          Show the active session settings'
   print '  show [theme]     Show semantic role values'
   print '  use <theme>      Apply a theme to this shell session'
-  print '  reset            Restore Catppuccin Mocha for this session'
+  print '  reset            Restore the terminal theme for this session'
   print '  export <theme>   Print safe settings for ~/.zshrc'
 }
 
@@ -32,7 +32,7 @@ _ztheme_refresh_integrations() {
 
 _ztheme_apply() {
   emulate -L zsh
-  local name=$1 old_ui=${ZSH_UI_THEME:-catppuccin-mocha} old_fzf=${ZSH_FZF_THEME-}
+  local name=$1 old_ui=${ZSH_UI_THEME:-terminal} old_fzf=${ZSH_FZF_THEME-}
 
   _ztheme_validate_name "$name" || {
     print -u2 -r -- "ztheme: unknown or invalid theme: $name"
@@ -116,7 +116,7 @@ _ztheme_list() {
     annotations=''
     [[ $name == ${_ZSH_UI_ACTIVE_THEME:-} ]] && annotations+='ui '
     [[ $name == ${_ZSH_FZF_ACTIVE_THEME:-} ]] && annotations+='fzf '
-    [[ $name == catppuccin-mocha ]] && annotations+='default '
+    [[ $name == terminal ]] && annotations+='default '
     annotations=${annotations% }
     print -r -- "${name}${annotations:+ [$annotations]}"
   done
@@ -142,8 +142,8 @@ _ztheme_current() {
   else
     glyph=${_ZSH_UI_GLYPH_TIER:-ascii}
   fi
-  print -r -- "UI theme: ${_ZSH_UI_ACTIVE_THEME:-catppuccin-mocha}"
-  print -r -- "fzf theme: ${_ZSH_FZF_ACTIVE_THEME:-${_ZSH_UI_ACTIVE_THEME:-catppuccin-mocha}}${fzf_note}"
+  print -r -- "UI theme: ${_ZSH_UI_ACTIVE_THEME:-terminal}"
+  print -r -- "fzf theme: ${_ZSH_FZF_ACTIVE_THEME:-${_ZSH_UI_ACTIVE_THEME:-terminal}}${fzf_note}"
   print -r -- "fzf layout: ${ZSH_FZF_LAYOUT:-compact}"
   print -r -- "glyphs: $glyph (requested: ${ZSH_UI_GLYPHS:-auto})"
   print -r -- "color depth: $depth"
@@ -199,7 +199,7 @@ ztheme() {
       ;;
     show)
       (( $# <= 2 )) || { _ztheme_usage >&2; return 1; }
-      theme=${2:-${_ZSH_UI_ACTIVE_THEME:-catppuccin-mocha}}
+      theme=${2:-${_ZSH_UI_ACTIVE_THEME:-terminal}}
       _ztheme_validate_name "$theme" || { print -u2 -r -- "ztheme: unknown or invalid theme: $theme"; return 1; }
       _ztheme_show "$theme"
       ;;
@@ -209,7 +209,7 @@ ztheme() {
       ;;
     reset)
       (( $# == 1 )) || { _ztheme_usage >&2; return 1; }
-      _ztheme_apply catppuccin-mocha
+      _ztheme_apply terminal
       ;;
     export)
       (( $# == 2 )) || { _ztheme_usage >&2; return 1; }

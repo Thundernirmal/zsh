@@ -99,8 +99,8 @@ _zsh_theme_ansi_code() {
 
 _zsh_theme_scope_name() {
   case ${1:-ui} in
-    ui) REPLY=${_ZSH_UI_ACTIVE_THEME:-catppuccin-mocha} ;;
-    fzf) REPLY=${_ZSH_FZF_ACTIVE_THEME:-${_ZSH_UI_ACTIVE_THEME:-catppuccin-mocha}} ;;
+    ui) REPLY=${_ZSH_UI_ACTIVE_THEME:-terminal} ;;
+    fzf) REPLY=${_ZSH_FZF_ACTIVE_THEME:-${_ZSH_UI_ACTIVE_THEME:-terminal}} ;;
     *) return 1 ;;
   esac
 }

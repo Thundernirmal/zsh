@@ -47,14 +47,14 @@ for theme in catppuccin-mocha catppuccin-latte nord gruvbox-dark; do
 done
 print -r -- "loaded=$_ZSH_THEME_BUILTIN_PALETTES_LOADED colors=${#_ZSH_THEME_COLORS}"')
   assert_status "$?" 0 'every fixed built-in defines valid RGB values' || return 1
-  assert_equals "${${(f)output}[1]}" 'catppuccin-mocha||catppuccin-mocha|catppuccin-mocha|truecolor|nerd' 'defaults resolve to Mocha, truecolor, and Nerd glyphs' || return 1
+  assert_equals "${${(f)output}[1]}" 'terminal||terminal|terminal|truecolor|nerd' 'defaults resolve to the terminal theme, truecolor, and Nerd glyphs' || return 1
   assert_equals "${${(f)output}[2]}" 'themes=5 roles=15 colors=0' 'startup defers fixed palette data until a color is requested' || return 1
   assert_equals "${${(f)output}[3]}" 'loaded=1 colors=60' 'first fixed-color lookup loads every built-in palette' || return 1
 }
 
 test_color_resolution() {
   local output
-  output=$(run_theme_case '' '
+  output=$(run_theme_case 'typeset -g ZSH_UI_THEME=catppuccin-mocha' '
 _zsh_theme_color_value accent ui truecolor; print -r -- "$REPLY"
 _zsh_theme_color_value accent ui 256; print -r -- "$REPLY"
 _zsh_theme_color_value danger ui ansi; print -r -- "$REPLY"
@@ -62,7 +62,7 @@ _zsh_theme_sgr accent fg; print -r -- "${(V)REPLY}"
 _zsh_theme_signature; print -r -- "$REPLY"')
   assert_equals "$output" $'#cba6f7\n183\n9\n^[[38;2;203;166;247m\ncatppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:' 'theme APIs resolve deterministic RGB, 256, ANSI, SGR, and signature values' || return 1
 
-  output=$(run_theme_case 'typeset -g ZSH_UI_THEME=terminal' '
+  output=$(run_theme_case '' '
 _zsh_theme_color_value base ui truecolor; print -r -- "$REPLY"
 _zsh_theme_color_value accent ui truecolor; print -r -- "$REPLY"
 _zsh_theme_sgr accent fg; print -r -- "${(V)REPLY}"')
@@ -83,18 +83,18 @@ _zsh_theme_role_hex custom accent; print -r -- "$ZSH_UI_THEME|$_ZSH_UI_ACTIVE_TH
 
   output=$(run_theme_case 'typeset -gA ZSH_UI_CUSTOM_COLORS=(base 101010); typeset -g ZSH_UI_THEME=custom' '
 print -r -- "$ZSH_UI_THEME|$_ZSH_UI_ACTIVE_THEME|${(j:,:)_ZSH_THEME_RESOLUTION_ISSUES}"')
-  assert_equals "$output" 'catppuccin-mocha|catppuccin-mocha|invalid custom UI palette' 'incomplete custom palette falls back atomically' || return 1
+  assert_equals "$output" 'terminal|terminal|invalid custom UI palette' 'incomplete custom palette falls back atomically' || return 1
 
   output=$(run_theme_case "${custom_setup/AA00FF/not-a-color}" '
 print -r -- "$ZSH_UI_THEME|${(j:,:)_ZSH_THEME_RESOLUTION_ISSUES}"')
-  assert_equals "$output" 'catppuccin-mocha|invalid custom UI palette' 'malformed custom values are rejected' || return 1
+  assert_equals "$output" 'terminal|invalid custom UI palette' 'malformed custom values are rejected' || return 1
 }
 
 test_fallbacks_and_modes() {
   local output
   output=$(run_theme_case 'typeset -g ZSH_UI_THEME=unknown; typeset -g ZSH_FZF_THEME=also-unknown; typeset -g ZSH_FZF_LAYOUT=huge; typeset -g ZSH_UI_GLYPHS=emoji' '
 print -r -- "$ZSH_UI_THEME|$ZSH_FZF_THEME|$ZSH_FZF_LAYOUT|$ZSH_UI_GLYPHS|$_ZSH_UI_GLYPH_TIER|${#_ZSH_THEME_RESOLUTION_ISSUES}"')
-  assert_equals "$output" 'catppuccin-mocha|catppuccin-mocha|compact|auto|nerd|4' 'unknown public settings fall back without partial application' || return 1
+  assert_equals "$output" 'terminal|terminal|compact|auto|nerd|4' 'unknown public settings fall back without partial application' || return 1
 
   output=$(NO_COLOR=1 NO_NERD_FONT=1 TERM=xterm-256color COLORTERM=truecolor LANG=en_US.UTF-8 \
     "$zsh_bin" -dfc "source ${(q)repo_dir}/25-theme.zsh; print -r -- \"\$_ZSH_UI_COLOR_DEPTH|\$_ZSH_UI_GLYPH_TIER\"")
@@ -116,15 +116,15 @@ print -r -- "$glyphs"')
 
 test_dashboard_renderer() {
   local output
-  output=$(run_theme_case '' '
+  output=$(run_theme_case 'typeset -g ZSH_UI_THEME=catppuccin-mocha' '
 source '"${repo_dir}"'/55-ui-helpers.zsh
 functions[_ui_is_rich_terminal]="return 0"
 mocha=$(_ui_color accent)
-ZSH_UI_THEME=nord
+ZSH_UI_THEME=terminal
 _zsh_theme_resolve_settings
-nord=$(_ui_color accent)
-print -r -- "${(V)mocha}|${(V)nord}|${+functions[_ui_palette_hex]}|${+functions[_ui_palette_256]}"')
-  assert_equals "$output" '^[[38;2;203;166;247m|^[[38;2;180;142;173m|0|0' 'dashboard colors follow the active semantic theme without private palettes' || return 1
+terminal_accent=$(_ui_color accent)
+print -r -- "${(V)mocha}|${(V)terminal_accent}|${+functions[_ui_palette_hex]}|${+functions[_ui_palette_256]}"')
+  assert_equals "$output" '^[[38;2;203;166;247m|^[[35m|0|0' 'dashboard colors follow the active semantic theme without private palettes' || return 1
 
   output=$(run_theme_case 'typeset -g ZSH_UI_GLYPHS=unicode' '
 source '"${repo_dir}"'/55-ui-helpers.zsh
@@ -145,7 +145,7 @@ print -r -- "${#color}|$icon"')
 
 test_fzf_compiler() {
   local output
-  output=$(run_theme_case '' '
+  output=$(run_theme_case 'typeset -g ZSH_UI_THEME=catppuccin-mocha' '
 for layout in compact roomy minimal; do
   ZSH_FZF_LAYOUT=$layout
   _zsh_theme_resolve_settings
@@ -163,10 +163,21 @@ _zsh_theme_fzf_color_args || exit 17
 print -r -- "nocolor=${(j:,:)reply}"')
   assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1\nnocolor=--no-color' 'fzf compiler covers every cohesive frame, semantic target, and no-color mode' || return 1
 
+  output=$(run_theme_case '' '
+for layout in compact roomy minimal; do
+  ZSH_FZF_LAYOUT=$layout
+  _zsh_theme_resolve_settings
+  _zsh_theme_fzf_chrome_args || exit 23
+  _zsh_theme_join_shell_args "${reply[@]}"
+  [[ $REPLY == *input-bg:-1* && $REPLY == *footer-bg:-1* && $REPLY != *#* && $REPLY == *footer-border* && $REPLY == *ghost* && $REPLY == *gutter* ]] || exit 24
+  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}"
+done')
+  assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1' 'terminal default compiles terminal-owned colors without hex values' || return 1
+
   if (( $+commands[fzf] )); then
     (
       unset NO_COLOR
-      export TERM=xterm-256color COLORTERM=truecolor COLUMNS=120
+      export TERM=xterm-256color COLORTERM=truecolor COLUMNS=120 ZSH_UI_THEME=catppuccin-mocha
       source "$repo_dir/25-theme.zsh"
       local layout
       for layout in compact roomy minimal; do
@@ -274,11 +285,11 @@ print -r -- "$custom_lines[1]|$custom_lines[2]|$custom_lines[16]|$custom_lines[1
   [[ ! -e $marker ]]
   assert_status "$?" 0 'ztheme names cannot execute shell syntax' || return 1
   assert_equals "${${(f)output}[3]}" '1|nord|nord|theme=nord' 'failed finder refresh rolls the active theme and exports back' || return 1
-  assert_equals "${${(f)output}[4]}" 'catppuccin-mocha|catppuccin-mocha' 'ztheme reset restores the compatibility default' || return 1
-  assert_equals "${${(f)output}[5]}" 'Theme: nord|base        #2e3440|ansi=0|active=catppuccin-mocha' 'ztheme show has stable plain output and does not switch themes' || return 1
-  assert_equals "${${(f)output}[6]}" 'UI theme: catppuccin-mocha|fzf theme: catppuccin-mocha (inherits UI)|external fzf options: yes' 'ztheme current reports inheritance and external option layers' || return 1
+  assert_equals "${${(f)output}[4]}" 'terminal|terminal' 'ztheme reset restores the default theme' || return 1
+  assert_equals "${${(f)output}[5]}" 'Theme: nord|base        #2e3440|ansi=0|active=terminal' 'ztheme show has stable plain output and does not switch themes' || return 1
+  assert_equals "${${(f)output}[6]}" 'UI theme: terminal|fzf theme: terminal (inherits UI)|external fzf options: yes' 'ztheme current reports inheritance and external option layers' || return 1
   assert_equals "${${(f)output}[7]}" "typeset -g ZSH_UI_THEME=gruvbox-dark|typeset -g ZSH_FZF_THEME=''" 'ztheme export prints safe machine-local assignments' || return 1
-  assert_equals "${${(f)output}[8]}" 'Theme|catppuccin-mocha [ui fzf default]|catppuccin-latte|nord|gruvbox-dark|terminal' 'ztheme list is stable and marks active and default themes' || return 1
+  assert_equals "${${(f)output}[8]}" 'Theme|catppuccin-mocha|catppuccin-latte|nord|gruvbox-dark|terminal [ui fzf default]' 'ztheme list is stable and marks active and default themes' || return 1
   assert_equals "${${(f)output}[9]}" "typeset -gA ZSH_UI_CUSTOM_COLORS=(|  base 101010|  danger 101010|)|typeset -g ZSH_UI_THEME=custom|typeset -g ZSH_FZF_THEME=''" 'ztheme export serializes a validated custom palette in stable role order' || return 1
 }
 
@@ -302,8 +313,8 @@ done
 print -r -- "resourced=${(V)REPLY} paths=$function_path_count"')
 
   assert_equals "${${(f)output}[1]}" 'ztheme=1 helpers=0 colors=0 registry=0 palettes=0' 'startup registers ztheme without parsing command-only or color registry helpers' || return 1
-  assert_equals "${${(f)output}[2]}" 'helpers=1 colors=1 registry=1 palettes=1 sgr=^[[38;2;203;166;247m' 'first color use loads trusted command, registry, palette, and SGR helpers' || return 1
-  assert_equals "${${(f)output}[3]}" 'resourced=^[[38;2;203;166;247m paths=1' 're-sourcing preserves lazy helpers and one private function path' || return 1
+  assert_equals "${${(f)output}[2]}" 'helpers=1 colors=1 registry=1 palettes=0 sgr=^[[35m' 'first color use loads trusted command, registry, and SGR helpers without fixed palettes under the terminal default' || return 1
+  assert_equals "${${(f)output}[3]}" 'resourced=^[[35m paths=1' 're-sourcing preserves lazy helpers and one private function path' || return 1
 }
 
 test_idempotence_and_safety() {
@@ -312,7 +323,7 @@ test_idempotence_and_safety() {
 _zsh_theme_signature; first=$REPLY
 source '"${repo_dir}"'/25-theme.zsh
 _zsh_theme_signature; print -r -- "$first|$REPLY|${#_ZSH_UI_THEME_NAMES}|${#_ZSH_THEME_COLORS}"')
-  assert_equals "$output" 'catppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:|catppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:|5|0' 're-sourcing is idempotent after an unsafe theme name fallback' || return 1
+  assert_equals "$output" 'terminal:terminal:truecolor:nerd:compact:|terminal:terminal:truecolor:nerd:compact:|5|0' 're-sourcing is idempotent after an unsafe theme name fallback' || return 1
   [[ ! -e $marker ]]
   assert_status "$?" 0 'theme names are data and cannot execute shell syntax' || return 1
 

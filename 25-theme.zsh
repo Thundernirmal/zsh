@@ -28,7 +28,7 @@ if (( _ZSH_THEME_BUILTIN_PALETTES_LOADED )); then
 fi
 
 if (( ! ${+ZSH_UI_THEME} )); then
-  typeset -g ZSH_UI_THEME=catppuccin-mocha
+  typeset -g ZSH_UI_THEME=terminal
 fi
 if (( ! ${+ZSH_FZF_THEME} )); then
   typeset -g ZSH_FZF_THEME=''
@@ -202,7 +202,7 @@ _zsh_theme_fzf_color_args() {
   emulate -L zsh
 
   local depth=${_ZSH_UI_COLOR_DEPTH:-ansi}
-  local theme=${_ZSH_FZF_ACTIVE_THEME:-catppuccin-mocha}
+  local theme=${_ZSH_FZF_ACTIVE_THEME:-terminal}
   local role target value
   local -a mappings args
 
@@ -373,11 +373,11 @@ _zsh_theme_resolve_settings() {
   if [[ $requested_ui == custom ]]; then
     if (( ! custom_valid )); then
       _ZSH_THEME_RESOLUTION_ISSUES+=( 'invalid custom UI palette' )
-      requested_ui=catppuccin-mocha
+      requested_ui=terminal
     fi
   elif ! _zsh_theme_is_builtin "$requested_ui"; then
     _ZSH_THEME_RESOLUTION_ISSUES+=( "unknown UI theme: ${requested_ui:-<empty>}" )
-    requested_ui=catppuccin-mocha
+    requested_ui=terminal
   fi
 
   if [[ -z $requested_fzf ]]; then
@@ -385,11 +385,11 @@ _zsh_theme_resolve_settings() {
   elif [[ $requested_fzf == custom ]]; then
     if (( ! custom_valid )); then
       _ZSH_THEME_RESOLUTION_ISSUES+=( 'invalid custom fzf palette' )
-      requested_fzf=catppuccin-mocha
+      requested_fzf=terminal
     fi
   elif ! _zsh_theme_is_builtin "$requested_fzf"; then
     _ZSH_THEME_RESOLUTION_ISSUES+=( "unknown fzf theme: $requested_fzf" )
-    requested_fzf=catppuccin-mocha
+    requested_fzf=terminal
   fi
 
   case $requested_layout in

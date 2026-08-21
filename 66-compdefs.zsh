@@ -34,7 +34,7 @@ if (( $+functions[compdef] )); then
     'current:Show active session settings'
     'show:Show semantic role values'
     'use:Apply a theme to this shell session'
-    'reset:Restore Catppuccin Mocha for this session'
+    'reset:Restore the terminal theme for this session'
     'export:Print safe settings for ~/.zshrc'
   )
   typeset -ga _ZSH_ZTHEME_NAMES=(

@@ -136,7 +136,7 @@ Pipes, redirects, narrow terminals, non-UTF-8 locales, and dumb terminals receiv
 
 | Setting | Effect |
 |---|---|
-| `ZSH_UI_THEME=catppuccin-mocha` | Select the dashboard palette; built-ins are `catppuccin-mocha`, `catppuccin-latte`, `nord`, `gruvbox-dark`, and `terminal` |
+| `ZSH_UI_THEME=terminal` | Select the dashboard palette; built-ins are `catppuccin-mocha`, `catppuccin-latte`, `nord`, `gruvbox-dark`, and `terminal` |
 | `ZSH_FZF_THEME=` | Inherit `ZSH_UI_THEME`; set a built-in name or `custom` for an fzf-only override |
 | `ZSH_FZF_LAYOUT=compact` | Select the `compact`, `roomy`, or `minimal` finder layout |
 | `ZSH_FZF_EXTRA_OPTS=` | Append an intentional final user option layer to shared fzf defaults |
@@ -146,7 +146,7 @@ Pipes, redirects, narrow terminals, non-UTF-8 locales, and dumb terminals receiv
 | `NO_NERD_FONT=1` | Keep colour but use ordinary Unicode rather than private-use Nerd Font glyphs |
 | `zhelp --plain` | Force the stable plain help view |
 
-Set theme variables before sourcing `init.zsh`. `catppuccin-mocha` remains the default. Invalid names and incomplete or malformed custom palettes fall back to Mocha without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents.
+Set theme variables before sourcing `init.zsh`. `terminal` is the default. Invalid names and incomplete or malformed custom palettes fall back to it without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents.
 
 `NO_COLOR` does not disable fuzzy interaction. It removes repository-managed fzf colors, prevents color-forced file previews, and remains the final option even when inherited or extra options request colors.
 
@@ -154,11 +154,11 @@ Set theme variables before sourcing `init.zsh`. `catppuccin-mocha` remains the d
 
 | Theme | Background intent | Notes |
 |---|---|---|
-| `catppuccin-mocha` | dark | Compatibility default |
+| `catppuccin-mocha` | dark | Compatibility palette (former default) |
 | `catppuccin-latte` | light | Explicit light-background choice; background brightness is never guessed |
 | `nord` | dark | Muted cool palette |
 | `gruvbox-dark` | dark | Warm, higher-contrast palette |
-| `terminal` | terminal-owned | Uses default terminal foreground/background and named ANSI accents |
+| `terminal` | terminal-owned | Default; uses default terminal foreground/background and named ANSI accents |
 
 The fixed palette values are adapted from the MIT-licensed [Catppuccin](https://catppuccin.com/palette/), [Nord](https://github.com/nordtheme/nord), and [Gruvbox](https://github.com/morhetz/gruvbox) projects. The resolver emits RGB when `COLORTERM` is `truecolor` or `24bit`, xterm-256 values when `TERM` contains `256color`, and deterministic ANSI colors otherwise. It uses no terminal query or source-time subprocess.
 
