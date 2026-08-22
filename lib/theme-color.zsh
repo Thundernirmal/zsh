@@ -71,34 +71,35 @@ _zsh_theme_rgb_to_256() {
   fi
 }
 
-_zsh_theme_sgr() {
+_zsh_theme_sgr_for_theme() {
   emulate -L zsh
 
-  local role=$1 layer=${2:-fg} scope=${3:-ui}
-  local depth=${_ZSH_UI_COLOR_DEPTH:-ansi} value hex theme
+  local theme=$1 role=$2 layer=${3:-fg} depth=${4:-${_ZSH_UI_COLOR_DEPTH:-ansi}}
+  local value hex
   integer base=38 code
 
   [[ $layer == fg || $layer == bg ]] || return 1
   [[ $layer == bg ]] && base=48
-  _zsh_theme_scope_name "$scope" || return 1
-  theme=$REPLY
+  [[ $depth != none ]] || { REPLY=''; return 1; }
   [[ $theme == terminal && $depth != none ]] && depth=ansi
-  _zsh_theme_color_value "$role" "$scope" "$depth" || {
-    REPLY=''
-    return 1
-  }
-  value=$REPLY
 
   case $depth in
     truecolor)
-      hex=${value#\#}
+      _zsh_theme_role_hex "$theme" "$role" || return 1
+      hex=$REPLY
       _zsh_theme_rgb_components "$hex" || return 1
       REPLY=$'\e'"[${base};2;${reply[1]};${reply[2]};${reply[3]}m"
+      return 0
       ;;
     256)
-      REPLY=$'\e'"[${base};5;${value}m"
+      _zsh_theme_role_hex "$theme" "$role" || return 1
+      _zsh_theme_rgb_to_256 "$REPLY" || return 1
+      REPLY=$'\e'"[${base};5;${REPLY}m"
+      return 0
       ;;
     ansi)
+      _zsh_theme_ansi_code "$theme" "$role" || return 1
+      value=$REPLY
       if (( value < 0 )); then
         [[ $layer == bg ]] && code=49 || code=39
       elif (( value < 8 )); then
@@ -110,4 +111,13 @@ _zsh_theme_sgr() {
       ;;
     *) return 1 ;;
   esac
+}
+
+_zsh_theme_sgr() {
+  emulate -L zsh
+
+  local role=$1 layer=${2:-fg} scope=${3:-ui} theme
+  _zsh_theme_scope_name "$scope" || return 1
+  theme=$REPLY
+  _zsh_theme_sgr_for_theme "$theme" "$role" "$layer" "${_ZSH_UI_COLOR_DEPTH:-ansi}"
 }

@@ -234,9 +234,9 @@ Set `_FZF_MIN_VERSION=0.68.0` and update every dependency check, diagnostic, hel
 
 This new floor is functional, not cosmetic. Every supported fzf installation receives the same complete feature set:
 
-- `--style=full` or `--style=minimal` as selected by `ZSH_FZF_LAYOUT`;
+- `--style=default` for `compact` and `roomy`, or `--style=minimal` for `minimal`, with the explicit cohesive frame introduced by T10;
 - list, input, header, footer, outer, and preview borders/labels where the context uses them;
-- `line` borders for clean section separation without nested rounded boxes;
+- one rounded outer border, no nested list border, and bottom/top section dividers for clean separation;
 - contextual `--ghost` search hints;
 - readable multiline theme definitions and optional `alt-bg` row separation;
 - explicit current, selected, alternate, gutter, ghost, header, footer, preview, label, and match colors;

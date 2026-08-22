@@ -70,42 +70,12 @@ _ztheme_role_value() {
 
 _ztheme_role_sgr() {
   emulate -L zsh
-  local theme=$1 role=$2 layer=${3:-bg} depth hex value
-  integer base=48 code
+  local theme=$1 role=$2 layer=${3:-bg} depth
 
-  [[ $layer == fg || $layer == bg ]] || return 1
-  [[ $layer == fg ]] && base=38
   _zsh_theme_detect_color_depth
   depth=$REPLY
-  [[ $depth != none ]] || return 1
-
-  if [[ $theme == terminal ]]; then
-    depth=ansi
-    _zsh_theme_terminal_code "$role" || return 1
-    value=$REPLY
-  else
-    _zsh_theme_role_hex "$theme" "$role" || return 1
-    hex=$REPLY
-    case $depth in
-      truecolor)
-        _zsh_theme_rgb_components "$hex" || return 1
-        REPLY=$'\e'"[${base};2;${reply[1]};${reply[2]};${reply[3]}m"
-        return 0
-        ;;
-      256) _zsh_theme_rgb_to_256 "$hex" || return 1; value=$REPLY ;;
-      ansi) _zsh_theme_ansi_code "$theme" "$role" || return 1; value=$REPLY ;;
-      *) return 1 ;;
-    esac
-  fi
-
-  if (( value < 0 )); then
-    [[ $layer == bg ]] && code=49 || code=39
-  elif (( value < 8 )); then
-    [[ $layer == bg ]] && code=$(( 40 + value )) || code=$(( 30 + value ))
-  else
-    [[ $layer == bg ]] && code=$(( 100 + value - 8 )) || code=$(( 90 + value - 8 ))
-  fi
-  REPLY=$'\e'"[${code}m"
+  _zsh_theme_load_color_helpers || return 1
+  _zsh_theme_sgr_for_theme "$theme" "$role" "$layer" "$depth"
 }
 
 _ztheme_list() {

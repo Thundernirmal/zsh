@@ -59,8 +59,10 @@ _zsh_theme_color_value accent ui truecolor; print -r -- "$REPLY"
 _zsh_theme_color_value accent ui 256; print -r -- "$REPLY"
 _zsh_theme_color_value danger ui ansi; print -r -- "$REPLY"
 _zsh_theme_sgr accent fg; print -r -- "${(V)REPLY}"
+_zsh_theme_sgr_for_theme catppuccin-latte text fg ansi; print -r -- "${(V)REPLY}"
+_zsh_theme_sgr_for_theme terminal base bg truecolor; print -r -- "${(V)REPLY}"
 _zsh_theme_signature; print -r -- "$REPLY"')
-  assert_equals "$output" $'#cba6f7\n183\n9\n^[[38;2;203;166;247m\ncatppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:' 'theme APIs resolve deterministic RGB, 256, ANSI, SGR, and signature values' || return 1
+  assert_equals "$output" $'#cba6f7\n183\n9\n^[[38;2;203;166;247m\n^[[30m\n^[[49m\ncatppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:' 'theme APIs resolve deterministic RGB, 256, active/named SGR, and signature values' || return 1
 
   output=$(run_theme_case '' '
 _zsh_theme_color_value base ui truecolor; print -r -- "$REPLY"
