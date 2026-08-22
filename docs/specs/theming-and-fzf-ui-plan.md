@@ -4,7 +4,7 @@
 
 **Scope:** Shared terminal palette, fzf presentation, picker consistency, accessibility, and theme discovery
 
-**Last revised:** 2026-08-20; T12 alignment follow-up and PF-03 startup remediation audited
+**Last revised:** 2026-08-22; T13 terminal-default and T14 override-preservation follow-ups recorded
 
 **Current usage:** [`GUIDE.md`](../../GUIDE.md) is the authoritative reference for the implemented theme settings, `ztheme`, and fzf workflows. This specification remains the task ledger until the final release gates and performance follow-ups are complete.
 
@@ -14,7 +14,7 @@ Replace the repository's fixed, duplicated Catppuccin styling with a small pure-
 
 The first release should:
 
-- keep `catppuccin-mocha` as the default;
+- ship `catppuccin-mocha` as the initial compatibility default (superseded by T13, which made `terminal` the default);
 - add `catppuccin-latte`, `nord`, `gruvbox-dark`, and `terminal` built-ins;
 - accept a validated custom palette without sourcing arbitrary theme files;
 - theme all repository dashboards and fuzzy entry points consistently, including generated `**<Tab>` completion and zoxide's interactive finder;
@@ -45,7 +45,7 @@ The secure generated-integration cache is not a theme cache. Theme changes must 
 
 1. Give users an explicit, predictable choice of light, dark, terminal-native, or custom palettes.
 2. Use one set of semantic roles for fzf, dashboards, badges, panels, status output, and picker previews owned by this repository.
-3. Preserve the current Catppuccin Mocha identity as the default while correcting internal palette inconsistencies.
+3. Preserve the current Catppuccin Mocha identity as the initial default while correcting internal palette inconsistencies (later superseded by T13).
 4. Make every picker feel related: consistent focus, selected-row treatment, labels, key hints, cancellation behavior, and responsive previews.
 5. Preserve deterministic plain output, ASCII fallbacks, safe text handling, and clean behavior in redirected or unsuitable terminals.
 6. Keep startup lightweight: theme resolution must use Zsh builtins and must not contact services, probe executables, or launch subprocesses at module source time.
@@ -137,7 +137,7 @@ The supported public settings are:
 
 | Setting | Values | Default | Purpose |
 |---|---|---|---|
-| `ZSH_UI_THEME` | built-in name or `custom` | `catppuccin-mocha` | Shared semantic palette |
+| `ZSH_UI_THEME` | built-in name or `custom` | `terminal` | Shared semantic palette |
 | `ZSH_FZF_THEME` | built-in name, `custom`, or empty | empty, meaning `ZSH_UI_THEME` | Optional fzf-only palette override |
 | `ZSH_FZF_LAYOUT` | `compact`, `roomy`, `minimal` | `compact` | Finder height, chrome, and preview proportions |
 | `ZSH_UI_GLYPHS` | `auto`, `nerd`, `unicode`, `ascii` | `auto` | Symbols independently of color |
@@ -199,7 +199,7 @@ Theme validation must reject:
 - keys outside the documented custom contract;
 - values containing whitespace, quotes, shell syntax, or fzf options.
 
-An invalid startup selection falls back to `catppuccin-mocha`. A normal interactive prompt prints at most one concise diagnostic; non-interactive sourcing and `zsh -i -c` remain quiet. Invalid input to `ztheme use` returns nonzero without changing the current theme.
+An invalid startup selection falls back to `terminal`. A normal interactive prompt prints at most one concise diagnostic; non-interactive sourcing and `zsh -i -c` remain quiet. Invalid input to `ztheme use` returns nonzero without changing the current theme.
 
 ### 4. Support custom palettes as data, not code
 
@@ -399,8 +399,8 @@ Behavior:
 - `list` prints stable built-in names and indicates the current/default selections.
 - `current` reports UI theme, optional fzf override, layout, glyph tier, and color depth/no-color state.
 - `show` renders a compact semantic swatch/status sample when rich output is available and a stable role/value table otherwise.
-- `use` validates and applies a theme to the current shell, including future fzf launches and dashboards.
-- `reset` returns both UI and fzf to `catppuccin-mocha` for the current shell.
+- `use` validates and applies a theme to the current shell, including future fzf launches and dashboards; it preserves an explicit session-level `ZSH_FZF_THEME` fzf-only override.
+- `reset` returns both UI and fzf to `terminal` for the current shell by clearing any fzf-only override.
 - `export` prints the exact safe assignment to place before `source init.zsh` in the user's machine-local `.zshrc`.
 
 The command does not edit `.zshrc`, create a persistence file, or recolor an already-open fzf instance. Theme selection remains machine-local configuration outside this repository.
@@ -409,7 +409,7 @@ The command does not edit `.zshrc`, create a persistence file, or recolor an alr
 
 | Theme | Type | Intent |
 |---|---|---|
-| `catppuccin-mocha` | dark | Compatibility default; canonicalize current semantic mappings |
+| `catppuccin-mocha` | dark | Compatibility palette (former default); canonicalize current semantic mappings |
 | `catppuccin-latte` | light | First-class light-background option |
 | `nord` | dark | Muted cool, higher structural restraint |
 | `gruvbox-dark` | dark | Warm, higher-contrast alternative |
@@ -642,16 +642,48 @@ The work is divided so file ownership stays narrow and parallel tasks do not edi
 
 **Done when:** real-PTY `fbr` output has aligned branch/date/subject columns, an unfilled footer, and unchanged raw branch projection.
 
+### T13. Make `terminal` the default theme
+
+**Status:** Completed 2026-08-21
+
+**Depends on:** final-audit feedback
+
+**Primary files:** `25-theme.zsh`, `functions/ztheme`, `66-compdefs.zsh`, `lib/theme-registry.zsh`, `scripts/test-theme.zsh`, `GUIDE.md`
+
+**Size:** small
+
+- Replace internal `catppuccin-mocha` defaults so fresh sessions inherit the terminal's own foreground/background instead of a fixed dark palette.
+- Update resolver fallbacks, list annotations, command defaults, completion ordering, export output, and tests that asserted Mocha defaults.
+- Keep all five built-ins, validation, rollback, and option precedence unchanged.
+
+**Done when:** startup without theme variables resolves `terminal`, invalid startup selections fall back to `terminal`, and the ordered suite passes.
+
+### T14. Preserve explicit fzf overrides across `ztheme use`
+
+**Status:** Completed 2026-08-22
+
+**Depends on:** review feedback on the merged implementation
+
+**Primary files:** `functions/ztheme`, `scripts/test-theme.zsh`, `GUIDE.md`, this specification
+
+**Size:** small
+
+- Change `ztheme use <name>` so an explicit non-empty `ZSH_FZF_THEME` override survives dashboard-palette switches instead of being silently cleared.
+- Keep `ztheme reset` as the only command that restores inheritance, clearing both themes to their defaults under the existing atomic rollback path.
+- Cover preservation and reset-clearing behavior in the command regression tests and synchronize GUIDE.
+
+**Done when:** switching with an active override leaves `ZSH_FZF_THEME` untouched, `ztheme reset` clears it, and the ordered suite passes.
+
 ### Dependency graph
 
 ```text
 T1 -> T2 -> T3 ----\
           \-> T4 ----> T5 ----\
               \------> T6 ----+--> T7 --> T8
-                                     T8 --> T9 --> T10 --> T11 --> T12
+                                     T8 --> T9 --> T10 --> T11 --> T12 --> T13 --> T14
 ```
 
-T3 and T4 are the main parallel lane. T6 may begin after the resolver and fzf refresh API stabilize. T7 intentionally waits until public names and behavior stop moving.
+T3 and T4 are the main parallel lane. T6 may begin after the resolver and fzf refresh API stabilize. T7 intentionally waits until public names and behavior stop moving. T13 and T14 are post-audit follow-ups and run sequentially after the final audit.
 
 ## Implementation ledger
 
@@ -808,6 +840,7 @@ The implementation, automated verification, available-host visual QA, and perfor
 | T12 | `e4562cd7d49e7e4a27646eb6072f78c1afb815ad` | `fix(fbr): align branch rows and footer` |
 | PF-03 slowdown ledger | `d0c6d73c5f43a29e4223cd4af498f5a4d38f2cea` | `docs(perf): track fbr formatting startup regression` |
 | PF-03 | `14fcf6b1d06f2335678da5d38229d68f36b445fb` | `perf(fbr): defer row formatter` |
+| T13 | `970546294fb867a5bfe64fc833f99a8f148acff6` | `feat(theming): make terminal the default theme` |
 
 ### Audit result
 
@@ -995,3 +1028,17 @@ Never roll back by weakening fzf validation, evaluating generated code earlier, 
 **Exit criterion:** two consecutive 50-run samples must put command and interactive medians at or below 26.051 ms and 30.315 ms respectively. If host variance prevents the absolute target, use interleaved adjacent-checkout measurements and require the optimized tree to remain within 1.0 ms and 5% of T11 on both paths.
 
 **Result:** Host variance prevented two consecutive absolute passes, so the adjacent-checkout fallback was used. Across 50 interleaved samples per path, the optimized tree was 0.318 ms faster in command mode and 0.296 ms (0.87%) slower interactively than T11. The full ordered suite passed.
+
+### T13 ledger — terminal-default follow-up
+
+- **Commit:** task-scoped commit `feat(theming): make terminal the default theme`
+- **Outcome:** fresh sessions, invalid selections, `ztheme reset`, list annotations, and completion defaults now resolve `terminal`; GUIDE describes it as the default and Mocha as the former compatibility palette.
+- **Verification:** updated registry, resolver, command, and completion fixtures pass; all ordered repository checks passed.
+- **Performance:** string-default changes only inside already-lazy helpers; no new startup work was added.
+
+### T14 ledger — override-preserving `ztheme use`
+
+- **Commit:** task-scoped commit `fix(ztheme): preserve explicit fzf overrides`
+- **Cause:** review found that `ztheme use` unconditionally assigned an empty `ZSH_FZF_THEME`, silently discarding an explicit session-level fzf-only override.
+- **Outcome:** `use` switches only the UI theme and keeps a deliberate finder choice; `reset` remains the single path back to inherited defaults and clears the override under the existing atomic rollback contract.
+- **Verification:** command regressions cover preservation across a switch and reset clearing; GUIDE documents the split; the complete ordered suite passed.

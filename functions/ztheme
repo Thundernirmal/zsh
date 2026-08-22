@@ -8,7 +8,7 @@ _ztheme_usage() {
   print '  current          Show the active session settings'
   print '  show [theme]     Show semantic role values'
   print '  use <theme>      Apply a theme to this shell session'
-  print '  reset            Restore the terminal theme for this session'
+  print '  reset            Restore defaults and clear any fzf override'
   print '  export <theme>   Print safe settings for ~/.zshrc'
 }
 
@@ -32,7 +32,7 @@ _ztheme_refresh_integrations() {
 
 _ztheme_apply() {
   emulate -L zsh
-  local name=$1 old_ui=${ZSH_UI_THEME:-terminal} old_fzf=${ZSH_FZF_THEME-}
+  local name=$1 mode=${2:-use} old_ui=${ZSH_UI_THEME:-terminal} old_fzf=${ZSH_FZF_THEME-}
 
   _ztheme_validate_name "$name" || {
     print -u2 -r -- "ztheme: unknown or invalid theme: $name"
@@ -40,7 +40,7 @@ _ztheme_apply() {
   }
 
   typeset -g ZSH_UI_THEME=$name
-  typeset -g ZSH_FZF_THEME=''
+  [[ $mode == reset ]] && typeset -g ZSH_FZF_THEME=''
   _zsh_theme_resolve_settings
   if ! _ztheme_refresh_integrations; then
     typeset -g ZSH_UI_THEME=$old_ui
@@ -209,7 +209,7 @@ ztheme() {
       ;;
     reset)
       (( $# == 1 )) || { _ztheme_usage >&2; return 1; }
-      _ztheme_apply terminal
+      _ztheme_apply terminal reset
       ;;
     export)
       (( $# == 2 )) || { _ztheme_usage >&2; return 1; }
