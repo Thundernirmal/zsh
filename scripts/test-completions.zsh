@@ -94,6 +94,7 @@ test_registration() {
     fkill _zsh_fkill
     headers _zsh_headers
     zhelp _zsh_zhelp
+    ztheme _zsh_ztheme
     cgm _zsh_cgm
     fbr _zsh_no_arguments
     croot _zsh_no_arguments
@@ -169,6 +170,12 @@ test_static_values() {
   values=( "${reply[@]}" )
   assert_equals "${(j: :)values}" 'add install i find pick fzf search s list ls remove rm uninstall delete outdated check diff refresh upgrade up update help' 'npkg commands and aliases match the public interface' || return 1
   assert_unique 'npkg command values are unique' "${values[@]}" || return 1
+
+  spec_values "${_ZSH_ZTHEME_COMMAND_SPECS[@]}"
+  values=( "${reply[@]}" )
+  assert_equals "${(j: :)values}" 'list current show use reset export' 'ztheme completion covers every public subcommand' || return 1
+  assert_equals "${(j: :)_ZSH_ZTHEME_NAMES}" 'catppuccin-mocha catppuccin-latte nord gruvbox-dark terminal' 'ztheme completion uses a static built-in theme list' || return 1
+  assert_unique 'ztheme completion values are unique' "${_ZSH_ZTHEME_NAMES[@]}" || return 1
 
   spec_values "${_ZSH_CGM_COMMAND_SPECS[@]}"
   values=( "${reply[@]}" )

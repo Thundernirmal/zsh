@@ -1,0 +1,25 @@
+emulate -L zsh
+
+local branch=$1 relative=$2 subject=$3 worktree_path=$4
+local badge_color=$5 badge_reset=$6
+integer branch_width=${7:-32} relative_width=${8:-14}
+local branch_display branch_field relative_field safe_worktree
+
+if [[ -n $worktree_path ]]; then
+  branch_display="[WT] $branch"
+else
+  branch_display=$branch
+fi
+
+branch_display=$(_ui_safe_text "$branch_display")
+branch_field=$(_ui_pad left "$branch_width" "$branch_display")
+if [[ -n $worktree_path && -n $badge_color ]]; then
+  branch_field="${badge_color}[WT]${badge_reset}${branch_field[5,-1]}"
+fi
+
+relative=$(_ui_safe_text "$relative")
+relative_field=$(_ui_pad left "$relative_width" "$relative")
+subject=$(_ui_safe_text "$subject")
+safe_worktree=$(_ui_safe_text "$worktree_path")
+
+REPLY="$branch_field"$'\t'"$relative_field"$'\t'"$subject"$'\t'"$safe_worktree"$'\t'"$branch"

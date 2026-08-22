@@ -1,19 +1,30 @@
 # Shared fzf validation, settings, and bindings.
 if (( ! ${+_FZF_MIN_VERSION} )); then
-  typeset -gr _FZF_MIN_VERSION='0.52.0'
+  typeset -gr _FZF_MIN_VERSION='0.68.0'
 fi
 if (( ! ${+_FZF_CACHE_SCHEMA} )); then
-  typeset -gr _FZF_CACHE_SCHEMA='1'
+  typeset -gr _FZF_CACHE_SCHEMA='2'
 fi
 typeset -gA _FZF_VERSION_STATE_BY_PATH
 typeset -gA _FZF_VERSION_FOUND_BY_PATH
 typeset -gA _FZF_INTEGRATION_STATE_BY_PATH
 typeset -gA _FZF_INTEGRATION_REASON_BY_PATH
-typeset -gA _FZF_CONFIGURED_BY_PATH
+typeset -gA _FZF_CONFIG_SIGNATURE_BY_PATH
 typeset -g _FZF_CHECKED_PATH=${_FZF_CHECKED_PATH:-}
 typeset -g _FZF_STATE=${_FZF_STATE:-unchecked}
 typeset -g _FZF_FOUND=${_FZF_FOUND:-not checked}
 typeset -gi _FZF_STARTUP_DIAGNOSTIC_SHOWN=${_FZF_STARTUP_DIAGNOSTIC_SHOWN:-0}
+
+if (( ! ${+_FZF_USER_OPTS_CAPTURED} )); then
+  typeset -g _FZF_INHERITED_DEFAULT_OPTS=${FZF_DEFAULT_OPTS-}
+  typeset -g _FZF_INHERITED_CTRL_T_OPTS=${FZF_CTRL_T_OPTS-}
+  typeset -g _FZF_INHERITED_CTRL_R_OPTS=${FZF_CTRL_R_OPTS-}
+  typeset -g _FZF_INHERITED_ALT_C_OPTS=${FZF_ALT_C_OPTS-}
+  typeset -g _FZF_INHERITED_COMPLETION_OPTS=${FZF_COMPLETION_OPTS-}
+  typeset -g _FZF_INHERITED_COMPLETION_PATH_OPTS=${FZF_COMPLETION_PATH_OPTS-}
+  typeset -g _FZF_INHERITED_COMPLETION_DIR_OPTS=${FZF_COMPLETION_DIR_OPTS-}
+  typeset -gi _FZF_USER_OPTS_CAPTURED=1
+fi
 
 _fzf_set_state() {
   typeset -g _FZF_CHECKED_PATH=$1
@@ -34,23 +45,105 @@ _fzf_startup_diagnostic() {
 _fzf_export_config() {
   emulate -L zsh
 
-  local fzf_path=${_FZF_CHECKED_PATH:-}
+  local fzf_path=${_FZF_CHECKED_PATH:-} signature theme_signature width_class
+  local managed preview_command preview_window
+  local -a args context_args
   [[ -n $fzf_path && $fzf_path != '<missing>' ]] || return 1
-  [[ -z ${_FZF_CONFIGURED_BY_PATH[$fzf_path]-} ]] || return 0
 
-  export FZF_DEFAULT_OPTS='--height=45% --layout=reverse --border=rounded --inline-info --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8 --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc --color=marker:#f5a97f,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8 --color=selected-bg:#45475a --color=border:#585b70,label:#cdd6f4,query:#a6e3a1'
+  if (( $+functions[_zsh_theme_detect_color_depth] )); then
+    _zsh_theme_detect_color_depth
+    typeset -g _ZSH_UI_COLOR_DEPTH=$REPLY
+    _zsh_theme_resolve_glyph_tier "${ZSH_UI_GLYPHS:-auto}" || return 1
+    typeset -g _ZSH_UI_GLYPH_TIER=$REPLY
+    _zsh_theme_signature
+    theme_signature=$REPLY
+  else
+    theme_signature='legacy'
+  fi
 
-  export FZF_CTRL_T_OPTS="--preview 'if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=always --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -C -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=always --line-range=:200 -- {}; else sed -n \"1,200p\" -- {}; fi' --preview-window=right,60%,border-left,wrap"
-  export FZF_ALT_C_OPTS='--height=50% --preview-window=hidden'
+  case ${COLUMNS:-80} in
+    ''|*[!0-9]*) width_class=narrow ;;
+    *) (( COLUMNS >= 100 )) && width_class=wide || width_class=narrow ;;
+  esac
+  signature="${theme_signature}|${width_class}|${_FZF_INHERITED_DEFAULT_OPTS}|${_FZF_INHERITED_CTRL_T_OPTS}|${_FZF_INHERITED_CTRL_R_OPTS}|${_FZF_INHERITED_ALT_C_OPTS}|${_FZF_INHERITED_COMPLETION_OPTS}|${_FZF_INHERITED_COMPLETION_PATH_OPTS}|${_FZF_INHERITED_COMPLETION_DIR_OPTS}|${NO_COLOR:-}"
+  [[ ${_FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]-} == "$signature" ]] && return 0
 
-  # Fuzzy history search with preview.
-  export FZF_CTRL_R_OPTS="
-    --preview 'echo {}' --preview-window down:3:hidden:wrap
-    --bind '?:toggle-preview'
-    --color header:italic
-    --header 'Press ? to toggle the command preview'"
+  _zsh_theme_fzf_chrome_opts || return 1
+  managed=$REPLY
+  export FZF_DEFAULT_OPTS=$managed
+  [[ -n $_FZF_INHERITED_DEFAULT_OPTS ]] && FZF_DEFAULT_OPTS+=" $_FZF_INHERITED_DEFAULT_OPTS"
+  [[ -n ${ZSH_FZF_EXTRA_OPTS:-} ]] && FZF_DEFAULT_OPTS+=" ${ZSH_FZF_EXTRA_OPTS}"
+  [[ -n ${NO_COLOR:-} ]] && FZF_DEFAULT_OPTS+=' --no-color'
 
-  _FZF_CONFIGURED_BY_PATH[$fzf_path]=1
+  if [[ -n ${NO_COLOR:-} ]]; then
+    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=never --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=never --line-range=:200 -- {}; else sed -n "1,200p" -- {}; fi'
+  else
+    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=always --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -C -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=always --line-range=:200 -- {}; else sed -n "1,200p" -- {}; fi'
+  fi
+  _zsh_theme_fzf_preview_window
+  preview_window=$REPLY
+  _zsh_theme_fzf_context_args Files 'Type to filter files' 'Enter insert  Ctrl-P preview  Ctrl-/ wrap  Esc close'
+  context_args=( "${reply[@]}" )
+  args=(
+    "${context_args[@]}"
+    --scheme=path
+    "--preview=$preview_command"
+    "--preview-window=$preview_window"
+    --preview-label=File
+    '--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word'
+  )
+  _zsh_theme_join_shell_args "${args[@]}"
+  export FZF_CTRL_T_OPTS=$REPLY
+  [[ -n $_FZF_INHERITED_CTRL_T_OPTS ]] && FZF_CTRL_T_OPTS+=" $_FZF_INHERITED_CTRL_T_OPTS"
+  [[ -n ${NO_COLOR:-} ]] && FZF_CTRL_T_OPTS+=' --no-color'
+
+  _zsh_theme_fzf_context_args History 'Type to filter history' 'Enter insert  ? preview  Ctrl-/ wrap  Esc close'
+  context_args=( "${reply[@]}" )
+  args=(
+    "${context_args[@]}"
+    --scheme=history
+    --wrap=word
+    '--preview=echo {}'
+    '--preview-window=down,3,hidden,wrap-word'
+    --preview-label=Command
+    '--bind=?:toggle-preview,ctrl-/:toggle-preview-wrap-word'
+  )
+  _zsh_theme_join_shell_args "${args[@]}"
+  export FZF_CTRL_R_OPTS=$REPLY
+  [[ -n $_FZF_INHERITED_CTRL_R_OPTS ]] && FZF_CTRL_R_OPTS+=" $_FZF_INHERITED_CTRL_R_OPTS"
+  [[ -n ${NO_COLOR:-} ]] && FZF_CTRL_R_OPTS+=' --no-color'
+
+  _zsh_theme_fzf_context_args Directories 'Type to filter directories' 'Enter cd  Esc close'
+  context_args=( "${reply[@]}" )
+  args=( "${context_args[@]}" --scheme=path --preview-window=hidden )
+  _zsh_theme_join_shell_args "${args[@]}"
+  export FZF_ALT_C_OPTS=$REPLY
+  [[ -n $_FZF_INHERITED_ALT_C_OPTS ]] && FZF_ALT_C_OPTS+=" $_FZF_INHERITED_ALT_C_OPTS"
+  [[ -n ${NO_COLOR:-} ]] && FZF_ALT_C_OPTS+=' --no-color'
+
+  _zsh_theme_fzf_context_args Completions 'Type to filter completions' 'Enter insert  Esc close'
+  args=( "${reply[@]}" )
+  _zsh_theme_join_shell_args "${args[@]}"
+  export FZF_COMPLETION_OPTS=$REPLY
+  [[ -n $_FZF_INHERITED_COMPLETION_OPTS ]] && FZF_COMPLETION_OPTS+=" $_FZF_INHERITED_COMPLETION_OPTS"
+  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_OPTS+=' --no-color'
+
+  _zsh_theme_fzf_context_args Paths 'Type to filter paths' 'Enter insert  Tab mark  Esc close'
+  args=( "${reply[@]}" --scheme=path )
+  _zsh_theme_join_shell_args "${args[@]}"
+  export FZF_COMPLETION_PATH_OPTS=$REPLY
+  [[ -n $_FZF_INHERITED_COMPLETION_PATH_OPTS ]] && FZF_COMPLETION_PATH_OPTS+=" $_FZF_INHERITED_COMPLETION_PATH_OPTS"
+  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_PATH_OPTS+=' --no-color'
+
+  _zsh_theme_fzf_context_args Directories 'Type to filter directories' 'Enter insert  Esc close'
+  args=( "${reply[@]}" --scheme=path --no-multi )
+  _zsh_theme_join_shell_args "${args[@]}"
+  export FZF_COMPLETION_DIR_OPTS=$REPLY
+  [[ -n $_FZF_INHERITED_COMPLETION_DIR_OPTS ]] && FZF_COMPLETION_DIR_OPTS+=" $_FZF_INHERITED_COMPLETION_DIR_OPTS"
+  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_DIR_OPTS+=' --no-color'
+
+  (( $+functions[_zsh_zoxide_refresh_fzf_opts] )) && _zsh_zoxide_refresh_fzf_opts
+  _FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]=$signature
 }
 
 _fzf_check_version_token() {
@@ -58,8 +151,8 @@ _fzf_check_version_token() {
 
   local version_token=$1 patch_component
   local prerelease_pattern='^[0-9]+\.[0-9]+(\.[0-9]+)?-[A-Za-z0-9._-]+$'
-  local -a components
-  integer major minor
+  local -a components minimum_components
+  integer major minor patch minimum_major minimum_minor minimum_patch
 
   if [[ $version_token != <->.<-> && $version_token != <->.<->.<-> ]]; then
     if [[ $version_token =~ $prerelease_pattern ]]; then
@@ -79,7 +172,16 @@ _fzf_check_version_token() {
 
   major=$(( 10#${components[1]} ))
   minor=$(( 10#${components[2]} ))
-  if (( major == 0 && minor < 52 )); then
+  patch=$(( 10#${patch_component} ))
+  minimum_components=( "${(@s:.:)_FZF_MIN_VERSION}" )
+  minimum_major=$(( 10#${minimum_components[1]} ))
+  minimum_minor=$(( 10#${minimum_components[2]} ))
+  minimum_patch=$(( 10#${minimum_components[3]} ))
+  if ((
+    major < minimum_major ||
+    (major == minimum_major && minor < minimum_minor) ||
+    (major == minimum_major && minor == minimum_minor && patch < minimum_patch)
+  )); then
     REPLY=$version_token
     return 1
   fi
@@ -170,6 +272,36 @@ _fzf_require_ready() {
 
   _fzf_diagnostic
   return 1
+}
+
+_fzf_picker_context_args() {
+  emulate -L zsh
+
+  local list_label=$1 ghost=$2 footer=$3
+  _zsh_theme_fzf_context_args "$list_label" "$ghost" "$footer" || return 1
+}
+
+_fzf_picker_preview_args() {
+  emulate -L zsh
+
+  local label=$1
+  _zsh_theme_fzf_preview_window || return 1
+  reply=(
+    "--preview-label=$label"
+    "--preview-window=$REPLY"
+    '--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word'
+  )
+}
+
+_fzf_picker_multi_args() {
+  emulate -L zsh
+
+  local action=${1:-select}
+  REPLY="Enter ${action}  Tab mark  Selected 0  Esc close"
+  reply=(
+    --multi
+    "--bind=multi:transform-footer:printf 'Enter ${action}  Tab mark  Selected %s  Esc close\\n' \"\$FZF_SELECT_COUNT\""
+  )
 }
 
 _fzf_wrap_generated_entry_points() {

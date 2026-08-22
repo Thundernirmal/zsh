@@ -90,7 +90,7 @@ file_contents() {
 
 test_catalogue() {
   local id before_count rc
-  local expected='.. ... .... - z zi mkcd croot ls ll la lt mkdir cp mv rm cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm upkg npkg G L W H T NE NUL tips zhelp'
+  local expected='.. ... .... - z zi mkcd croot ls ll la lt mkdir cp mv rm cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm upkg npkg G L W H T NE NUL tips ztheme zhelp'
 
   assert_equals "${(j: :)_ZSH_HELP_ORDER}" "$expected" 'catalogue covers the public command suite in stable order' || return 1
   assert_unique 'catalogue IDs are unique' "${_ZSH_HELP_ORDER[@]}" || return 1
@@ -107,6 +107,7 @@ test_catalogue() {
   assert_equals "${_ZSH_HELP_SUMMARY[upkg]}" 'Check, search, upgrade, and clean detected managers' 'upkg help summary is concise and includes cleanup' || return 1
   assert_equals "${_ZSH_HELP_USAGE[weather]}" 'weather' 'weather help does not promise an unsupported location argument' || return 1
   assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat or cat' 'peek help names its real fallback' || return 1
+  assert_equals "${_ZSH_HELP_USAGE[ztheme]}" 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme help exposes every public subcommand' || return 1
 
   before_count=${#_ZSH_HELP_ORDER[@]}
   _zsh_help_register extract Files duplicate duplicate duplicate none function none
@@ -141,7 +142,7 @@ test_plain_rendering_and_availability() {
   assert_contains " ${(j: :)reply} " ' npkg ' '--all results include unavailable commands' || return 1
 
   output=$(zhelp --plain --all package)
-  assert_contains "$output" 'Manage the current Nix profile [needs nix; jq and fzf 0.52.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
+  assert_contains "$output" 'Manage the current Nix profile [needs nix; jq and fzf 0.68.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
 
   output=$(zhelp --plain --all upkg)
   assert_contains "$output" 'upkg: Check, search, upgrade, and clean detected managers' 'exact lookup renders a concise command summary' || return 1
@@ -154,7 +155,7 @@ test_plain_rendering_and_availability() {
   assert_contains "$output" "Run 'zhelp --all npkg'" 'unavailable exact lookup explains how to include the command' || return 1
 
   output=$(zhelp --plain --all npkg)
-  assert_contains "$output" 'Status:  unavailable (needs nix; jq and fzf 0.52.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
+  assert_contains "$output" 'Status:  unavailable (needs nix; jq and fzf 0.68.0+ for optional workflows)' '--all labels unavailable command requirements' || return 1
 
   output=$(zhelp --plain --all cgm)
   assert_contains "$output" 'cgm: Store and load shell credentials securely' 'cgm has a concise help record' || return 1
@@ -193,6 +194,9 @@ test_palette_queue_and_cancel() {
   local dangerous_example="print -r -- executed > ${(q)marker_file}"
   local queued old_path=$PATH rc
 
+  assert_contains "${functions[_zsh_help_palette]}" '--accept-nth=5' 'zhelp asks fzf to return only the editable example' || return 1
+  assert_contains "${functions[_zsh_help_palette]}" '_fzf_picker_preview_args Usage' 'zhelp uses the shared responsive preview policy' || return 1
+
   command mkdir -p -- "$fakebin"
   _zsh_help_register test-palette Meta 'Palette safety fixture' 'test-palette' "$dangerous_example" none function none || return 1
   functions[_fzf_require_ready]='return 0'
@@ -201,7 +205,11 @@ test_palette_queue_and_cancel() {
 while IFS= read -r line; do
   case "$line" in
     "$ZSH_HELP_TEST_ID	"*)
-      printf "%s\n" "$line"
+      tab=$(printf "\t")
+      IFS="$tab" read -r id category summary usage example availability <<EOF
+$line
+EOF
+      printf "%s\n" "$example"
       exit 0
       ;;
   esac
@@ -278,6 +286,8 @@ test_tips_are_concise() {
 }
 
 main() {
+  source "$repo_dir/25-theme.zsh"
+  source "$repo_dir/40-fzf.zsh"
   source "$repo_dir/65-help.zsh"
 
   test_catalogue || return 1

@@ -14,6 +14,7 @@ setopt INTERACTIVE_COMMENTS # Allow # comments in interactive shell
 for zsh_config_file in \
   "$HOME/.config/zsh/10-history.zsh" \
   "$HOME/.config/zsh/20-aliases.zsh" \
+  "$HOME/.config/zsh/25-theme.zsh" \
   "$HOME/.config/zsh/30-zoxide.zsh" \
   "$HOME/.config/zsh/40-fzf.zsh" \
   "$HOME/.config/zsh/50-completion.zsh" \

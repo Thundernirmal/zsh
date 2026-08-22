@@ -97,11 +97,18 @@ ft() {
 
 _zsh_require_fzf() {
   if (( ! $+functions[_fzf_require_ready] )); then
-    print -u2 -r -- 'zsh config: fzf 0.52.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
+    print -u2 -r -- 'zsh config: fzf 0.68.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
     return 1
   fi
   _fzf_require_ready
 }
+
+typeset -g _ZSH_CONFIG_FUNCTIONS_DIR=${${(%):-%N}:A:h}/functions
+if (( ! ${fpath[(Ie)$_ZSH_CONFIG_FUNCTIONS_DIR]} )); then
+  fpath=( "$_ZSH_CONFIG_FUNCTIONS_DIR" "${fpath[@]}" )
+fi
+(( $+functions[ztheme] )) || autoload -Uz ztheme
+(( $+functions[_fbr_format_entry] )) || autoload -Uz _fbr_format_entry
 
 # Fuzzy kill process
 fkill() {
@@ -113,12 +120,24 @@ fkill() {
   fi
 
   local signal=${1:-15}
-  local selected pid
-  local -a pids
-  local _fzf_pointer='>' _fzf_marker='+'
-  (( $+functions[_ui_has_icons] )) && _ui_has_icons && { _fzf_pointer='󰘳'; _fzf_marker='󰄬'; }
+  local selected pid multi_footer
+  local -a pids fzf_args multi_args context_args
 
   signal=${signal#-}
+  _fzf_picker_multi_args kill
+  multi_footer=$REPLY
+  multi_args=( "${reply[@]}" )
+  _fzf_picker_context_args Processes 'Type to filter processes' "$multi_footer"
+  context_args=( "${reply[@]}" )
+  fzf_args=(
+    "${context_args[@]}"
+    "${multi_args[@]}"
+    --delimiter=$'\t'
+    --with-nth=2..
+    --accept-nth=1
+    "--header=Signal: SIG${signal}"
+    --header-label=Signal
+  )
   selected=$(
     ps -ef | sed 1d | awk '
       {
@@ -127,14 +146,10 @@ fkill() {
         sub(/^ +/, "")
         print pid "\t" $0
       }
-    ' | fzf -m --delimiter=$'\t' --with-nth=2.. \
-      --prompt='Kill> ' \
-      --header="Select process(es) to kill with SIG${signal}" \
-      --pointer="$_fzf_pointer" \
-      --marker="$_fzf_marker"
+    ' | command fzf "${fzf_args[@]}"
   ) || return 0
 
-  while IFS=$'\t' read -r pid _; do
+  while IFS= read -r pid; do
     [ -n "$pid" ] && pids+=("$pid")
   done <<< "$selected"
 
@@ -1091,15 +1106,38 @@ fbr() {
     return 1
   }
 
-  local selection branch branch_label current_worktree ref_details ref_line worktree_branch worktree_display worktree_path
-  local worktree_badge_color='' worktree_badge_reset=''
+  local selection branch current_worktree ref_details ref_line relative subject worktree_branch worktree_path
+  local worktree_badge_color='' worktree_badge_reset='' preview_command
   local -A worktree_paths
-  local _fzf_pointer='>' _fzf_marker='+'
-  (( $+functions[_ui_has_icons] )) && _ui_has_icons && { _fzf_pointer='󰘳'; _fzf_marker='󰄬'; }
+  local -a fzf_args context_args preview_args
   if ! _ui_plain_mode; then
-    worktree_badge_color=$'\e[1;38;5;116m'
-    worktree_badge_reset=$'\e[0m'
+    if _zsh_theme_sgr success fg ui; then
+      worktree_badge_color=$REPLY
+      worktree_badge_reset=$'\e[0m'
+    fi
   fi
+
+  if [[ -n ${NO_COLOR:-} ]]; then
+    preview_command='git log --oneline --decorate --color=never -20 {5}'
+  else
+    preview_command='git log --oneline --decorate --color=always -20 {5}'
+  fi
+  _fzf_picker_context_args Branches 'Type to filter branches' 'Enter checkout  Ctrl-P preview  Ctrl-/ wrap  Esc close'
+  context_args=( "${reply[@]}" )
+  _fzf_picker_preview_args Log
+  preview_args=( "${reply[@]}" )
+  fzf_args=(
+    "${context_args[@]}"
+    "${preview_args[@]}"
+    --ansi
+    --delimiter=$'\t'
+    --with-nth=1,2,3
+    --nth=1,2,3
+    --accept-nth=5
+    --freeze-left=1
+    --no-multi
+    "--preview=$preview_command"
+  )
 
   current_worktree=$(command git rev-parse --show-toplevel 2>/dev/null) || current_worktree=''
   while IFS= read -r -d '' worktree_branch && IFS= read -r -d '' worktree_path; do
@@ -1111,29 +1149,22 @@ fbr() {
       branch=${ref_line%%$'\t'*}
       [[ $branch == */HEAD ]] && continue
 
-      branch_label=$branch
-      worktree_display=''
-      if [[ -n ${worktree_paths[$branch]-} ]]; then
-        branch_label="${worktree_badge_color}[WT]${worktree_badge_reset} $branch"
-        worktree_display=$(_ui_safe_text "${worktree_paths[$branch]}")
-      fi
-
       ref_details=${ref_line#*$'\t'}
-      print -r -- "$branch"$'\t'"$branch_label"$'\t'"$ref_details"$'\t'"$worktree_display"
+      relative=${ref_details%%$'\t'*}
+      subject=${ref_details#*$'\t'}
+      worktree_path=${worktree_paths[$branch]-}
+      _fbr_format_entry "$branch" "$relative" "$subject" "$worktree_path" \
+        "$worktree_badge_color" "$worktree_badge_reset" 32 14
+      print -r -- "$REPLY"
     done < <(
       command git for-each-ref --sort=-committerdate \
         --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \
         refs/heads refs/remotes
     ) |
-      fzf --ansi --height=50% --delimiter=$'\t' --with-nth=2,3,4,5 \
-        --prompt='Branch> ' \
-        --pointer="$_fzf_pointer" \
-        --marker="$_fzf_marker" \
-        --preview 'git log --oneline --decorate --color=always -20 {1}' \
-        --preview-window=right,60%,border-left,wrap
+      command fzf "${fzf_args[@]}"
   ) || return 0
 
-  branch=${selection%%$'\t'*}
+  branch=$selection
 
   worktree_path=${worktree_paths[$branch]-}
   if [[ -z $worktree_path ]] && command git show-ref --verify --quiet "refs/remotes/$branch"; then
@@ -3780,7 +3811,7 @@ if command -v nix >/dev/null 2>&1; then
     print '  - Bare install names are expanded to nixpkgs#<name>'
     print '  - npkg find searches a cached list of nixpkgs attribute names'
     print '  - npkg refresh and outdated need jq'
-    print '  - Interactive add/find/remove needs jq and fzf 0.52.0+'
+    print '  - Interactive add/find/remove needs jq and fzf 0.68.0+'
     print '  - Advanced nix flags can be passed through by calling nix directly'
   }
 
@@ -3889,49 +3920,52 @@ if command -v nix >/dev/null 2>&1; then
   _npkg_fzf_preview_window() {
     emulate -L zsh
 
-    local percent=${1:-50}
-    local width
-
-    width=$(_ui_term_width)
-    case $width in
-      ''|*[!0-9]*) width=80 ;;
-    esac
-
-    if (( width >= 100 )); then
-      print -r -- "right,${percent}%,border-left,wrap"
-    else
-      print -r -- "down,45%,border-top,wrap"
+    if (( $+functions[_zsh_theme_fzf_preview_window] )); then
+      _zsh_theme_fzf_preview_window || return 1
+      print -r -- "$REPLY"
+      return
     fi
+
+    print -r -- 'down,40%,border-top,wrap-word'
   }
 
   _npkg_pick_installables() {
     emulate -L zsh
 
-    local cache_file selection attr query preview_window
-    local -a installables
+    local cache_file selection attr query multi_footer
+    local -a installables fzf_args context_args preview_args multi_args
     local _c_attr='' _c_muted='' _c_success='' _c_info='' _c0=''
 
     _npkg_require_picker 'install' || return 1
 
     if (( $+functions[_ui_is_rich_terminal] )) && _ui_is_rich_terminal; then
-      _c_attr='\033[38;2;245;224;220m'
-      _c_muted='\033[38;2;166;173;200m'
-      _c_success='\033[38;2;166;227;161m'
-      _c_info='\033[38;2;137;180;250m'
-      _c0='\033[0m'
+      _zsh_theme_sgr accent fg ui && _c_attr=$REPLY
+      _zsh_theme_sgr muted fg ui && _c_muted=$REPLY
+      _zsh_theme_sgr success fg ui && _c_success=$REPLY
+      _zsh_theme_sgr info fg ui && _c_info=$REPLY
+      _c0=$'\e[0m'
     fi
 
     query="${(j: :)@}"
     cache_file=$(_npkg_attr_index) || return 1
-    preview_window=$(_npkg_fzf_preview_window 45)
+    _fzf_picker_multi_args add
+    multi_footer=$REPLY
+    multi_args=( "${reply[@]}" )
+    _fzf_picker_context_args Packages 'Type to filter packages' "$multi_footer"
+    context_args=( "${reply[@]}" )
+    _fzf_picker_preview_args Package
+    preview_args=( "${reply[@]}" )
+    fzf_args=(
+      "${context_args[@]}"
+      "${preview_args[@]}"
+      "${multi_args[@]}"
+      "--query=$query"
+    )
 
     selection=$(
       _c_attr="$_c_attr" _c_muted="$_c_muted" _c_success="$_c_success" \
       _c_info="$_c_info" _c0="$_c0" \
-      command fzf -m \
-        --prompt='Nix install> ' \
-        --query="$query" \
-        --header='Type to filter attribute names, Tab marks packages, Enter adds' \
+      command fzf "${fzf_args[@]}" \
         --preview '
             attr={}
             printf "${_c_attr}Attr:${_c0} %s\n" "$attr"
@@ -3957,7 +3991,6 @@ if command -v nix >/dev/null 2>&1; then
               printf "${_c_info}Homepage:${_c0} %s\n" "$hp"
             fi
           ' \
-        --preview-window="$preview_window" \
         < "$cache_file"
     ) || return 0
 
@@ -3973,17 +4006,17 @@ if command -v nix >/dev/null 2>&1; then
     emulate -L zsh
     setopt pipefail
 
-    local candidates selection preview_window
-    local -a targets
+    local candidates selection multi_footer target
+    local -a targets fzf_args context_args preview_args multi_args
     local _c_attr='' _c_muted='' _c_info='' _c0=''
 
     _npkg_require_picker 'remove' || return 1
 
     if (( $+functions[_ui_is_rich_terminal] )) && _ui_is_rich_terminal; then
-      _c_attr='\033[38;2;245;224;220m'
-      _c_muted='\033[38;2;166;173;200m'
-      _c_info='\033[38;2;137;180;250m'
-      _c0='\033[0m'
+      _zsh_theme_sgr accent fg ui && _c_attr=$REPLY
+      _zsh_theme_sgr muted fg ui && _c_muted=$REPLY
+      _zsh_theme_sgr info fg ui && _c_info=$REPLY
+      _c0=$'\e[0m'
     fi
 
     candidates=$(
@@ -4023,10 +4056,10 @@ if command -v nix >/dev/null 2>&1; then
           manifest_entries
           | select(.target != "")
           | [
-              .target,
               .name,
               .attr,
-              (.source | clean_text)
+              (.source | clean_text),
+              .target
             ]
           | @tsv
         '
@@ -4037,19 +4070,33 @@ if command -v nix >/dev/null 2>&1; then
       return 0
     fi
 
-    preview_window=$(_npkg_fzf_preview_window 60)
+    _fzf_picker_multi_args remove
+    multi_footer=$REPLY
+    multi_args=( "${reply[@]}" )
+    _fzf_picker_context_args 'Installed packages' 'Type to filter installed packages' "$multi_footer"
+    context_args=( "${reply[@]}" )
+    _fzf_picker_preview_args Package
+    preview_args=( "${reply[@]}" )
+    fzf_args=(
+      "${context_args[@]}"
+      "${preview_args[@]}"
+      "${multi_args[@]}"
+      --delimiter=$'\t'
+      --with-nth=1,2,3
+      --nth=1,2,3
+      --accept-nth=4
+      --freeze-left=1
+      --wrap=word
+    )
 
     selection=$(
       print -r -- "$candidates" |
         _c_attr="$_c_attr" _c_muted="$_c_muted" _c_info="$_c_info" _c0="$_c0" \
-        command fzf -m --delimiter=$'\t' --with-nth=2,3,4 \
-          --prompt='Nix remove> ' \
-          --header='Tab marks packages, Enter removes' \
-          --preview 'printf "${_c_attr}Name:${_c0} %s\n${_c_muted}Attr:${_c0} %s\n${_c_info}Source:${_c0} %s\n" {2} {3} {4}' \
-          --preview-window="$preview_window"
+        command fzf "${fzf_args[@]}" \
+          --preview 'printf "${_c_attr}Name:${_c0} %s\n${_c_muted}Attr:${_c0} %s\n${_c_info}Source:${_c0} %s\n" {1} {2} {3}'
     ) || return 0
 
-    while IFS=$'\t' read -r target _; do
+    while IFS= read -r target; do
       [ -n "$target" ] && targets+=("$target")
     done <<< "$selection"
 

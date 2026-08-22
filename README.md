@@ -9,6 +9,9 @@ A portable, versioned Zsh layer for GNU/Linux. It adds safer interactive default
 This repository expects to live at `~/.config/zsh`. Source it near the end of `~/.zshrc`, after Oh My Zsh if the shared aliases should take precedence:
 
 ```zsh
+# Optional: choose a built-in palette before loading the shared layer.
+typeset -g ZSH_UI_THEME=nord
+
 if [ -r "$HOME/.config/zsh/init.zsh" ]; then
   source "$HOME/.config/zsh/init.zsh"
 fi
@@ -21,18 +24,21 @@ exec zsh
 $HOME/.config/zsh/scripts/check-deps.sh
 zhelp
 tips
+ztheme list
 ```
 
 `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example.
+
+Fuzzy pickers share one rounded frame with unfilled input and footer rows, restrained section dividers, concise key hints, responsive previews, and theme-aware focus and selection cues. Tabular pickers align their display columns while returning undecorated values. Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
 
 ## What it provides
 
 - Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning.
 - Guarded `zoxide` and `fzf` integration with Ctrl+R, Ctrl+T, and Alt+C bindings.
-- File, search, Git branch navigation with labeled alternate worktrees, network, disk-usage, and process helpers.
+- File, search, Git branch navigation with undecorated branch selection and labeled alternate worktrees, network, disk-usage, and process helpers.
 - `upkg` for detected package managers and optional `npkg` helpers for Nix profiles.
 - Optional `cgm` credential storage through Linux Secret Service.
-- Rich terminal dashboards with deterministic plain-text fallbacks.
+- Shared themes for rich dashboards and every fzf entry point, with safe session switching through `ztheme` and deterministic plain-text fallbacks.
 
 ## Requirements
 
@@ -40,9 +46,11 @@ The dependency checker treats these as required for the intended setup:
 
 - `zsh`, `git`, `curl`, and `ss`
 - `lsd` and `zoxide`
-- stable `fzf` 0.52.0 or newer
+- stable `fzf` 0.68.0 or newer
 
 Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
+
+If the packaged fzf is older than 0.68.0, upgrade it through a current package source or follow the upstream installation link printed by `scripts/check-deps.sh`.
 
 The configuration targets GNU/Linux. Some commands and flags are not portable to BSD or macOS userlands without adjustment.
 

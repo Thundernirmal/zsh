@@ -9,6 +9,8 @@
 | Scope | Four High-priority release blockers; the audit identified no separate Critical-severity finding |
 
 > This is a historical implementation specification. For current setup, usage, and gotchas, use [`GUIDE.md`](../../GUIDE.md).
+>
+> **Superseded compatibility decision:** HC-03 records the 0.52.0 floor shipped by this historical remediation. The later [shared theming and fzf UI specification](theming-and-fzf-ui-plan.md) raises the current floor to 0.68.0 for structured picker UI; current code and user documentation use 0.68.0.
 
 ## Summary
 

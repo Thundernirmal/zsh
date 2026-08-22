@@ -8,6 +8,8 @@ _zsh_tip_pool=(
   "Use *(D) when a glob should include hidden entries"
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
+  "Run ztheme use nord to switch dashboard and finder colors for this session"
+  "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"
   "Run ft <pattern> [path] to search file contents"
@@ -44,8 +46,10 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Press Ctrl+R to insert a history entry for editing"
     "Press Ctrl+T to insert a selected file path"
     "Press Alt+C to select and enter a directory"
+    "Type in the unfilled fzf input row to filter; use the footer for keys"
+    "Press Ctrl+P in preview pickers to toggle the preview; use Ctrl+/ to wrap"
     "Run fkill to select processes and send SIGTERM; use 9 only to force"
-    "Run fbr to select a branch, enter its worktree, or check it out"
+    "Run fbr to scan aligned branch details and enter or check out the result"
     "Use [WT] in fbr to spot branches checked out in another worktree"
   )
 

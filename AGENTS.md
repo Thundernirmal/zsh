@@ -3,7 +3,8 @@
 ## Repo Shape
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
-- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
+- `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `25-theme.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
+- `functions/ztheme`, `functions/_fbr_format_entry`, and `lib/theme-*.zsh` are trusted repo-local lazy helpers. Normal startup registers `ztheme`, the fbr row formatter, and lightweight registry/color stubs; command-only rendering, fbr formatting, palette, validation, and conversion code is parsed on first use.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Documentation Ownership
@@ -22,6 +23,9 @@
   - Startup-time guards (top level of a module, evaluated on every shell start) use `(( $+commands[tool] ))`. A `command -v` miss walks the whole `PATH`, which dominates startup time on long `PATH`s such as WSL2 setups that inherit Windows entries.
   - Guards inside function bodies keep `command -v ... >/dev/null 2>&1`. `$commands` is a cached hash, so it can go stale mid-session and it defeats the `PATH`-stubbed fake binaries in `scripts/test-upkg.zsh`.
 - `40-fzf.zsh` also embeds `command -v` inside the exported `FZF_*_OPTS` preview strings. Those run in a separate shell that fzf spawns, so they must stay `command -v`.
+- `25-theme.zsh` is the single palette and glyph source of truth. Keep its startup path pure Zsh: no executable probes, terminal queries, filesystem theme discovery, downloaded palettes, arbitrary theme sourcing, or `eval`. Renderer and picker code consume semantic roles instead of palette-specific names or raw colors.
+- `60-functions.zsh` owns registration of the session-only `ztheme` command, and `functions/ztheme` owns its implementation. It may print safe assignments but must not edit `.zshrc`; invalid settings and failed finder refreshes must remain atomic.
+- Keep the private `functions/` path idempotent and keep lazy helper sources fixed to the repository directory. Do not replace them with user-controlled discovery or runtime downloads.
 - IMPORTANT: whenever you change a user-facing alias, function, completion behavior, or workflow in this repo, update `80-tips.zsh`, `README.md`, and `GUIDE.md` in the same change so all documentation stays accurate and consistent. Keep each update within the ownership boundaries above; synchronization does not mean duplicating the same prose.
 - If you add or remove a shared external dependency, update `scripts/check-deps.sh` too.
 - `scripts/check-deps.sh` is POSIX `sh`, not Zsh. Keep it portable.
@@ -36,15 +40,17 @@
 
 Run these in order after edits:
 
-1. `zsh -n *.zsh`
-2. `sh -n scripts/check-deps.sh`
-3. `zsh scripts/test-init.zsh`
-4. `zsh scripts/test-functions.zsh`
-5. `zsh scripts/test-cgm.zsh`
-6. `zsh scripts/test-upkg.zsh`
-7. `zsh scripts/test-completions.zsh`
-8. `zsh scripts/test-help.zsh`
-9. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
+1. `zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry`
+2. `zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh`
+3. `sh -n scripts/check-deps.sh`
+4. `zsh scripts/test-init.zsh`
+5. `zsh scripts/test-theme.zsh`
+6. `zsh scripts/test-functions.zsh`
+7. `zsh scripts/test-cgm.zsh`
+8. `zsh scripts/test-upkg.zsh`
+9. `zsh scripts/test-completions.zsh`
+10. `zsh scripts/test-help.zsh`
+11. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
 - `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `secret-tool`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.

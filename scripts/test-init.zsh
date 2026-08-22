@@ -147,7 +147,7 @@ run_init_case() {
 
 prepare_fzf_fakebin() {
   local fakebin=$1
-  local version=${2:-0.52.0}
+  local version=${2:-0.68.0}
   local version_status=${3:-0}
   local integration_mode=${4:-ok}
   local include_fzf=${5:-1}
@@ -245,17 +245,20 @@ run_fzf_startup_case() {
   : > "$widget_log"
 
   prepare_fzf_fakebin "$case_dir/bin" "$version" "$version_status" "$integration_mode" "$include_fzf" || return 1
-  print -r -- 'unset FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_ALT_C_OPTS FZF_CTRL_R_OPTS
+  print -r -- 'unset FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_ALT_C_OPTS FZF_CTRL_R_OPTS FZF_COMPLETION_OPTS FZF_COMPLETION_PATH_OPTS FZF_COMPLETION_DIR_OPTS
 source "$HOME/.config/zsh/init.zsh"
 [[ ${FZF_DEFAULT_OPTS-} == *selected-bg* ]] && selected_bg=1 || selected_bg=0
 print -r -- "state=${_FZF_STATE:-unset} found=${_FZF_FOUND:-unset} evaluated=${FZF_TEST_EVALUATED:-0}"
-print -r -- "opts=${+FZF_DEFAULT_OPTS}${+FZF_CTRL_T_OPTS}${+FZF_ALT_C_OPTS}${+FZF_CTRL_R_OPTS} selected-bg=$selected_bg"
+print -r -- "opts=${+FZF_DEFAULT_OPTS}${+FZF_CTRL_T_OPTS}${+FZF_ALT_C_OPTS}${+FZF_CTRL_R_OPTS}${+FZF_COMPLETION_OPTS}${+FZF_COMPLETION_PATH_OPTS}${+FZF_COMPLETION_DIR_OPTS} zoxide=${+_ZO_FZF_OPTS} selected-bg=$selected_bg"
 print -r -- "generated=${+functions[fzf-file-widget]}${+functions[fzf-cd-widget]}${+functions[fzf-history-widget]}${+functions[__fzf_comprun]}${+functions[_fzf_complete]}"
 print -r -- "defined=${+functions[fkill]}${+functions[fbr]}${+functions[zhelp]}${+functions[npkg]}${+functions[zi]}"' > "$script_file"
 
   HOME="$tmp_home" \
     XDG_CACHE_HOME="$case_dir/cache" \
     PATH="$case_dir/bin" \
+    NO_COLOR= \
+    TERM=xterm-256color \
+    COLORTERM=truecolor \
     FZF_TEST_LOG="$log_file" \
     FZF_TEST_WIDGET_LOG="$widget_log" \
     "$zsh_bin" -dfi "$script_file" >"$stdout_file" 2>"$stderr_file"
@@ -336,10 +339,10 @@ test_fzf_startup_gate() {
   local -a fields blocked_cases integration_cases supported_cases
 
   run_fzf_startup_case 'unused' 0 ok 0 || return 1
-  expected='zsh config: fzf 0.52.0 or newer is required (found: missing). Upgrade fzf and restart the shell.'
+  expected='zsh config: fzf 0.68.0 or newer is required (found: missing). Upgrade fzf and restart the shell.'
   assert_status "$FZF_CASE_STATUS" 0 'missing fzf leaves normal interactive startup usable' || return 1
   assert_contains "$FZF_CASE_STDOUT" 'state=blocked found=missing evaluated=0' 'missing fzf records a blocked session state' || return 1
-  assert_contains "$FZF_CASE_STDOUT" 'opts=0000 selected-bg=0' 'missing fzf exports no repository options' || return 1
+  assert_contains "$FZF_CASE_STDOUT" 'opts=0000000 zoxide=1 selected-bg=0' 'missing fzf exports no fzf integration options' || return 1
   assert_contains "$FZF_CASE_STDOUT" 'generated=00000' 'missing fzf evaluates no generated integration' || return 1
   assert_contains "$FZF_CASE_STDOUT" 'defined=11111' 'missing fzf preserves repository picker functions' || return 1
   assert_equals "$FZF_CASE_STDERR" "$expected" 'missing fzf prints exactly one normal-startup diagnostic' || return 1
@@ -347,10 +350,10 @@ test_fzf_startup_gate() {
   command rm -rf -- "$FZF_CASE_DIR"
 
   blocked_cases=(
-    'version command failure|0.52.0|7|ok|version check failed'
+    'version command failure|0.68.0|7|ok|version check failed'
     'malformed version|not-a-version|0|ok|unparseable version'
-    'prerelease version|0.53.0-beta|0|ok|0.53.0-beta'
-    'below-minimum version|0.51.1|0|ok|0.51.1'
+    'prerelease version|0.69.0-beta|0|ok|0.69.0-beta'
+    'below-minimum version|0.67.9|0|ok|0.67.9'
   )
 
   for case_spec in "${blocked_cases[@]}"; do
@@ -361,11 +364,11 @@ test_fzf_startup_gate() {
     integration_mode=${fields[4]}
     found=${fields[5]}
     run_fzf_startup_case "$version" "$version_status" "$integration_mode" 1 || return 1
-    expected="zsh config: fzf 0.52.0 or newer is required (found: ${found}). Upgrade fzf and restart the shell."
+    expected="zsh config: fzf 0.68.0 or newer is required (found: ${found}). Upgrade fzf and restart the shell."
 
     assert_status "$FZF_CASE_STATUS" 0 "$label leaves normal interactive startup usable" || return 1
     assert_contains "$FZF_CASE_STDOUT" "state=blocked found=${found} evaluated=0" "$label records the expected block reason" || return 1
-    assert_contains "$FZF_CASE_STDOUT" 'opts=0000 selected-bg=0' "$label exports no repository options" || return 1
+    assert_contains "$FZF_CASE_STDOUT" 'opts=0000000 zoxide=1 selected-bg=0' "$label exports no fzf integration options" || return 1
     assert_contains "$FZF_CASE_STDOUT" 'generated=00000' "$label prevents generated integration evaluation" || return 1
     assert_contains "$FZF_CASE_STDOUT" 'defined=11111' "$label preserves repository picker functions" || return 1
     assert_equals "$FZF_CASE_STDERR" "$expected" "$label prints exactly one actionable diagnostic" || return 1
@@ -386,12 +389,12 @@ test_fzf_startup_gate() {
     label=${fields[1]}
     integration_mode=${fields[2]}
     found=${fields[3]}
-    run_fzf_startup_case 0.52.0 0 "$integration_mode" 1 || return 1
-    expected="zsh config: fzf 0.52.0 or newer is required (found: ${found}). Upgrade fzf and restart the shell."
+    run_fzf_startup_case 0.68.0 0 "$integration_mode" 1 || return 1
+    expected="zsh config: fzf 0.68.0 or newer is required (found: ${found}). Upgrade fzf and restart the shell."
 
     assert_status "$FZF_CASE_STATUS" 0 "$label leaves unrelated shell config usable" || return 1
     assert_contains "$FZF_CASE_STDOUT" "state=blocked found=${found} evaluated=0" "$label hard-blocks the fuzzy subsystem" || return 1
-    assert_contains "$FZF_CASE_STDOUT" 'opts=0000 selected-bg=0' "$label exports no repository options" || return 1
+    assert_contains "$FZF_CASE_STDOUT" 'opts=0000000 zoxide=1 selected-bg=0' "$label exports no fzf integration options" || return 1
     assert_contains "$FZF_CASE_STDOUT" 'generated=00000' "$label does not partially initialize generated features" || return 1
     assert_contains "$FZF_CASE_STDOUT" 'defined=11111' "$label preserves repository picker functions" || return 1
     assert_equals "$FZF_CASE_STDERR" "$expected" "$label prints exactly one actionable diagnostic" || return 1
@@ -401,8 +404,8 @@ test_fzf_startup_gate() {
   done
 
   supported_cases=(
-    'inclusive boundary|0.52.0'
-    'omitted patch boundary|0.52'
+    'inclusive boundary|0.68.0'
+    'omitted patch boundary|0.68'
     'newer minor|0.80.2'
     'newer major|1.0.0'
   )
@@ -415,7 +418,7 @@ test_fzf_startup_gate() {
 
     assert_status "$FZF_CASE_STATUS" 0 "$label initializes successfully" || return 1
     assert_contains "$FZF_CASE_STDOUT" "state=ready found=${version} evaluated=1" "$label records a ready session and evaluates integration" || return 1
-    assert_contains "$FZF_CASE_STDOUT" 'opts=1111 selected-bg=1' "$label retains selected-bg and all specialized option variables" || return 1
+    assert_contains "$FZF_CASE_STDOUT" 'opts=1111111 zoxide=1 selected-bg=1' "$label retains global, widget, completion, and zoxide options" || return 1
     assert_contains "$FZF_CASE_STDOUT" 'generated=11111' "$label retains generated widgets and completion" || return 1
     assert_contains "$FZF_CASE_STDOUT" 'defined=11111' "$label retains every repository picker function" || return 1
     assert_equals "$FZF_CASE_STDERR" '' "$label startup stays quiet" || return 1
@@ -440,7 +443,7 @@ test_fzf_persistent_startup_cache() {
   : > "$log_file"
   : > "$process_log"
 
-  prepare_fzf_fakebin "$case_dir/bin" 0.67.0 0 ok 1 || return 1
+  prepare_fzf_fakebin "$case_dir/bin" 0.70.0 0 ok 1 || return 1
   command rm -f -- "$case_dir/bin/zsh"
   print -r -- '#!/bin/sh
 printf "zsh:%s\n" "$*" >> "${FZF_TEST_PROCESS_LOG:-/dev/null}"
@@ -462,7 +465,7 @@ print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:
     output=$(file_contents "$stdout_file")
 
     assert_status "$cmd_status" 0 "$phase persistent-cache startup exits cleanly" || return 1
-    assert_contains "$output" 'state=ready found=0.67.0 evaluated=1 opts=1' "$phase persistent-cache startup retains the full integration" || return 1
+    assert_contains "$output" 'state=ready found=0.70.0 evaluated=1 opts=1' "$phase persistent-cache startup retains the full integration" || return 1
     assert_no_output "$stderr_file" "$phase persistent-cache startup stays quiet" || return 1
   done
 
@@ -485,7 +488,7 @@ print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:
   cmd_status=$?
   output=$(file_contents "$stdout_file")
   assert_status "$cmd_status" 0 'unsafe persistent cache is replaced cleanly' || return 1
-  assert_contains "$output" 'state=ready found=0.67.0 evaluated=1 opts=1' 'unsafe cache replacement retains the full integration' || return 1
+  assert_contains "$output" 'state=ready found=0.70.0 evaluated=1 opts=1' 'unsafe cache replacement retains the full integration' || return 1
   assert_no_output "$stderr_file" 'unsafe persistent cache replacement stays quiet' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 2 'group-writable cache forces version revalidation' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 2 'group-writable cache forces integration regeneration' || return 1
@@ -501,7 +504,7 @@ print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:
   cmd_status=$?
   output=$(file_contents "$stdout_file")
   assert_status "$cmd_status" 0 'changed fzf binary rebuilds the persistent cache cleanly' || return 1
-  assert_contains "$output" 'state=ready found=0.67.0 evaluated=1 opts=1' 'changed binary cache rebuild retains the full integration' || return 1
+  assert_contains "$output" 'state=ready found=0.70.0 evaluated=1 opts=1' 'changed binary cache rebuild retains the full integration' || return 1
   assert_no_output "$stderr_file" 'changed fzf binary cache rebuild stays quiet' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 3 'changed fzf binary invalidates the cached version result' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 3 'changed fzf binary invalidates generated integration' || return 1
@@ -514,7 +517,7 @@ test_fzf_quiet_startup_modes() {
   local case_dir stdout_file stderr_file log_file cmd_status
 
   case_dir=$(mktemp -d "$tmp_home/fzf-quiet.XXXXXX") || return 1
-  prepare_fzf_fakebin "$case_dir/bin" 0.51.1 0 ok 1 || return 1
+  prepare_fzf_fakebin "$case_dir/bin" 0.67.9 0 ok 1 || return 1
   stdout_file="$case_dir/stdout"
   stderr_file="$case_dir/stderr"
   log_file="$case_dir/fzf.log"
@@ -545,7 +548,7 @@ test_fzf_runtime_guards() {
   local explicit_plain automatic_plain output diagnostics cmd_status
 
   case_dir=$(mktemp -d "$tmp_home/fzf-runtime.XXXXXX") || return 1
-  prepare_fzf_fakebin "$case_dir/bin" 0.51.1 0 ok 1 || return 1
+  prepare_fzf_fakebin "$case_dir/bin" 0.67.9 0 ok 1 || return 1
   script_file="$case_dir/runtime.zsh"
   stdout_file="$case_dir/stdout"
   stderr_file="$case_dir/stderr"
@@ -590,7 +593,7 @@ print -r -- "plain=$explicit_rc,$automatic_rc guarded=$fkill_rc,$fbr_rc,$npkg_rc
   assert_contains "$output" 'plain=0,0 guarded=1,1,1,1,1 opts=0' 'plain modes work while every direct fuzzy entry point fails closed' || return 1
   assert_contains "$(file_contents "$explicit_plain")" 'Command        Category' 'zhelp --plain works without invoking blocked fzf' || return 1
   assert_contains "$(file_contents "$automatic_plain")" 'Command        Category' 'zhelp automatic plain mode works without invoking blocked fzf' || return 1
-  assert_matching_lines "$diagnostics" 'zsh config: fzf 0.52.0 or newer is required (found: 0.51.1).' 5 'every blocked explicit picker reports the shared diagnostic' || return 1
+  assert_matching_lines "$diagnostics" 'zsh config: fzf 0.68.0 or newer is required (found: 0.67.9).' 5 'every blocked explicit picker reports the shared diagnostic' || return 1
   assert_equals "$(file_contents "$log_file")" $'plain-finished\n'"$case_dir/bin/fzf:--version" 'plain help never probes fzf and guarded pickers share one cached version probe' || return 1
   assert_equals "$(file_contents "$widget_log")" '' 'blocked direct entry points never reach a picker implementation' || return 1
 
@@ -603,8 +606,8 @@ test_fzf_path_cache() {
   case_dir=$(mktemp -d "$tmp_home/fzf-cache.XXXXXX") || return 1
   ready_bin="$case_dir/ready-bin"
   blocked_bin="$case_dir/blocked-bin"
-  prepare_fzf_fakebin "$ready_bin" 0.52.0 0 ok 1 || return 1
-  prepare_fzf_fakebin "$blocked_bin" 0.51.1 0 ok 1 || return 1
+  prepare_fzf_fakebin "$ready_bin" 0.68.0 0 ok 1 || return 1
+  prepare_fzf_fakebin "$blocked_bin" 0.67.9 0 ok 1 || return 1
   script_file="$case_dir/cache.zsh"
   stdout_file="$case_dir/stdout"
   stderr_file="$case_dir/stderr"
@@ -633,11 +636,11 @@ print -r -- "states=$ready_one,$ready_two,$blocked_one,$blocked_two,$ready_again
   diagnostics=$(file_contents "$stderr_file")
 
   assert_status "$cmd_status" 0 'path-keyed fzf cache fixture completes' || return 1
-  assert_contains "$output" 'states=0,0,1,1,0 final=ready found=0.52.0' 'PATH changes validate a new binary and reuse each path result' || return 1
+  assert_contains "$output" 'states=0,0,1,1,0 final=ready found=0.68.0' 'PATH changes validate a new binary and reuse each path result' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 2 'each resolved fzf path is version-probed exactly once' || return 1
   assert_matching_lines "$(file_contents "$log_file")" "$ready_bin/fzf:--version" 1 'supported path result is reused after switching back' || return 1
   assert_matching_lines "$(file_contents "$log_file")" "$blocked_bin/fzf:--version" 1 'blocked path result is cached after its first probe' || return 1
-  assert_matching_lines "$diagnostics" 'found: 0.51.1' 2 'blocked calls can reuse the cached actionable diagnostic' || return 1
+  assert_matching_lines "$diagnostics" 'found: 0.67.9' 2 'blocked calls can reuse the cached actionable diagnostic' || return 1
 
   command rm -rf -- "$case_dir"
 }
@@ -649,8 +652,8 @@ test_fzf_generated_guards() {
   case_dir=$(mktemp -d "$tmp_home/fzf-generated.XXXXXX") || return 1
   ready_bin="$case_dir/ready-bin"
   blocked_bin="$case_dir/blocked-bin"
-  prepare_fzf_fakebin "$ready_bin" 0.52.0 0 ok 1 || return 1
-  prepare_fzf_fakebin "$blocked_bin" 0.51.1 0 ok 1 || return 1
+  prepare_fzf_fakebin "$ready_bin" 0.68.0 0 ok 1 || return 1
+  prepare_fzf_fakebin "$blocked_bin" 0.67.9 0 ok 1 || return 1
   script_file="$case_dir/generated.zsh"
   stdout_file="$case_dir/stdout"
   stderr_file="$case_dir/stderr"
@@ -685,7 +688,99 @@ print -r -- "generated-guards=$file_rc,$cd_rc,$history_rc,$completion_rc"' > "$s
   assert_matching_lines "$(file_contents "$log_file")" "$ready_bin/fzf:--zsh" 1 'supported startup retains generated integration' || return 1
   assert_matching_lines "$(file_contents "$log_file")" "$blocked_bin/fzf:--version" 1 'generated entry points validate a replacement PATH binary once' || return 1
   assert_not_contains "$(file_contents "$log_file")" 'picker:' 'generated entry points never launch the blocked picker' || return 1
-  assert_matching_lines "$diagnostics" 'found: 0.51.1' 4 'each generated blocked invocation returns the shared diagnostic' || return 1
+  assert_matching_lines "$diagnostics" 'found: 0.67.9' 4 'each generated blocked invocation returns the shared diagnostic' || return 1
+
+  command rm -rf -- "$case_dir"
+}
+
+test_fzf_theme_option_refresh() {
+  local case_dir script_file stdout_file stderr_file log_file widget_log
+  local output diagnostics cmd_status
+
+  case_dir=$(mktemp -d "$tmp_home/fzf-theme-options.XXXXXX") || return 1
+  script_file="$case_dir/options.zsh"
+  stdout_file="$case_dir/stdout"
+  stderr_file="$case_dir/stderr"
+  log_file="$case_dir/fzf.log"
+  widget_log="$case_dir/widget.log"
+  : > "$log_file"
+  : > "$widget_log"
+  prepare_fzf_fakebin "$case_dir/bin" 0.70.0 0 ok 1 || return 1
+
+  print -r -- 'export FZF_DEFAULT_OPTS="--user-default"
+export FZF_CTRL_T_OPTS="--user-files"
+export FZF_CTRL_R_OPTS="--user-history"
+export FZF_ALT_C_OPTS="--user-dirs"
+export FZF_COMPLETION_OPTS="--user-completion"
+export FZF_COMPLETION_PATH_OPTS="--user-paths"
+export FZF_COMPLETION_DIR_OPTS="--user-dir-completion"
+export _ZO_FZF_OPTS="--user-zoxide"
+typeset -g ZSH_FZF_EXTRA_OPTS="--tabstop=4"
+source "$HOME/.config/zsh/init.zsh"
+
+structured=0
+[[ $FZF_DEFAULT_OPTS == *--style=default* && $FZF_DEFAULT_OPTS == *--border=rounded* && $FZF_DEFAULT_OPTS == *--input-border=bottom* && $FZF_DEFAULT_OPTS == *--footer-border=top* && $FZF_DEFAULT_OPTS == *current-bg* && $FZF_DEFAULT_OPTS == *footer-border* ]] && structured=1
+contexts=0
+[[ $FZF_CTRL_T_OPTS == *Files* && $FZF_CTRL_R_OPTS == *History* && $FZF_ALT_C_OPTS == *Directories* ]] && contexts=1
+completion=0
+[[ $FZF_COMPLETION_OPTS == *Completions* && $FZF_COMPLETION_PATH_OPTS == *Paths* && $FZF_COMPLETION_DIR_OPTS == *Directories* ]] && completion=1
+preserved=0
+[[ $FZF_DEFAULT_OPTS == *--user-default* && $FZF_DEFAULT_OPTS == *--tabstop=4* && $FZF_CTRL_T_OPTS == *--user-files* && $FZF_COMPLETION_PATH_OPTS == *--user-paths* && $_ZO_FZF_OPTS == *--user-zoxide* ]] && preserved=1
+
+first_default=$FZF_DEFAULT_OPTS
+ZSH_UI_THEME=nord
+ZSH_FZF_LAYOUT=roomy
+_zsh_theme_resolve_settings
+_fzf_require_ready
+refreshed=0
+[[ $FZF_DEFAULT_OPTS != "$first_default" && $FZF_DEFAULT_OPTS == *--style=default* && $FZF_DEFAULT_OPTS == *--padding=1,2* && $FZF_DEFAULT_OPTS == *b48ead* ]] && refreshed=1
+
+typeset -gA ZSH_UI_CUSTOM_COLORS
+for role in "${_ZSH_UI_THEME_ROLES[@]}"; do
+  ZSH_UI_CUSTOM_COLORS[$role]=101010
+done
+ZSH_UI_CUSTOM_COLORS[accent]=abcdef
+ZSH_UI_THEME=custom
+ZSH_FZF_LAYOUT=compact
+_zsh_theme_resolve_settings
+_fzf_require_ready
+first_custom=$FZF_DEFAULT_OPTS
+ZSH_UI_CUSTOM_COLORS[accent]=112233
+_zsh_theme_resolve_settings
+_fzf_require_ready
+custom_refreshed=0
+[[ $FZF_DEFAULT_OPTS != "$first_custom" && $FZF_DEFAULT_OPTS == *112233* && $_ZO_FZF_OPTS == *112233* ]] && custom_refreshed=1
+
+NO_COLOR=1
+_fzf_require_ready
+nocolor=0
+[[ $FZF_DEFAULT_OPTS == *--no-color && $FZF_CTRL_T_OPTS == *--no-color && $FZF_CTRL_R_OPTS == *--no-color && $FZF_ALT_C_OPTS == *--no-color && $FZF_COMPLETION_OPTS == *--no-color && $FZF_COMPLETION_PATH_OPTS == *--no-color && $FZF_COMPLETION_DIR_OPTS == *--no-color && $_ZO_FZF_OPTS == *--no-color ]] && nocolor=1
+preview_plain=0
+[[ $FZF_CTRL_T_OPTS == *--color=never* && $FZF_CTRL_T_OPTS != *--color=always* ]] && preview_plain=1
+
+source "$HOME/.config/zsh/40-fzf.zsh"
+duplicates=0
+[[ $FZF_DEFAULT_OPTS == *--user-default*--user-default* || $FZF_COMPLETION_PATH_OPTS == *--user-paths*--user-paths* || $_ZO_FZF_OPTS == *--user-zoxide*--user-zoxide* ]] && duplicates=1
+print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain duplicates=$duplicates"' > "$script_file"
+
+  HOME="$tmp_home" \
+    XDG_CACHE_HOME="$case_dir/cache" \
+    PATH="$case_dir/bin" \
+    NO_COLOR= \
+    TERM=xterm-256color \
+    COLORTERM=truecolor \
+    FZF_TEST_LOG="$log_file" \
+    FZF_TEST_WIDGET_LOG="$widget_log" \
+    "$zsh_bin" -dfi "$script_file" >"$stdout_file" 2>"$stderr_file"
+  cmd_status=$?
+  output=$(file_contents "$stdout_file")
+  diagnostics=$(file_contents "$stderr_file")
+
+  assert_status "$cmd_status" 0 'theme-aware fzf option fixture completes' || return 1
+  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
+  assert_equals "$diagnostics" '' 'theme-aware fzf option refresh stays quiet' || return 1
+  assert_matching_lines "$(file_contents "$log_file")" ':--version' 1 'theme/layout/no-color refresh does not repeat version validation' || return 1
+  assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 1 'theme/layout/no-color refresh does not regenerate integration' || return 1
 
   command rm -rf -- "$case_dir"
 }
@@ -725,11 +820,11 @@ test_fzf_dependency_checker() {
   local -a fields blocked_cases supported_cases
 
   blocked_cases=(
-    'missing|unused|0|0|missing required: fzf (minimum 0.52.0)'
-    'version failure|0.52.0|7|1|unsupported required: fzf version check failed (minimum 0.52.0)'
-    'malformed|not-a-version|0|1|unsupported required: fzf has an unparseable version (minimum 0.52.0)'
-    'prerelease|0.53.0-beta|0|1|unsupported required: fzf 0.53.0-beta is a prerelease (minimum 0.52.0)'
-    'below minimum|0.51.1|0|1|unsupported required: fzf 0.51.1 (minimum 0.52.0)'
+    'missing|unused|0|0|missing required: fzf (minimum 0.68.0)'
+    'version failure|0.68.0|7|1|unsupported required: fzf version check failed (minimum 0.68.0)'
+    'malformed|not-a-version|0|1|unsupported required: fzf has an unparseable version (minimum 0.68.0)'
+    'prerelease|0.69.0-beta|0|1|unsupported required: fzf 0.69.0-beta is a prerelease (minimum 0.68.0)'
+    'below minimum|0.67.9|0|1|unsupported required: fzf 0.67.9 (minimum 0.68.0)'
   )
 
   for case_spec in "${blocked_cases[@]}"; do
@@ -747,8 +842,8 @@ test_fzf_dependency_checker() {
   done
 
   supported_cases=(
-    'inclusive boundary|0.52.0'
-    'omitted patch boundary|0.52'
+    'inclusive boundary|0.68.0'
+    'omitted patch boundary|0.68'
     'newer minor|0.80.2'
     'newer major|1.0.0'
   )
@@ -759,7 +854,7 @@ test_fzf_dependency_checker() {
     version=${fields[2]}
     run_dependency_case "$version" 0 1 || return 1
     assert_status "$FZF_DEP_STATUS" 0 "dependency checker accepts $label fzf" || return 1
-    assert_contains "$FZF_DEP_OUTPUT" "ok: fzf ${version} (minimum 0.52.0)" "dependency checker reports installed and minimum versions for $label" || return 1
+    assert_contains "$FZF_DEP_OUTPUT" "ok: fzf ${version} (minimum 0.68.0)" "dependency checker reports installed and minimum versions for $label" || return 1
     assert_contains "$FZF_DEP_OUTPUT" 'missing optional: secret-tool' "dependency checker reports optional cgm support for $label" || return 1
     command rm -rf -- "$FZF_DEP_DIR"
   done
@@ -789,6 +884,7 @@ main() {
   test_fzf_runtime_guards || return 1
   test_fzf_path_cache || return 1
   test_fzf_generated_guards || return 1
+  test_fzf_theme_option_refresh || return 1
   test_fzf_dependency_checker || return 1
 }
 

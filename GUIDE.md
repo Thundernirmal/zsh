@@ -64,11 +64,12 @@ Unreadable module files are skipped. The optional credential module is skipped e
 |---|---|
 | `10-history.zsh` | Shared 100,000-entry history |
 | `20-aliases.zsh` | Navigation, file, Git, and weather aliases |
+| `25-theme.zsh` | Semantic palette registry, validation, color depth, glyphs, and reusable fzf presentation fragments |
 | `30-zoxide.zsh` | Guarded zoxide initialization and `zi` fzf gate |
-| `40-fzf.zsh` | fzf validation, cache, theme, previews, and bindings |
+| `40-fzf.zsh` | fzf validation, secure integration cache, structured presentation, previews, and bindings |
 | `50-completion.zsh` | Lightweight global completion styles |
 | `55-ui-helpers.zsh` | Rich terminal rendering and plain fallbacks |
-| `60-functions.zsh` | General helpers, `upkg`, and optional `npkg` |
+| `60-functions.zsh` | General helpers, session-only `ztheme`, `upkg`, and optional `npkg` |
 | `62-cgm.zsh` | Optional Secret Service credential manager |
 | `65-help.zsh` | Command catalogue and `zhelp` |
 | `66-compdefs.zsh` | Command-aware completion definitions |
@@ -76,6 +77,8 @@ Unreadable module files are skipped. The optional credential module is skipped e
 | `80-tips.zsh` | Hook-free, on-demand tips |
 
 The numbered filenames define load order. `50-completion.zsh` assumes an earlier layer already ran `compinit`; `66-compdefs.zsh` becomes a silent no-op when `compdef` is unavailable.
+
+The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, and `lib/theme-*.zsh` files are lazy implementation helpers rather than startup modules. `60-functions.zsh` registers their fixed command paths once, while command-only swatch/export logic, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. A configured custom or colored non-default startup loads the pieces it needs before composing finder options.
 
 ## Dependencies
 
@@ -95,9 +98,11 @@ $HOME/.config/zsh/scripts/check-deps.sh
 | `ss` | `ports` |
 | `lsd` | Preferred file listing |
 | `zoxide` | `z` and `zi` navigation |
-| `fzf` 0.52.0+ | Keybindings and every fuzzy picker |
+| `fzf` 0.68.0+ | Keybindings and every fuzzy picker |
 
 `fzf` must report a stable numeric version. Missing, malformed, prerelease, and older builds fail the dependency check and hard-block fuzzy workflows.
+
+If the distribution package is older than 0.68.0, upgrade through a current package source or use the [official fzf installation instructions](https://github.com/junegunn/fzf#installation), then restart the shell and rerun `scripts/check-deps.sh`. There is no reduced UI for 0.60–0.67.
 
 ### Optional integrations and fallbacks
 
@@ -119,7 +124,7 @@ On Debian and Ubuntu, the distribution may expose `bat` as `batcat`. This reposi
 
 ## Terminal output modes
 
-Dashboards use the shared Catppuccin-themed renderer only when all of these are true:
+Dashboards use the shared semantic theme renderer only when all of these are true:
 
 - stdout is a terminal
 - `TERM` is set and is not `dumb`
@@ -131,11 +136,109 @@ Pipes, redirects, narrow terminals, non-UTF-8 locales, and dumb terminals receiv
 
 | Setting | Effect |
 |---|---|
-| `NO_COLOR=1` | Force shared dashboards to plain, uncoloured output |
-| `NO_NERD_FONT=1` | Keep colour but use ASCII-safe icons and bars |
+| `ZSH_UI_THEME=terminal` | Select the dashboard palette; built-ins are `catppuccin-mocha`, `catppuccin-latte`, `nord`, `gruvbox-dark`, and `terminal` |
+| `ZSH_FZF_THEME=` | Inherit `ZSH_UI_THEME`; set a built-in name or `custom` for an fzf-only override |
+| `ZSH_FZF_LAYOUT=compact` | Select the `compact`, `roomy`, or `minimal` finder layout |
+| `ZSH_FZF_EXTRA_OPTS=` | Append an intentional final user option layer to shared fzf defaults |
+| `ZSH_UI_GLYPHS=auto` | Select `auto`, `nerd`, `unicode`, or `ascii` dashboard and finder glyphs independently of color |
+| `ZSH_UI_CUSTOM_COLORS` | Provide all semantic roles as a validated associative array for the `custom` theme |
+| `NO_COLOR=1` | Force dashboards to plain output and fzf to its no-color presentation |
+| `NO_NERD_FONT=1` | Keep colour but use ordinary Unicode rather than private-use Nerd Font glyphs |
 | `zhelp --plain` | Force the stable plain help view |
 
-`NO_COLOR` does not disable fuzzy interaction: the `zhelp` palette stays interactive with colour disabled, while other fzf workflows retain fzf's own options.
+Set theme variables before sourcing `init.zsh`. `terminal` is the default. Invalid names and incomplete or malformed custom palettes fall back to it without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents.
+
+`NO_COLOR` does not disable fuzzy interaction. It removes repository-managed fzf colors, prevents color-forced file previews, and remains the final option even when inherited or extra options request colors.
+
+### Built-ins, color depth, and glyphs
+
+| Theme | Background intent | Notes |
+|---|---|---|
+| `catppuccin-mocha` | dark | Compatibility palette (former default) |
+| `catppuccin-latte` | light | Explicit light-background choice; background brightness is never guessed |
+| `nord` | dark | Muted cool palette |
+| `gruvbox-dark` | dark | Warm, higher-contrast palette |
+| `terminal` | terminal-owned | Default; uses default terminal foreground/background and named ANSI accents |
+
+The fixed palette values are adapted from the MIT-licensed [Catppuccin](https://catppuccin.com/palette/), [Nord](https://github.com/nordtheme/nord), and [Gruvbox](https://github.com/morhetz/gruvbox) projects. The resolver emits RGB when `COLORTERM` is `truecolor` or `24bit`, xterm-256 values when `TERM` contains `256color`, and deterministic ANSI colors otherwise. It uses no terminal query or source-time subprocess.
+
+Glyph selection is independent of palette and color depth:
+
+| Mode | Behavior |
+|---|---|
+| `auto` | Nerd Font symbols in UTF-8 locales; ordinary Unicode when `NO_NERD_FONT` is set; ASCII outside UTF-8 |
+| `nerd` | Private-use Nerd Font icons plus Unicode structure symbols |
+| `unicode` | Ordinary Unicode only, with no private-use glyphs |
+| `ascii` | ASCII pointers, markers, separators, and status symbols only |
+
+Selection, focus, success, warning, and danger retain text, pointer, marker, label, or status-word cues rather than relying only on color. `NO_NERD_FONT` affects symbols, not color; `NO_COLOR` affects repository-managed color, not picker availability.
+
+### Custom palette contract
+
+Define a custom palette before sourcing `init.zsh`, then select it for the shared UI and optionally for fzf:
+
+```zsh
+typeset -gA ZSH_UI_CUSTOM_COLORS=(
+  base 1e1e2e
+  surface 313244
+  selected 45475a
+  border 6c7086
+  gutter 1e1e2e
+  text cdd6f4
+  muted a6adc8
+  accent cba6f7
+  query a6e3a1
+  match f38ba8
+  focus f5e0dc
+  info 89b4fa
+  success a6e3a1
+  warning f9e2af
+  danger f38ba8
+)
+typeset -g ZSH_UI_THEME=custom
+typeset -g ZSH_FZF_THEME=''
+```
+
+All 15 keys are required, extra keys are rejected, and every value must be exactly six hexadecimal digits without `#`. Validation is atomic: a missing, extra, or malformed value makes startup fall back to the terminal theme rather than partially applying the palette. Theme names and values are data only; the configuration does not evaluate them, source a theme directory, scan the filesystem, or download palettes.
+
+### Finder layout and option precedence
+
+| Layout | Frame | Preview at 100+ columns | Preview below 100 columns |
+|---|---|---|---|
+| `compact` | adaptive `~60%`, one rounded frame, `0,1` padding | right `50%` | down `40%` |
+| `roomy` | fixed `80%`, one rounded frame, `1,2` padding | right `55%` | down `45%` |
+| `minimal` | adaptive `~45%`, one rounded frame, `0,1` padding | right `45%` | down `35%` |
+
+Every profile uses a single rounded outer box. The input and footer share the base finder background instead of drawing filled inner boxes. The input and optional header have one lower divider, the footer has one upper divider, and the list does not draw a nested box. The picker label sits in the outer border and `Search` sits in the input divider, avoiding the stacked top rules produced by fzf's `full:line` height-mode preset.
+
+The 100-column boundary affects presentation only. Candidate generation, selected values, and actions do not change. Palette, layout, glyphs, and the secure generated-integration cache are separate: changing presentation refreshes exported options without regenerating `fzf --zsh`.
+
+fzf options are composed in this order:
+
+1. repository-managed structure and semantic palette;
+2. captured inherited `FZF_DEFAULT_OPTS`;
+3. `ZSH_FZF_EXTRA_OPTS` as the intentional final global override;
+4. widget, completion, zoxide, or direct-picker arguments for their own workflow;
+5. a final `--no-color` whenever `NO_COLOR` is set.
+
+Inherited widget, general/path/directory completion, and `_ZO_FZF_OPTS` values are likewise captured once and appended to their managed presentation. Re-sourcing does not duplicate or recapture composed values. Because inherited and explicit layers are intentionally allowed to override managed fzf options, `ztheme current` reports whether an external option layer exists; it does not attempt to parse arbitrary user option strings.
+
+### Theme discovery and session switching
+
+`ztheme` inspects or switches the shared dashboard and finder palette without invoking an external program:
+
+```zsh
+ztheme list                 # list built-ins and mark active/default themes
+ztheme current              # show theme, layout, glyph, depth, and option layers
+ztheme show nord            # show semantic role values or terminal swatches
+ztheme use nord             # switch dashboards and future fzf launches now
+ztheme reset                # restore the terminal theme now
+ztheme export nord          # print settings to copy into ~/.zshrc
+```
+
+`use` and `reset` affect only the current shell session and refresh future fzf and zoxide picker launches; a picker that is already open is unchanged. `use` switches the dashboard palette and preserves an explicit `ZSH_FZF_THEME` fzf-only override, so a deliberate finder choice survives unrelated dashboard switches. `reset` restores the default `terminal` theme and clears any such override so fzf inherits the UI theme again. Invalid names and invalid custom palettes return nonzero without changing the active theme or finder exports.
+
+To persist a built-in choice, copy the output of `ztheme export <name>` above the `source init.zsh` line in the machine-local `~/.zshrc`. The command prints text only and never edits that file. Exporting a validated `custom` theme also prints its complete role array in stable order.
 
 `dusage`, `bigfiles`, and `path` sanitize filesystem- or environment-controlled labels before rendering. Named controls such as newline, tab, escape, and bell become visible escapes; other C0, DEL, and C1 bytes use forms such as `\x7f`. Sanitization happens before measuring or truncating, keeps each value on one logical line, and preserves printable Unicode.
 
@@ -242,7 +345,7 @@ zhelp --help
 
 The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. Exact names show usage, an example, and live availability.
 
-In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
+In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
 Sourcing `65-help.zsh` only registers data. Availability checks and subprocesses are deferred until `zhelp` is called.
 
@@ -333,9 +436,11 @@ zi projects
 
 `z` performs ranked directory jumps. `zi` uses zoxide's interactive picker but is wrapped by the shared fzf version gate.
 
+The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets without replacing zoxide's scoring or candidate generation.
+
 ### fzf requirement and startup
 
-Every fuzzy workflow requires stable `fzf` 0.52.0 or newer. At the first normal prompt for a new fzf executable, the configuration:
+Every fuzzy workflow requires stable `fzf` 0.68.0 or newer. At the first normal prompt for a new fzf executable, the configuration:
 
 1. validates the version;
 2. captures non-empty `fzf --zsh` output;
@@ -347,6 +452,8 @@ The cache is stored below `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` and is keye
 
 Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows and print an actionable diagnostic. Non-interactive sourcing and `zsh -i -c ...` remain silent and do not initialize ZLE bindings.
 
+Finder presentation is compiled separately from the trusted integration cache. Changing theme, layout, glyph mode, terminal width class, or `NO_COLOR` refreshes future launches without rerunning `fzf --version` or regenerating `fzf --zsh`. Existing `FZF_DEFAULT_OPTS`, widget options, completion options, and `_ZO_FZF_OPTS` are captured once and appended after managed presentation. `ZSH_FZF_EXTRA_OPTS` follows the inherited global layer; `--no-color` is always final when requested.
+
 ### Keybindings
 
 | Binding | Action |
@@ -355,9 +462,13 @@ Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows
 | Ctrl+R | Select a history entry and insert it for editing |
 | Alt+C | Select a directory and change to it |
 
-Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R uses `?` to toggle its full-command preview.
+Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R uses `?` to toggle its full-command preview. In preview pickers, Ctrl+P toggles the preview and Ctrl+/ toggles word wrapping; the established Ctrl+R `?` binding remains available.
 
-The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths.
+Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
+
+The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths. Every picker uses the same list/search/footer hierarchy and contextual ghost hint. At 100 columns and wider, textual previews sit beside the list; below 100 columns they move underneath. `fkill` and the Nix multi-select pickers show a live selected-item count in the footer. Git and Nix table pickers keep the visible identity column frozen, while `--accept-nth` returns undecorated branch, PID, example, or profile-target fields to the calling workflow; `fbr` also previews that undecorated branch rather than its optional `[WT]` display badge.
+
+Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` sends the requested signal after selection, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.
 
 ## Function reference
 
@@ -432,7 +543,7 @@ fkill
 fkill 9
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. This also applies when selecting the corresponding remote branch. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists.
+`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed widths, so subjects begin in one stable column even when branch names differ; long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. This also applies when selecting the corresponding remote branch. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists.
 
 ## Credential manager: cgm
 
@@ -622,7 +733,7 @@ Bare install names become `nixpkgs#<name>`. Flake references, paths, and argumen
 
 `npkg refresh` and `npkg outdated` require `jq`. Interactive add, find, and remove also require a real terminal and supported fzf.
 
-The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. Building it evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns.
+The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. Building it evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns. Tab marks multiple packages, and the footer updates the selected count before Enter confirms the add or remove operation.
 
 ### Outdated semantics
 
@@ -653,19 +764,20 @@ These are the cross-cutting rules most likely to surprise a new user:
 7. **Global aliases expand anywhere.** Unquoted tokens such as `G` or `NUL` can change a command far from its first word. Quote literal occurrences.
 8. **An empty PATH component means the current directory.** `path` preserves and exposes it because silently normalizing PATH would change command lookup.
 9. **Completion needs compinit.** Without `compdef`, command-specific completion quietly does nothing.
-10. **fzf is all-or-nothing at 0.52.0+.** An unsupported build blocks fuzzy workflows instead of enabling a reduced theme or partial bindings. Plain `zhelp` remains available.
-11. **Ctrl+R does not execute the selection.** It inserts history into the command buffer for review and editing.
-12. **`fkill` defaults to SIGTERM.** `fkill 9` is a force-kill and should be the exception.
-13. **CGM is startup-optional.** Installing `secret-tool` mid-session does not define `cgm` until the module is sourced again or the shell restarts.
-14. **CGM changes only the current shell.** Run `env`, `unset`, and `delete` directly, not through a pipe, command substitution, or subshell. Deletion cannot revoke values inherited by existing processes.
-15. **`upkg` is not entirely read-only.** The default, `outdated`, `search`, and `plan` are read-only; `upgrade` and `clean` mutate manager state. Preview cleanup with `clean --dry-run`.
-16. **`--sudo` authorizes but does not auto-confirm.** Native package-manager and polkit prompts remain authoritative.
-17. **Outdated data can be stale.** Distro checks use local metadata, and `npkg` reports output identity—not version ordering.
-18. **Partial package results fail.** `upkg` continues other managers but returns nonzero for partial, failed, or blocked selected backends. `npkg` returns nonzero when any row is unknown.
-19. **Rich output is presentation.** Use a pipe, redirect, `NO_COLOR`, or an explicit plain option for stable machine-readable text.
-20. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows are Linux-oriented.
-21. **Network helpers contact external services.** `weather` requests `wttr.in`, `myip` requests `ifconfig.me`, and `headers` contacts the URL supplied by the user.
-22. **Automation must load the layer explicitly.** Aliases and functions are interactive shell features; scripts should call real binaries or source `init.zsh` inside Zsh.
+10. **fzf is all-or-nothing at 0.68.0+.** An unsupported build blocks fuzzy workflows instead of enabling a reduced theme or partial bindings. Plain `zhelp` remains available.
+11. **Theme choice is machine-local.** `ztheme use` changes only the current shell, and `ztheme export` prints settings without editing `.zshrc`. This repository does not theme the prompt, terminal, tmux, editor, `bat`, Git, or `LS_COLORS`.
+12. **Ctrl+R does not execute the selection.** It inserts history into the command buffer for review and editing.
+13. **`fkill` defaults to SIGTERM.** `fkill 9` is a force-kill and should be the exception.
+14. **CGM is startup-optional.** Installing `secret-tool` mid-session does not define `cgm` until the module is sourced again or the shell restarts.
+15. **CGM changes only the current shell.** Run `env`, `unset`, and `delete` directly, not through a pipe, command substitution, or subshell. Deletion cannot revoke values inherited by existing processes.
+16. **`upkg` is not entirely read-only.** The default, `outdated`, `search`, and `plan` are read-only; `upgrade` and `clean` mutate manager state. Preview cleanup with `clean --dry-run`.
+17. **`--sudo` authorizes but does not auto-confirm.** Native package-manager and polkit prompts remain authoritative.
+18. **Outdated data can be stale.** Distro checks use local metadata, and `npkg` reports output identity—not version ordering.
+19. **Partial package results fail.** `upkg` continues other managers but returns nonzero for partial, failed, or blocked selected backends. `npkg` returns nonzero when any row is unknown.
+20. **Rich output is presentation.** Use a pipe, redirect, `NO_COLOR`, or an explicit plain option for stable machine-readable text.
+21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows are Linux-oriented.
+22. **Network helpers contact external services.** `weather` requests `wttr.in`, `myip` requests `ifconfig.me`, and `headers` contacts the URL supplied by the user.
+23. **Automation must load the layer explicitly.** Aliases and functions are interactive shell features; scripts should call real binaries or source `init.zsh` inside Zsh.
 
 ## Maintenance and verification
 
@@ -697,9 +809,11 @@ When user-facing behavior changes, update every affected surface without copying
 Run these in order:
 
 ```sh
-zsh -n *.zsh
+zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry
+zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh
 sh -n scripts/check-deps.sh
 zsh scripts/test-init.zsh
+zsh scripts/test-theme.zsh
 zsh scripts/test-functions.zsh
 zsh scripts/test-cgm.zsh
 zsh scripts/test-upkg.zsh

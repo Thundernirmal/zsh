@@ -4,7 +4,10 @@ set -u
 
 missing_required=""
 missing_optional=""
-fzf_min_version=0.52.0
+fzf_min_version=0.68.0
+fzf_min_major=0
+fzf_min_minor=68
+fzf_min_patch=0
 fzf_problem=0
 
 have_cmd() {
@@ -120,7 +123,9 @@ check_fzf() {
     return
   fi
 
-  if [ "$fzf_major" -gt 0 ] || { [ "$fzf_major" -eq 0 ] && [ "$fzf_minor" -ge 52 ]; }; then
+  if [ "$fzf_major" -gt "$fzf_min_major" ] ||
+    { [ "$fzf_major" -eq "$fzf_min_major" ] && [ "$fzf_minor" -gt "$fzf_min_minor" ]; } ||
+    { [ "$fzf_major" -eq "$fzf_min_major" ] && [ "$fzf_minor" -eq "$fzf_min_minor" ] && [ "$fzf_patch" -ge "$fzf_min_patch" ]; }; then
     printf 'ok: fzf %s (minimum %s)\n' "$fzf_version" "$fzf_min_version"
     return
   fi

@@ -274,13 +274,49 @@ exit 2' >"$fakebin/diff"
 
 test_fkill_default_signal() {
   assert_contains "${functions[fkill]}" 'local signal=${1:-15}' 'fkill defaults to SIGTERM' || return 1
+  assert_contains "${functions[fkill]}" '--accept-nth=1' 'fkill asks fzf to return PIDs directly' || return 1
+  assert_contains "${functions[fkill]}" '_fzf_picker_multi_args kill' 'fkill uses the shared live multi-selection footer' || return 1
+  assert_not_contains "${functions[fkill]}" '_fzf_pointer' 'fkill no longer duplicates pointer presentation' || return 1
 }
 
 test_fbr_worktree_navigation() {
   local fixture_repo="$tmp_dir/fbr-repo"
   local worktree_dir="$tmp_dir/fbr worktree"
-  local original_dir=$PWD branch current_branch worktree_path
+  local original_dir=$PWD branch current_branch first_row formatter_body projected second_row worktree_path
+  integer private_fpath_count=0
   local -A worktree_paths
+
+  assert_equals "${(V)functions[_fbr_format_entry]}" 'builtin autoload -XU' 'fbr formatter starts as a deferred repo-local autoload' || return 1
+  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12
+  first_row=$REPLY
+  assert_equals "$first_row" $'short           \t5 days ago  \tA subject\t\tshort' 'fbr pads branch and relative-date display columns' || return 1
+  formatter_body=${functions[_fbr_format_entry]}
+  assert_not_contains "${(V)formatter_body}" 'builtin autoload -XU' 'first fbr formatting call loads the deferred implementation' || return 1
+
+  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12
+  second_row=$REPLY
+  assert_equals "$second_row" "$first_row" 'repeated fbr formatting stays deterministic' || return 1
+
+  source "$repo_dir/60-functions.zsh"
+  assert_equals "${functions[_fbr_format_entry]}" "$formatter_body" 're-sourcing preserves the loaded fbr formatter' || return 1
+  for worktree_path in "${fpath[@]}"; do
+    [[ $worktree_path == "$repo_dir/functions" ]] && (( private_fpath_count++ ))
+  done
+  assert_equals "$private_fpath_count" 1 're-sourcing keeps one trusted functions path' || return 1
+
+  _fbr_format_entry worktree-test '21 hours ago' $'Tabbed\tsubject' '/tmp/work tree' '' '' 16 12
+  assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\tworktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1
+
+  assert_contains "${functions[fbr]}" '--accept-nth=5' 'fbr asks fzf to return the branch field directly' || return 1
+  assert_contains "${functions[fbr]}" "git log --oneline --decorate --color=always -20 {5}" 'fbr previews the undecorated branch field' || return 1
+  assert_contains "${functions[fbr]}" '_fzf_picker_preview_args Log' 'fbr uses the shared responsive preview policy' || return 1
+  assert_not_contains "${functions[fbr]}" '38;5;116' 'fbr worktree badges no longer embed a raw palette color' || return 1
+
+  if (( $+commands[fzf] )); then
+    projected=$(print -r -- $'visible padded                  \tdate padded   \tsubject\t/worktree path\traw-branch' |
+      command fzf --filter visible --delimiter=$'\t' --with-nth=1,2,3 --nth=1,2,3 --accept-nth=5)
+    assert_equals "$projected" 'raw-branch' 'fbr five-field rows project the raw branch identity' || return 1
+  fi
 
   command git init -q "$fixture_repo" || return 1
   print -r -- 'fixture' >"$fixture_repo/tracked.txt"
