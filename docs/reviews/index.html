@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cross-Review Synthesis — Zsh Config Audit</title>
+<style>
+  :root{
+    --bg:#f3f4ef; --surface:#fbfbf8; --surface2:#edefe6; --ink:#232820; --muted:#636c5d;
+    --line:#dbe0d1; --line-strong:#c6cdb8; --accent:#0e7490; --accent-soft:#e2eff3;
+    --crit:#b3362a; --crit-bg:#f9e9e6; --high:#a05508; --high-bg:#faf0de;
+    --med:#8a6a00; --med-bg:#f8f2da; --low:#3557b7; --low-bg:#e8edfa;
+    --ok:#2f7d44; --ok-bg:#e6f2e9; --code-bg:#22271f; --code-ink:#e7ebe0;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  :root[data-theme="dark"]{
+    --bg:#151812; --surface:#1c2018; --surface2:#242a1f; --ink:#e7ebe0; --muted:#a2ac97;
+    --line:#30372a; --line-strong:#48523c; --accent:#67d1e0; --accent-soft:#11333b;
+    --crit:#ff9082; --crit-bg:#3c1813; --high:#ffb872; --high-bg:#34210d;
+    --med:#ffd95e; --med-bg:#302806; --low:#96b5ff; --low-bg:#152240; --ok:#7fd694; --ok-bg:#112a19;
+    --code-bg:#10130d; --code-ink:#dfe5d6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme]){
+      --bg:#151812; --surface:#1c2018; --surface2:#242a1f; --ink:#e7ebe0; --muted:#a2ac97;
+      --line:#30372a; --line-strong:#48523c; --accent:#67d1e0; --accent-soft:#11333b;
+      --crit:#ff9082; --crit-bg:#3c1813; --high:#ffb872; --high-bg:#34210d;
+      --med:#ffd95e; --med-bg:#302806; --low:#96b5ff; --low-bg:#152240; --ok:#7fd694; --ok-bg:#112a19;
+      --code-bg:#10130d; --code-ink:#dfe5d6;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} *{transition:none!important} }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); font-size:16px; line-height:1.65;
+  }
+  ::selection{background:var(--accent); color:var(--bg)}
+  a{color:var(--accent)}
+  .wrap{max-width:1140px; margin:0 auto; padding:0 clamp(16px,4vw,40px)}
+
+  /* ---------- header ---------- */
+  header.top{
+    border-bottom:1px solid var(--line-strong);
+    background:linear-gradient(var(--surface), var(--bg));
+  }
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:16px; padding-top:20px}
+  .brand{font-family:var(--mono); font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .brand b{color:var(--accent); font-weight:600}
+  #themeBtn{
+    font-family:var(--mono); font-size:12px; letter-spacing:.06em;
+    background:transparent; color:var(--muted); border:1px solid var(--line-strong);
+    border-radius:999px; padding:6px 14px; cursor:pointer;
+  }
+  #themeBtn:hover{color:var(--ink); border-color:var(--accent)}
+  #themeBtn:focus-visible,a:focus-visible,button:focus-visible,.filter:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  h1{
+    font-family:var(--mono); font-weight:700; letter-spacing:-.03em;
+    font-size:clamp(30px,5.2vw,52px); line-height:1.06; margin:26px 0 14px;
+    text-wrap:balance; max-width:22ch;
+  }
+  h1 .tick{color:var(--accent)}
+  .lede{max-width:64ch; color:var(--muted); font-size:17px; margin:0 0 26px}
+  .metagrid{
+    display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line-strong);
+    border-radius:10px 10px 0 0; overflow:hidden; background:var(--surface);
+  }
+  .metagrid div{flex:1 1 150px; padding:12px 16px; border-right:1px solid var(--line)}
+  .metagrid div:last-child{border-right:none}
+  .metagrid dt{display:none}
+  .metagrid .k{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); display:block}
+  .metagrid .v{font-family:var(--mono); font-size:14px; font-variant-numeric:tabular-nums}
+
+  /* ---------- nav ---------- */
+  nav.toc{
+    position:sticky; top:0; z-index:20; background:var(--bg);
+    border-bottom:1px solid var(--line);
+  }
+  nav.toc .rail{display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; padding:8px 0}
+  nav.toc .rail::-webkit-scrollbar{display:none}
+  nav.toc a{
+    font-family:var(--mono); font-size:12.5px; white-space:nowrap;
+    color:var(--muted); text-decoration:none; padding:6px 12px; border-radius:999px;
+    border:1px solid transparent;
+  }
+  nav.toc a:hover{color:var(--ink); border-color:var(--line-strong)}
+  nav.toc a.on{color:var(--accent); border-color:var(--accent)}
+
+  main{padding:8px 0 80px}
+  section{padding:56px 0 8px}
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 6px;
+  }
+  h2{font-family:var(--mono); letter-spacing:-.02em; font-size:clamp(22px,3vw,30px); margin:0 0 18px; text-wrap:balance}
+  h3{font-size:17px; margin:30px 0 10px}
+  p{max-width:68ch}
+  .sectionnote{color:var(--muted); max-width:70ch; margin:-6px 0 22px}
+
+  /* ---------- chips & badges ---------- */
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 30px; padding:0; list-style:none}
+  .chip{
+    font-family:var(--mono); font-size:12.5px; padding:6px 13px; border-radius:999px;
+    border:1px solid var(--line-strong); background:var(--surface); white-space:nowrap;
+  }
+  .chip b{font-weight:600}
+  .chip.good{border-color:color-mix(in srgb,var(--ok) 45%, transparent); background:var(--ok-bg); color:var(--ok)}
+  .chip.warn{border-color:color-mix(in srgb,var(--high) 45%, transparent); background:var(--high-bg); color:var(--high)}
+  .chip.bad{border-color:color-mix(in srgb,var(--crit) 45%, transparent); background:var(--crit-bg); color:var(--crit)}
+  .chip.info{border-color:color-mix(in srgb,var(--accent) 40%, transparent); background:var(--accent-soft); color:var(--accent)}
+
+  /* ---------- generic tables ---------- */
+  .scroll{overflow-x:auto; border:1px solid var(--line-strong); border-radius:10px; background:var(--surface)}
+  table{border-collapse:collapse; width:100%; font-size:14px}
+  th{
+    font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); text-align:left; padding:10px 14px; border-bottom:1px solid var(--line-strong);
+    background:var(--surface2); white-space:nowrap;
+  }
+  td{padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:color-mix(in srgb,var(--accent-soft) 40%, transparent)}
+  td.num,th.num{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+  td.mono{font-family:var(--mono); font-size:13px}
+  .loc{font-family:var(--mono); font-size:12.5px; color:var(--muted); white-space:nowrap}
+
+  /* ---------- severity pills ---------- */
+  .sev{
+    display:inline-block; font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+    padding:2px 9px; border-radius:5px; text-transform:uppercase; font-weight:600;
+  }
+  .sev.crit{background:var(--crit-bg); color:var(--crit); border:1px solid color-mix(in srgb,var(--crit) 40%, transparent)}
+  .sev.high{background:var(--high-bg); color:var(--high); border:1px solid color-mix(in srgb,var(--high) 40%, transparent)}
+  .sev.med{background:var(--med-bg); color:var(--med); border:1px solid color-mix(in srgb,var(--med) 40%, transparent)}
+  .sev.low{background:var(--low-bg); color:var(--low); border:1px solid color-mix(in srgb,var(--low) 40%, transparent)}
+  .sev.ok{background:var(--ok-bg); color:var(--ok); border:1px solid color-mix(in srgb,var(--ok) 40%, transparent)}
+
+  /* ---------- verdict cards ---------- */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px}
+  .card{
+    background:var(--surface); border:1px solid var(--line-strong); border-radius:10px;
+    padding:18px 18px 14px;
+  }
+  .card h4{margin:0 0 4px; font-family:var(--mono); font-size:14px}
+  .card .sub{font-family:var(--mono); font-size:11.5px; color:var(--muted); letter-spacing:.06em; margin-bottom:10px}
+  .card p{font-size:13.5px; margin:0; color:var(--ink)}
+  .card .stat{font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:10px}
+
+  /* ---------- consensus matrix ---------- */
+  td.c{text-align:center; font-family:var(--mono); font-size:14px; white-space:nowrap}
+  .dot-yes{color:var(--crit)} .dot-part{color:var(--med)} .dot-no{color:var(--line-strong)}
+  :root[data-theme="dark"] .dot-no{color:#525c47}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; font-family:var(--mono); font-size:12px; color:var(--muted); margin:10px 0 0}
+
+  /* ---------- code ---------- */
+  pre{
+    background:var(--code-bg); color:var(--code-ink); border-radius:10px;
+    padding:14px 16px; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.55;
+    margin:12px 0; border:1px solid var(--line-strong);
+  }
+  pre .cm{color:#8a9a84} pre .kw{color:#79c0ff} pre .str{color:#a5d6a7}
+  code.inline{font-family:var(--mono); font-size:.88em; background:var(--surface2); padding:1px 6px; border-radius:5px; border:1px solid var(--line)}
+
+  /* ---------- findings register ---------- */
+  .filters{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 22px}
+  .filter{
+    font-family:var(--mono); font-size:12.5px; cursor:pointer;
+    background:var(--surface); color:var(--muted); border:1px solid var(--line-strong);
+    border-radius:999px; padding:7px 15px;
+  }
+  .filter:hover{color:var(--ink)}
+  .filter.active{background:var(--accent); color:var(--bg); border-color:var(--accent)}
+  .tier{margin:34px 0 10px; display:flex; align-items:center; gap:12px}
+  .tier h3{margin:0}
+  .tier .rule{flex:1; height:1px; background:var(--line-strong)}
+  .finding{
+    display:grid; grid-template-columns:minmax(74px,auto) 1fr; gap:0 18px;
+    background:var(--surface); border:1px solid var(--line-strong); border-left-width:4px;
+    border-radius:8px; padding:14px 18px; margin:0 0 10px;
+  }
+  .finding[data-sev="t0"]{border-left-color:var(--crit)}
+  .finding[data-sev="t1"]{border-left-color:var(--high)}
+  .finding[data-sev="t2"]{border-left-color:var(--med)}
+  .finding[data-sev="t3"]{border-left-color:var(--low)}
+  .fid{font-family:var(--mono); font-weight:700; font-size:13px; color:var(--muted); padding-top:2px}
+  .ftitle{font-weight:650; margin:0 0 4px}
+  .fmeta{font-family:var(--mono); font-size:12px; color:var(--muted); margin:0 0 8px; display:flex; flex-wrap:wrap; gap:6px 16px}
+  .fbody{font-size:14px; margin:0; max-width:none}
+  .ffix{font-size:13.5px; margin:8px 0 0; padding-top:8px; border-top:1px dashed var(--line)}
+  .ffix b{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent)}
+  .srcs{white-space:nowrap}
+  .srcs i{font-style:normal}
+  .srcs .y{color:var(--ink)} .srcs .n{color:var(--line-strong)} .srcs .p{color:var(--med)}
+  .banner{
+    border:1px solid var(--line-strong); border-left:4px solid var(--accent);
+    background:var(--surface); border-radius:8px; padding:14px 18px; margin:0 0 26px;
+    font-size:14px;
+  }
+  .banner b{font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent)}
+
+  footer{border-top:1px solid var(--line); padding:26px 0 60px; color:var(--muted); font-family:var(--mono); font-size:12.5px}
+  footer .wrap{display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap}
+
+  @media (max-width:640px){
+    .finding{grid-template-columns:1fr}
+    .metagrid div{flex-basis:46%}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="topbar">
+      <span class="brand"><b>~/.config/zsh</b> · cross-review synthesis</span>
+      <button id="themeBtn" type="button" aria-label="Toggle color theme">theme: auto</button>
+    </div>
+    <h1>Four audits.<br>Eighteen documents.<span class="tick"> One verdict.</span></h1>
+    <p class="lede">Every independent review of this repository — Ox, dsV4flash, Gemini/Antigravity, and Muse — consolidated into a single account of what is true, what is contested, and what to fix first.</p>
+    <dl class="metagrid">
+      <div><dt></dt><span class="k">Date</span><span class="v">2026-08-25</span></div>
+      <div><dt></dt><span class="k">Repo</span><span class="v">@ 71fce91</span></div>
+      <div><dt></dt><span class="k">Review suites</span><span class="v">4</span></div>
+      <div><dt></dt><span class="k">Source docs</span><span class="v">18</span></div>
+      <div><dt></dt><span class="k">Consolidated findings</span><span class="v">27</span></div>
+      <div><dt></dt><span class="k">Tests</span><span class="v">926 pass · 0 fail</span></div>
+    </dl>
+    <ul class="chips" aria-label="Verdict at a glance">
+      <li class="chip good"><b>Startup</b> 22–29 ms · zero prompt-time hooks</li>
+      <li class="chip good"><b>Secrets</b> cgm fully compliant</li>
+      <li class="chip good"><b>Docs</b> surfaces in sync</li>
+      <li class="chip warn"><b>Standards</b> 1 guard violation</li>
+      <li class="chip warn"><b>CI</b> drifted from documented checks</li>
+      <li class="chip good"><b>Remediated</b> PRs #31 · #32 — 21 fixed, 5 adjudicated, 1 deferred</li>
+    </ul>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <div class="wrap"><div class="rail">
+    <a href="#verdict">01 Verdict</a>
+    <a href="#sources">02 Sources</a>
+    <a href="#consensus">03 Consensus</a>
+    <a href="#performance">04 Performance</a>
+    <a href="#security">05 Security</a>
+    <a href="#quality">06 Architecture</a>
+    <a href="#project">07 Docs · CI · Tests</a>
+    <a href="#findings">08 Findings by criticality</a>
+  </div></div>
+</nav>
+
+<main class="wrap">
+
+<!-- ==================== 01 VERDICT ==================== -->
+<section id="verdict">
+  <p class="eyebrow">01 · Verdict</p>
+  <h2>A healthy repo with a short, well-understood punch list.</h2>
+  <p class="sectionnote">All four suites executed the full 11-step verification locally and passed. They disagree on labels, not on substance: there is exactly one clear-cut standards violation, one systemic process gap (CI parity), and a cluster of small hardening items.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>Ox</h4>
+      <div class="sub">3 reports + 1 master</div>
+      <p>&ldquo;Good shape.&rdquo; Zero prompt-time spawns, pure-Zsh theme startup, passing Secret Service posture. One finding explicitly violates the repo&rsquo;s own AGENTS.md rules.</p>
+      <div class="stat">Perf good · Project fair · Code good</div>
+    </div>
+    <div class="card">
+      <h4>dsV4flash</h4>
+      <div class="sub">4 reports</div>
+      <p>&ldquo;Healthy, unusually well-tested.&rdquo; 926 assertions, 0 failures. No Critical or High code defects; findings are edge drift and optimization opportunities.</p>
+      <div class="stat">~27 ms startup verified three ways · 30–40% addressable</div>
+    </div>
+    <div class="card">
+      <h4>Gemini / Antigravity</h4>
+      <div class="sub">4 reports</div>
+      <p>&ldquo;A+ (96.1%) — release candidate ready.&rdquo; Discovered the largest single runtime win: a 190&times; speedup available in the fbr branch picker.</p>
+      <div class="stat">Command 22.4 ms · Interactive warm 26.6 ms · Cold 63.3 ms</div>
+    </div>
+    <div class="card">
+      <h4>Muse</h4>
+      <div class="sub">6 reports · strictest rubric</div>
+      <p>&ldquo;Ship with fixes.&rdquo; No blocker to daily use, but counts 4 Critical + 12 High before next stable release — two of those &ldquo;Criticals&rdquo; are CI parity, two are function length.</p>
+      <div class="stat">56 code findings · 2 Medium security hardening items</div>
+    </div>
+  </div>
+
+  <h3>What every suite agrees on</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Claim</th><th>Status</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>No prompt-time work at all</td><td><span class="sev ok">verified</span></td><td>No <code class="inline">precmd/preexec/chpwd/add-zsh-hook</code> anywhere; caches reset per invocation, no unbounded growth.</td></tr>
+      <tr><td>Startup is fast and disciplined</td><td><span class="sev ok">verified</span></td><td>Repo contributes ≈22–29 ms of a ~126 ms real interactive shell; warm fzf cache costs just +0.37 ms.</td></tr>
+      <tr><td>cgm secret handling is exemplary</td><td><span class="sev ok">verified</span></td><td>No plaintext fallback, no reveal, no eval-export, xtrace-safe, TOCTOU-hardened; test-proven with fake <code class="inline">secret-tool</code>.</td></tr>
+      <tr><td>Documentation surfaces are synchronized</td><td><span class="sev ok">verified</span></td><td>README/GUIDE/tips/zhelp cross-checked feature by feature; only minor gaps found (see §07).</td></tr>
+      <tr><td>The one clear-cut defect is the nix guard</td><td><span class="sev high">consensus</span></td><td><span class="loc">60-functions.zsh:3782</span> — flagged by 3 of 4 suites; see CR-01.</td></tr>
+      <tr><td>CI does not match the documented verification</td><td><span class="sev high">consensus</span></td><td>All four suites found the same two missing steps; root cause is triplicated documentation of the sequence.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ==================== 02 SOURCES ==================== -->
+<section id="sources">
+  <p class="eyebrow">02 · Sources</p>
+  <h2>Eighteen documents, four methodologies.</h2>
+  <p class="sectionnote">Each suite ran independently against the same checkout. Methodologies overlap but are not identical — which is what makes the convergence map in §03 meaningful.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Suite</th><th>Document</th><th>Focus</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><b>Ox</b></td><td class="mono">Ox_REPORT.md</td><td>Cross-review priority synthesis</td></tr>
+      <tr><td class="mono">Ox_CODE_REVIEW.md</td><td>Correctness, cgm security verdict, quality notes</td></tr>
+      <tr><td class="mono">Ox_PERFORMANCE_REVIEW.md</td><td>Startup anatomy, guard-rule audit, benchmark adequacy</td></tr>
+      <tr><td class="mono">Ox_PROJECT_REVIEW.md</td><td>Docs-sync matrix, test coverage, CI drift</td></tr>
+      <tr><td rowspan="4"><b>dsV4flash</b></td><td class="mono">dsV4flash_Summary_Report.md</td><td>Consolidated findings + execution order</td></tr>
+      <tr><td class="mono">dsV4flash_Code_Report.md</td><td>Adversarial correctness + security review</td></tr>
+      <tr><td class="mono">dsV4flash_Performance_Report.md</td><td>Three timing methods, per-module decomposition</td></tr>
+      <tr><td class="mono">dsV4flash_Project_Report.md</td><td>Verification run, docs audit, coverage matrix, hygiene</td></tr>
+      <tr><td rowspan="4"><b>Gemini / Antigravity</b></td><td class="mono">gemini_full_report.md</td><td>Executive scorecard, remediation roadmap</td></tr>
+      <tr><td class="mono">gemini_code_review.md</td><td>Line-by-line safety, stream discipline, temp leaks</td></tr>
+      <tr><td class="mono">gemini_performance_report.md</td><td>n=50 benchmarks, fbr bottleneck discovery</td></tr>
+      <tr><td class="mono">gemini_project_report.md</td><td>Architecture, portability matrix, CI gaps</td></tr>
+      <tr><td rowspan="6"><b>Muse</b></td><td class="mono">muse_full_report.md</td><td>Five-subagent synthesis, action plan</td></tr>
+      <tr><td class="mono">muse_code_review.md</td><td>56 findings across 11 categories (DRY, complexity, aliases)</td></tr>
+      <tr><td class="mono">muse_performance_report.md</td><td>Per-module µs, lazy-load graph, eager-load defeat</td></tr>
+      <tr><td class="mono">muse_project_report.md</td><td>Ownership boundaries, QA template audit</td></tr>
+      <tr><td class="mono">muse_security_portability_report.md</td><td>Secret/theme/injection matrices, diff-ready fixes</td></tr>
+      <tr><td class="mono">muse_tooling_ci_report.md</td><td>CI parity, POSIX audit, harness robustness</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ==================== 03 CONSENSUS ==================== -->
+<section id="consensus">
+  <p class="eyebrow">03 · Consensus</p>
+  <h2>Where reviewers converge — and where they don&rsquo;t.</h2>
+  <p class="sectionnote">Multi-review is most valuable at the edges: the nix guard was caught by three suites and missed by the fourth; the fbr subshell storm was found only by the suite that benchmarked interactive rendering; the temp-file trap story is actively contradicted between suites.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Finding</th><th class="num">Ox</th><th class="num">dsV4</th><th class="num">Gemini</th><th class="num">Muse</th><th>Reading</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">CR-01 Top-level <code class="inline">command -v nix</code></td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td class="c dot-no">&#9675;</td><td>Muse&rsquo;s guard matrix marked the module PASS — the miss proves the value of independent re-review.</td></tr>
+      <tr><td class="mono">CR-02 CI &#8800; documented verification</td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td>Unanimous. Same two missing steps identified independently.</td></tr>
+      <tr><td class="mono">CR-03 Env-overridable theme dir</td><td class="c dot-yes">&#9679;</td><td class="c dot-no">&#9675;</td><td class="c dot-no">&#9675;</td><td class="c dot-yes">&#9679;</td><td>Ox rated it Med (rules violation); Muse Low (hardening).</td></tr>
+      <tr><td class="mono">CR-04 Alias-probe subprocesses</td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td class="c dot-yes">&#9679;</td><td>Unanimous; severity ranges Minor&rarr;High by measurement method.</td></tr>
+      <tr><td class="mono">CR-05 Eager zoxide chrome refresh</td><td class="c dot-no">&#9675;</td><td class="c dot-yes">&#9679;</td><td class="c dot-part">&#9685;</td><td class="c dot-yes">&#9679;</td><td>Muse named it the one lazy-invariant defeat; Gemini flagged the related eval cost.</td></tr>
+      <tr><td class="mono">CR-06 Temp-file leaks on signals</td><td class="c dot-yes">&#9679;</td><td class="c dot-part">&#9685;</td><td class="c dot-yes">&#9679;</td><td class="c dot-part">&#9685;</td><td>Contested detail: Muse lists a trap as a strength; Ox/Gemini show INT/TERM paths leak.</td></tr>
+      <tr><td class="mono">CR-07 Missing <code class="inline">--</code> terminators</td><td class="c dot-yes">&#9679;</td><td class="c dot-no">&#9675;</td><td class="c dot-yes">&#9679;</td><td class="c dot-no">&#9675;</td><td>Same sites found (mkcd, extract, croot, git checkout, search backends).</td></tr>
+      <tr><td class="mono">CR-12 fbr subshell storm (190&times;)</td><td class="c dot-no">&#9675;</td><td class="c dot-no">&#9675;</td><td class="c dot-yes">&#9679;</td><td class="c dot-no">&#9675;</td><td>Only Gemini profiled picker-open latency: 305 ms &rarr; 1.6 ms.</td></tr>
+      <tr><td class="mono">CR-19 fzf bare <code class="inline">{}</code> placeholder</td><td class="c dot-no">&#9675;</td><td class="c dot-part">&#9685;</td><td class="c dot-part">&#9685;</td><td class="c dot-yes">&#9679;</td><td>Genuinely disputed: Ox &amp; dsV4 hold fzf auto-quoting safe (modulo embedded-quote edge, fzf#1586); Muse rates it Medium injection risk.</td></tr>
+      <tr><td class="mono">Complexity of upkg/_npkg_outdated</td><td class="c dot-part">&#9685;</td><td class="c dot-no">&#9675;</td><td class="c dot-part">&#9685;</td><td class="c dot-yes">&#9679;</td><td>Muse alone calls length Critical; others log maintainability debt, not defects.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="legend"><span><i class="dot-yes">&#9679;</i> flagged</span><span><i class="dot-part">&#9685;</i> partially / variant framing</span><span><i class="dot-no">&#9675;</i> not flagged</span></p>
+</section>
+
+<!-- ==================== 04 PERFORMANCE ==================== -->
+<section id="performance">
+  <p class="eyebrow">04 · Performance</p>
+  <h2>≈25 ms of well-audited startup, with ~30–40% still on the table.</h2>
+  <p class="sectionnote">Numbers vary by machine, PATH length, and fzf presence, but every suite&rsquo;s decomposition points at the same four modules and the same fixes. Guard microbenchmarks agree that <code class="inline">$+commands</code> beats <code class="inline">command -v</code> by 35&times; on normal PATHs and up to 416&times; on WSL2-length PATHs.</p>
+
+  <h3>Measured baselines</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Path</th><th class="num">dsV4flash</th><th class="num">Gemini</th><th class="num">Muse</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td>Bare zsh (<code class="inline">zsh -df</code>)</td><td class="num">1.19 ms</td><td class="num">1.47 ms</td><td class="num">—</td><td>Interpreter floor</td></tr>
+      <tr><td>Command mode (init sourced)</td><td class="num">28.8 ms</td><td class="num">22.4 ms</td><td class="num">~22 ms</td><td>Median</td></tr>
+      <tr><td>Interactive (warm fzf cache)</td><td class="num">27.9 ms</td><td class="num">26.6 ms</td><td class="num">~28 ms</td><td>Steady state</td></tr>
+      <tr><td>Interactive (cold fzf cache)</td><td class="num">+3.2 ms one-time</td><td class="num">63.3 ms</td><td class="num">—</td><td>One-time generation</td></tr>
+      <tr><td>Real user shell (<code class="inline">zsh -i -c exit</code>)</td><td class="num">~126 ms</td><td class="num">—</td><td class="num">—</td><td>~100 ms belongs to OMZ/compinit/brew/bun, not this repo</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Per-module net cost (ranges across suites)</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Module</th><th class="num">Net cost</th><th>Primary driver</th><th>Addressable by</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">20-aliases</td><td class="num">6.3 – 8.0 ms</td><td><code class="inline">--color</code> feature-probe subprocesses</td><td class="mono">CR-04</td></tr>
+      <tr><td class="mono">60-functions</td><td class="num">5.6 – 7.0 ms</td><td>Parse of 4,639 lines (125 KB)</td><td class="mono">CR-26 (long-term)</td></tr>
+      <tr><td class="mono">30-zoxide</td><td class="num">3.4 – 7.0 ms</td><td><code class="inline">zoxide init</code> eval + eager fzf-chrome refresh</td><td class="mono">CR-05</td></tr>
+      <tr><td class="mono">65-help</td><td class="num">2.7 – 4.1 ms</td><td>Eager registration of 50–60 help records</td><td class="mono">CR-13</td></tr>
+      <tr><td class="mono">80-tips</td><td class="num">0.3 – 3.8 ms</td><td>Eager tip pool (method-dependent)</td><td class="mono">CR-13</td></tr>
+      <tr><td class="mono">40-fzf</td><td class="num">0.5 – 4.7 ms</td><td>Cache-aware; correctly gated interactive</td><td>— (well-engineered)</td></tr>
+      <tr><td class="mono">25-theme</td><td class="num">0.7 – 0.9 ms</td><td>Pure Zsh, lazy stubs</td><td>—</td></tr>
+      <tr><td class="mono">all remaining</td><td class="num">&lt; 1 ms each</td><td>Definitions + guarded gates</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Optimization ledger</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>Action</th><th class="num">Saving</th><th>Effort</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">CR-12</td><td>Rewrite <code class="inline">_fbr_format_entry</code> with pure-Zsh <code class="inline">printf -v</code> (kills 6 subshells/row)</td><td class="num">305 ms &rarr; 1.6 ms per fbr open (190&times;)</td><td>Small, must preserve exact output contract</td></tr>
+      <tr><td class="mono">CR-04</td><td>Single-process grep probe; gate ls/grep/diff probes behind presence checks</td><td class="num">&minus;2.6 ms (~10% startup)</td><td>Trivial</td></tr>
+      <tr><td class="mono">CR-13</td><td>Lazy-load zhelp catalogue + tips pool into <code class="inline">lib/</code></td><td class="num">&minus;6.6 ms (~24% startup)</td><td>Medium</td></tr>
+      <tr><td class="mono">CR-05</td><td>Interactive-gate <code class="inline">_zsh_zoxide_refresh_fzf_opts</code>; defer to first <code class="inline">zi</code></td><td class="num">&minus;2.2 ms on zoxide-less shells; restores lazy invariant everywhere</td><td>Trivial</td></tr>
+      <tr><td class="mono">CR-01</td><td><code class="inline">(( $+commands[nix] ))</code> at top level</td><td class="num">Removes per-start PATH walk; dominant on WSL2</td><td>One line</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:14px">Combined addressable: <strong>~9–12 ms of ~27 ms (30–40%)</strong> conservatively; Gemini projects ~50% including the aggressive split of <code class="inline">60-functions.zsh</code>. The irreducible floor is the module&rsquo;s parse cost and zoxide&rsquo;s required eval.</p>
+</section>
+
+<!-- ==================== 05 SECURITY ==================== -->
+<section id="security">
+  <p class="eyebrow">05 · Security</p>
+  <h2>Secret handling passes everywhere; residuals are hardening, not holes.</h2>
+  <p class="sectionnote">All suites audited <code class="inline">62-cgm.zsh</code> against every AGENTS.md constraint and all returned clean verdicts. No working injection, no unguarded <code class="inline">rm -rf</code>, no plaintext-on-disk path was constructed by any reviewer.</p>
+
+  <h3>cgm constraint checklist (consensus)</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Constraint</th><th>Verdict</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Entirely optional; silent when <code class="inline">secret-tool</code> absent</td><td><span class="sev ok">pass</span></td><td><span class="loc">init.zsh:29–31</span> skips module; sourcing contacts nothing</td></tr>
+      <tr><td>No plaintext secret fallback</td><td><span class="sev ok">pass</span></td><td>Values exist only in Secret Service; catalogue holds empty 600-permission markers</td></tr>
+      <tr><td>No reveal command</td><td><span class="sev ok">pass</span></td><td>Only set/list/env/unset/delete/help; values never printed</td></tr>
+      <tr><td>No eval-based export</td><td><span class="sev ok">pass</span></td><td><span class="loc">62-cgm.zsh:269</span> literal <code class="inline">typeset -gx -- "$1=$2"</code>; injection fixture proves metachars stay data</td></tr>
+      <tr><td>Completion never retrieves values</td><td><span class="sev ok">pass</span></td><td><span class="loc">66-compdefs.zsh:180–193</span> reads filesystem markers only</td></tr>
+      <tr><td>No xtrace leak during lookup</td><td><span class="sev ok">pass</span></td><td><code class="inline">emulate -L</code> + <code class="inline">unsetopt xtrace</code>; test asserts restoration</td></tr>
+      <tr><td>Sentinel newline handling correct</td><td><span class="sev ok">pass</span></td><td>Byte-exact strip inside <code class="inline">$( )</code>; multiline secrets rejected</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Residual hardening items</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>ID</th><th>Item</th><th>Severity spread</th><th>Disposition</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">CR-11</td><td>Relative <code class="inline">XDG_DATA_HOME</code>/<code class="inline">XDG_CACHE_HOME</code> accepted by cgm catalogue &amp; npkg cache</td><td>Low–Medium</td><td>Fix: require <code class="inline">== /*</code>, matching fzf&rsquo;s existing rigor</td></tr>
+      <tr><td class="mono">CR-10</td><td><code class="inline">eval "$(zoxide init zsh)"</code> lacks the empty-output / <code class="inline">zsh -fn</code> gate fzf uses</td><td>Low–Medium</td><td>Fix: mirror the fzf validation pattern</td></tr>
+      <tr><td class="mono">CR-19</td><td>fzf preview strings rely on bare <code class="inline">{}</code> auto-quoting</td><td>Contested</td><td>Optional: quoted placeholder or wrapper; embedded-single-quote edge (fzf#1586) is real but requires hostile names + hover</td></tr>
+      <tr><td class="mono">CR-03</td><td>Exported <code class="inline">_ZSH_THEME_MODULE_DIR</code> redirects lazy theme sources</td><td>Med (Ox) / Low (Muse)</td><td>Fix: pin unconditionally to script dir</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Positive controls worth preserving</h3>
+  <p>The fzf cache trust model earned special praise: device/inode/size/mtime/ctime keying, mktemp into a 0700 dir, ownership + symlink + mode-mask validation, schema-pinned header, <code class="inline">(q)</code>-escaped paths, and <code class="inline">zsh -fn</code>-validated generation before atomic activation. Catalogue hardening (umask 077 + noclobber marker creation, symlink refusal, readonly-parameter guard) and atomic rollback semantics in <code class="inline">ztheme</code> were likewise flagged as patterns to keep.</p>
+</section>
+
+<!-- ==================== 06 ARCHITECTURE ==================== -->
+<section id="quality">
+  <p class="eyebrow">06 · Architecture &amp; code quality</p>
+  <h2>Sound bones; the debt is duplication and a few oversized functions.</h2>
+  <p class="sectionnote">The theme subsystem — semantic roles, glyph tiers, lazy palettes — was repeatedly cited as the repo&rsquo;s best design. The debt concentrates elsewhere: <code class="inline">60-functions.zsh</code> internals and repeated scaffolding across modules.</p>
+
+  <h3>Debt ledger</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Area</th><th>Finding</th><th>Locations</th><th>Consolidated as</th></tr></thead>
+    <tbody>
+      <tr><td>Duplication</td><td><code class="inline">dusage</code>/<code class="inline">bigfiles</code> share ~85% scaffolding (~260 LOC)</td><td class="loc">60-functions.zsh:515–647 · 650–793</td><td class="mono">CR-27</td></tr>
+      <tr><td>Duplication</td><td><code class="inline">NO_COLOR</code> append repeated 7&times;; duplicate 280-char preview lines</td><td class="loc">40-fzf.zsh:73–143</td><td class="mono">CR-27</td></tr>
+      <tr><td>Duplication</td><td>Term-dimension + UTF-8 locale helpers duplicated across theme/ui modules; two signature schemes drifting</td><td class="loc">55-ui-helpers · 25-theme · 40-fzf</td><td class="mono">CR-27</td></tr>
+      <tr><td>Registries</td><td>Theme names, manager whitelist, extension table hand-copied into completions</td><td class="loc">66-compdefs.zsh:26–42</td><td class="mono">CR-09</td></tr>
+      <tr><td>Complexity</td><td><code class="inline">upkg()</code> 372 LOC / ~35 cyclomatic; <code class="inline">_npkg_outdated()</code> 396 LOC with job pool + 3 trap scopes</td><td class="loc">60-functions.zsh:3407 · 4160</td><td class="mono">CR-26</td></tr>
+      <tr><td>Idiom</td><td>Nine utilities lack <code class="inline">emulate -L zsh</code>; inherit caller options</td><td class="loc">extract · mkcd · ff · ft · fkill · headers · peek · croot · gitcount</td><td class="mono">CR-08</td></tr>
+      <tr><td>I/O</td><td>Errors printed via <code class="inline">echo</code> to stdout; pollute pipelines/captures</td><td class="loc">60-functions.zsh (9 sites)</td><td class="mono">CR-17</td></tr>
+      <tr><td>Aliases</td><td>Intentional <code class="inline">mkdir -p</code>/<code class="inline">cp·mv·rm -iv</code> shadowing; <code class="inline">command</code>-bypass undocumented at point of use; <code class="inline">rm -iv</code> stalls scripted flows</td><td class="loc">20-aliases.zsh:32–35</td><td class="mono">CR-18</td></tr>
+      <tr><td>Coupling</td><td><code class="inline">_upkg_record_cleanup_result</code> mutates caller locals via dynamic scope; <code class="inline">upkg</code> leaves <code class="inline">_UPKG_*</code> globals behind</td><td class="loc">60-functions.zsh:1624–1639 · 3681–3694</td><td class="mono">CR-15 · CR-27</td></tr>
+      <tr><td>Dead code</td><td>Unused icon/truecolor probes; unreachable skip-recording branch; dead theme re-source blocks</td><td class="loc">55-ui-helpers.zsh:82–86 · 60:3704–3708 · 25-theme:26–28,162–167</td><td class="mono">CR-23</td></tr>
+      <tr><td>Magic numbers</td><td>History cap, tree depth, TTL, job count, layout breakpoints unnamed</td><td class="loc">various</td><td class="mono">CR-27</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Strengths to protect</h3>
+  <p>Correct startup/in-function guard split observed repo-wide; <code class="inline">(b)</code>-escaped globs before interpolation; fbr selecting raw branch names rather than parsed display rows; tests that drive <em>real</em> modules through fake binaries and assert negative properties; idempotent fpath handling; atomic settings changes with genuine rollback.</p>
+</section>
+
+<!-- ==================== 07 PROJECT ==================== -->
+<section id="project">
+  <p class="eyebrow">07 · Docs · CI · tests</p>
+  <h2>Documentation is a strength; CI and coverage have known holes.</h2>
+  <p class="sectionnote">Two suites independently walked every user-facing feature across README, GUIDE, tips, and the zhelp catalogue and found near-total sync. The gaps that remain are enumerated and cheap.</p>
+
+  <h3>CI parity gaps (.github/workflows/checks.yml)</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Documented step</th><th>CI status</th><th>Found by</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inline">zsh -n scripts/benchmark-startup.zsh …</code> (step 2)</td><td><span class="sev crit">missing</span></td><td>All four suites</td></tr>
+      <tr><td><code class="inline">zsh -fc 'source "$HOME/.config/zsh/init.zsh"'</code> (step 11 smoke)</td><td><span class="sev crit">missing</span></td><td>All four suites</td></tr>
+      <tr><td><code class="inline">check-deps.sh</code> executed (not just syntax-checked)</td><td><span class="sev high">never run</span></td><td>Muse</td></tr>
+      <tr><td>Job timeout / hang protection</td><td><span class="sev med">absent</span></td><td>Muse</td></tr>
+      <tr><td>Trigger covers active dev branch</td><td><span class="sev med">gap</span></td><td>dsV4flash (pushes to <code class="inline">chore/25</code> never run CI)</td></tr>
+    </tbody>
+  </table></div>
+  <p>Root cause identified by Ox: the 11-step sequence lives as three hand-maintained copies (AGENTS.md, GUIDE.md, checks.yml). The durable fix is a single <code class="inline">scripts/run-tests.sh</code> that CI invokes.</p>
+
+  <h3>Test coverage</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Coverage</th><th>Modules / behaviors</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev ok">deep</span></td><td>40-fzf (via test-init), upkg (403 assertions), 62-cgm, 25-theme + libs, 65-help, 66-compdefs</td></tr>
+      <tr><td><span class="sev med">partial</span></td><td>init (fzf-focused; no history/option asserts), 20-aliases, 30-zoxide, 55-ui-helpers (indirect)</td></tr>
+      <tr><td><span class="sev crit">none</span></td><td><code class="inline">10-history.zsh</code>, <code class="inline">50-completion.zsh</code>, <code class="inline">70-globals.zsh</code></td></tr>
+      <tr><td><span class="sev crit">untested functions</span></td><td><code class="inline">ports · fanprofile · croot · gitcount · headers · weather · extract · peek · tips()</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Docs &amp; hygiene</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Item</th><th>Detail</th><th>Found by</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">CR-21</td><td>GUIDE completion list presents 8 entries as exhaustive; 23 compdefs registered — 15 missing incl. headline <code class="inline">ztheme</code></td><td>dsV4flash</td></tr>
+      <tr><td class="mono">CR-22</td><td><code class="inline">qa-features.csv</code>: spec ledger claims 39 rows, file has 13; statuses read <code class="inline">Passed</code> where template demands <code class="inline">Not Run</code></td><td>dsV4flash · Gemini · Muse</td></tr>
+      <tr><td class="mono">CR-28</td><td>GUIDE rich-tips rendering undocumented; README carries GUIDE-density frame internals</td><td>Ox</td></tr>
+      <tr><td class="mono">CR-27</td><td>Housekeeping: stale branches (~45), stray review artifacts, untagged theming release pending T8 visual signoff, benchmark hardcodes <code class="inline">$HOME/.config/zsh</code>, test-harness robustness nits, <code class="inline">skills-lock.json</code> undocumented</td><td>multiple</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ==================== 08 FINDINGS ==================== -->
+<section id="findings">
+  <p class="eyebrow">08 · Findings by criticality</p>
+  <h2>The full register — fix-as-soon-as-possible first.</h2>
+  <p class="sectionnote">Twenty-seven consolidated findings, deduplicated across all eighteen documents. Tier&nbsp;0 is what stands between the repo and its own stated standards; each entry lists who flagged it, where it lives, and the accepted fix.</p>
+
+  <div class="banner">
+    <b>Remediation status</b> — updated after the two-axis review of PRs #31 (7 commits) and #32 (<span class="loc">526dd6f</span>).<br>
+    21 of 27 findings are fixed and regression-tested; 5 closed as no-fix by the validated adjudication (<span class="loc">CR-14 · CR-15 · CR-18 · CR-19 · CR-22</span>); CR-26 deferred behind its measurement gate; CR-27 split with selected items fixed. The full suite passes under <code class="inline">scripts/run-tests.zsh</code> (1,046 assertions). The re-review found no High or Critical regressions; three new Medium follow-ups (<span class="loc">N-01 · N-02 · N-03</span>) were surfaced by the fixes themselves and are tracked at the end of this section and in <a href="../specs/post-remediation-follow-ups.md"><code class="inline">docs/specs/post-remediation-follow-ups.md</code></a>.
+  </div>
+
+  <div class="filters" role="group" aria-label="Filter findings by tier">
+    <button class="filter active" data-tier="all">All · 27</button>
+    <button class="filter" data-tier="t0">T0 · Fix now · 6</button>
+    <button class="filter" data-tier="t1">T1 · Perf wins · 4</button>
+    <button class="filter" data-tier="t2">T2 · Medium · 10</button>
+    <button class="filter" data-tier="t3">T3 · Backlog · 7</button>
+  </div>
+
+  <!-- ===== TIER 0 ===== -->
+  <div class="tier" data-tier-group="t0"><h3>Tier 0 — fix as soon as possible</h3><div class="rule"></div></div>
+
+  <article class="finding" data-sev="t0">
+    <div class="fid">CR-01</div>
+    <div>
+      <p class="ftitle">Top-level <code class="inline">command -v nix</code> walks the whole PATH on every shell start</p>
+      <p class="fmeta"><span class="sev ok">fixed · cab1547 ·#31</span><span class="loc">60-functions.zsh:3782</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="y">&#9679;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="n">&#9675;</i></span><span>severity: High (consensus)</span></p>
+      <p class="fbody">The only startup-time guard in the repo violating AGENTS.md&rsquo;s <code class="inline">$+commands</code> rule — commit d90ed98 converted the rest and missed this one. On nix-less machines it buys a full PATH miss per start; worst case dominates on WSL2-length PATHs (measured 35–416&times; slower than the hash lookup). Double penalty: full walk, nothing gained.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">if (( $+commands[nix] )); then</code> — one line. Better: move the ~857-line npkg block to an autoloaded helper. Note: test-upkg stubs <code class="inline">nix</code> via PATH, so either rehash in tests or document the deliberate exception in AGENTS.md.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t0">
+    <div class="fid">CR-02</div>
+    <div>
+      <p class="ftitle">CI silently diverges from the documented 11-step verification</p>
+      <p class="fmeta"><span class="sev ok">fixed · 00c87e6 ·#31</span><span class="loc">.github/workflows/checks.yml</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="y">&#9679;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i></span><span>severity: High (unanimous)</span></p>
+      <p class="fbody">Benchmark-script syntax check (step 2) and the final source-smoke test (step 11) are absent from CI; Muse additionally notes check-deps.sh is never executed, there&rsquo;s no job timeout, and pushes to the active dev branch trigger nothing. Root cause: the sequence is hand-maintained in AGENTS.md, GUIDE.md, and checks.yml.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Add <code class="inline">scripts/run-tests.sh</code> encoding the documented order; make checks.yml call it verbatim; add <code class="inline">timeout-minutes</code> and dev-branch/<code class="inline">workflow_dispatch</code> triggers.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t0">
+    <div class="fid">CR-03</div>
+    <div>
+      <p class="ftitle">Exported env var can redirect all lazy theme-helper sources</p>
+      <p class="fmeta"><span class="sev ok">fixed · cab1547 ·#31</span><span class="loc">25-theme.zsh:21</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="n">&#9675;</i> · Gemini <i class="n">&#9675;</i> · Muse <i class="y">&#9679;</i></span><span>severity: Medium–High</span></p>
+      <p class="fbody"><code class="inline">${_ZSH_THEME_MODULE_DIR:-…}</code> honors a caller-exported value, sending every lazy <code class="inline">source</code> of the theme libs to an arbitrary directory — an explicit violation of the &ldquo;fixed to the repository directory, not user-controlled&rdquo; rule. Contrast <span class="loc">60-functions.zsh:106</span>, which sets its dir unconditionally.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">typeset -g _ZSH_THEME_MODULE_DIR=${${(%):-%N}:A:h}</code> — drop the fallback wrapper.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t0">
+    <div class="fid">CR-06</div>
+    <div>
+      <p class="ftitle">Temp files leak when dusage / bigfiles / npkg index hit signals or failures</p>
+      <p class="fmeta"><span class="sev ok">fixed · 279ae27·e6d4f06·449721b ·#31</span><span class="loc">60-functions.zsh:545–554 · 674–696 · 3868–3879</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="p">&#9685;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="p">&#9685;</i></span><span>severity: Medium</span></p>
+      <p class="fbody">Ctrl+C during scanning leaves mktemp files orphaned in $TMPDIR (no INT/TERM traps); <code class="inline">_npkg_refresh_index</code> leaks <code class="inline">.err</code>/<code class="inline">.tmp</code> on specific failure paths. Cleanup discipline is inconsistent across the module — elsewhere traps are the norm. (Muse counted a trap here as a strength; Ox and Gemini traced the interrupt paths specifically.)</p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">setopt localtraps</code> + <code class="inline">trap 'command rm -f -- "$f1" "$f2"' EXIT INT TERM</code>; close the <code class="inline">_npkg_refresh_index</code> leak paths for parity.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t0">
+    <div class="fid">CR-07</div>
+    <div>
+      <p class="ftitle">Missing <code class="inline">--</code> terminators let hyphen-prefixed arguments parse as options</p>
+      <p class="fmeta"><span class="sev ok">fixed · 279ae27 #31 · 526dd6f #32</span><span class="loc">mkcd:57 · extract:14–45 · croot:980 · _fbr_activate:1077–1086 · search backends:2081,2255,2376,2462</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="n">&#9675;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="n">&#9675;</i></span><span>severity: Medium</span></p>
+      <p class="fbody"><code class="inline">mkdir -p "$1"</code>, the extract unpackers, <code class="inline">cd "$root"</code>, <code class="inline">git checkout "$branch"</code>, and apt/brew/npm/flatpak search backends all pass user-controlled strings without <code class="inline">--</code>; pacman/paru already do it correctly.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Add <code class="inline">--</code> before path/file/query parameters throughout; mechanical change, easy to regression-test.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t0">
+    <div class="fid">CR-09</div>
+    <div>
+      <p class="ftitle">Completion registries hand-duplicated from their owners will drift silently</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">66-compdefs.zsh:26–42</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="n">&#9675;</i> · Gemini <i class="n">&#9675;</i> · Muse <i class="p">&#9685;</i></span><span>severity: Medium</span></p>
+      <p class="fbody">Theme-name list duplicates the theme registry, the manager list duplicates the upkg whitelist, extract extensions duplicate the extract table. Adding a sixth theme or manager desyncs completion from behavior with no error — a single-source-of-truth violation.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Derive the lists at load time, or add a drift-detection sync test asserting equality with the owners.</p>
+    </div>
+  </article>
+
+  <!-- ===== TIER 1 ===== -->
+  <div class="tier" data-tier-group="t1"><h3>Tier 1 — high-value performance wins</h3><div class="rule"></div></div>
+
+  <article class="finding" data-sev="t1">
+    <div class="fid">CR-04</div>
+    <div>
+      <p class="ftitle">Three capability probes fork subprocesses on every startup</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">20-aliases.zsh:10 · 42 · 46</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="y">&#9679;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i></span><span>impact: &minus;2.6 ms (~10% of startup)</span></p>
+      <p class="fbody"><code class="inline">ls --color</code>, a 3-process grep pipeline, and <code class="inline">diff --color</code> run unconditionally each start to detect flag support — the largest single module cost (20-aliases: 6.3–8.0 ms). The answer essentially never changes.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Single-process probe: <code class="inline">command grep --color=auto -e x &lt;/dev/null &gt;/dev/null 2&gt;&amp;1</code> (exit 1 = supported); gate all three behind presence checks; simplify the ls probe in the lsd-fallback branch.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t1">
+    <div class="fid">CR-05</div>
+    <div>
+      <p class="ftitle">Zoxide fzf-chrome refresh runs eagerly — defeating the lazy-theme invariant</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">30-zoxide.zsh:31</span><span class="srcs">Ox <i class="n">&#9675;</i> · dsV4 <i class="y">&#9679;</i> · Gemini <i class="p">&#9685;</i> · Muse <i class="y">&#9679;</i></span><span>impact: &minus;2.2 ms on zoxide-less shells + restores laziness</span></p>
+      <p class="fbody">The refresh executes outside the <code class="inline">$+commands[zoxide]</code> guard and forces theme registry + palette materialization even in non-interactive shells, git hooks, and <code class="inline">zsh -c</code> pipelines — while <code class="inline">40-fzf.zsh:549</code> correctly gates the equivalent work on interactivity.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">if [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then _zsh_zoxide_refresh_fzf_opts; fi</code> — or defer to first <code class="inline">zi</code> via the existing wrapper.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t1">
+    <div class="fid">CR-12</div>
+    <div>
+      <p class="ftitle">fbr branch picker forks 6 subshells per row — 305 ms before the UI opens</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">functions/_fbr_format_entry</span><span class="srcs">Ox <i class="n">&#9675;</i> · dsV4 <i class="n">&#9675;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="n">&#9675;</i></span><span>impact: 190&times; faster picker launch</span></p>
+      <p class="fbody">Per-row <code class="inline">$(_ui_safe_text)</code>/<code class="inline">$(_ui_pad)</code> calls mean 288 forks for a 48-branch repo (~1.3 s at 200 branches). Gemini&rsquo;s pure-Zsh rewrite using <code class="inline">printf -v</code> measures 1.60 ms for the same 48 rows. Caution from the cross-review: Ox verified the current <code class="inline">[WT] </code> prefix surgery correct for width &ge;&nbsp;5 — any rewrite must preserve the byte-exact output contract that tests pin.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;In-process formatter setting <code class="inline">REPLY</code> via <code class="inline">printf -v</code>; keep the fbr-side <code class="inline">--accept-nth=5</code> raw-name selection unchanged; assert row-format equivalence in tests.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t1">
+    <div class="fid">CR-13</div>
+    <div>
+      <p class="ftitle">zhelp catalogue and tips pool build eagerly for on-demand commands</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">65-help.zsh:55–115 · 80-tips.zsh:4–111</span><span class="srcs">Ox <i class="n">&#9675;</i> · dsV4 <i class="y">&#9679;</i> · Gemini <i class="p">&#9685;</i> · Muse <i class="n">&#9685;</i></span><span>impact: &minus;6.6 ms (~24% of startup)</span></p>
+      <p class="fbody">Sixty validated help registrations plus the tip pool execute at source time, but are read only when <code class="inline">zhelp</code>/<code class="inline">tips</code> run. Pure data, no side effects — ideal candidates for the repo&rsquo;s existing lazy-lib pattern. The compdef already falls back gracefully when the catalogue is absent.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Move data into <code class="inline">lib/</code> files; source on first invocation from the commands and the compdef loader.</p>
+    </div>
+  </article>
+
+  <!-- ===== TIER 2 ===== -->
+  <div class="tier" data-tier-group="t2"><h3>Tier 2 — medium</h3><div class="rule"></div></div>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-08</div>
+    <div>
+      <p class="ftitle">Nine utility functions lack <code class="inline">emulate -L zsh</code></p>
+      <p class="fmeta"><span class="sev ok">fixed · e6d4f06 ·#31</span><span class="loc">extract · mkcd · ff · ft · fkill · headers · peek · croot · gitcount</span><span class="srcs">Gemini <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i></span></p>
+      <p class="fbody">They inherit whatever options the caller set (<code class="inline">SH_WORD_SPLIT</code>, <code class="inline">KSH_ARRAYS</code>, <code class="inline">GLOB_SUBST</code>, <code class="inline">NOUNSET</code>), so third-party plugins can break them. Every neighboring function isolates correctly.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Add <code class="inline">emulate -L zsh</code> as the first line of each.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-10</div>
+    <div>
+      <p class="ftitle"><code class="inline">eval "$(zoxide init zsh)"</code> has no validation gate</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">30-zoxide.zsh:34</span><span class="srcs">Ox <i class="y">&#9679;</i>(Low) · Muse <i class="y">&#9679;</i>(Med)</span></p>
+      <p class="fbody">No empty-output or syntax check, in contrast to the fzf bootstrap&rsquo;s rigor. Practically, a hijacked zoxide binary is already game over — but the consistency hardening is cheap and matches the repo&rsquo;s stated posture.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Capture output; reject empty; validate with <code class="inline">zsh -fn</code>; only then eval.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-11</div>
+    <div>
+      <p class="ftitle">Relative <code class="inline">XDG_DATA_HOME</code>/<code class="inline">XDG_CACHE_HOME</code> accepted for cgm catalogue and npkg cache</p>
+      <p class="fmeta"><span class="sev ok">fixed · 8902436·e6d4f06 ·#31</span><span class="loc">62-cgm.zsh:93–95 · 60-functions.zsh:3828 · 3862</span><span class="srcs">Ox <i class="y">&#9679;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i></span></p>
+      <p class="fbody">A relative XDG override roots the credential catalogue under the current directory; fzf validates <code class="inline">== /*</code> but cgm and npkg don&rsquo;t. Secondary nit: mkdir-then-chmod leaves a brief umask-derived permission window.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Require absolute paths; create directories under <code class="inline">( umask 077; mkdir -p … )</code>.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-14</div>
+    <div>
+      <p class="ftitle">Mid-session <code class="inline">FZF_DEFAULT_OPTS</code> edits silently dropped on theme change</p>
+      <p class="fmeta"><span class="sev info">no fix · adjudicated</span><span class="loc">40-fzf.zsh:18–27 · 30-zoxide.zsh:3</span><span class="srcs">dsV4 <i class="y">&#9679;</i></span></p>
+      <p class="fbody">Inherited options are frozen at first source; a later <code class="inline">ztheme use …</code> rebuilds exports from the stale snapshot, discarding live user edits.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Re-capture current values on signature change before re-export, or document the freeze.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-15</div>
+    <div>
+      <p class="ftitle">Cleanup accounting relies on invisible dynamic scoping</p>
+      <p class="fmeta"><span class="sev info">no fix · adjudicated</span><span class="loc">60-functions.zsh:1624–1639</span><span class="srcs">dsV4 <i class="y">&#9679;</i> · Ox <i class="p">&#9685;</i></span></p>
+      <p class="fbody"><code class="inline">_upkg_record_cleanup_result</code> mutates <code class="inline">succeeded/failed/failures</code> declared only in callers. Works today; a future call site without those locals creates globals or aborts under <code class="inline">set -u</code>.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Pass explicit arguments, or document the contract above the function.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-16</div>
+    <div>
+      <p class="ftitle"><code class="inline">dusage</code> fails silently past ARG_MAX</p>
+      <p class="fmeta"><span class="sev ok">fixed · e6d4f06·78377e3 ·#31</span><span class="loc">60-functions.zsh:546</span><span class="srcs">Gemini <i class="y">&#9679;</i></span></p>
+      <p class="fbody">Expanding tens of thousands of entries onto a single <code class="inline">du</code> invocation exceeds E2BIG on huge trees; the tool fails without a diagnosable message.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Batch entries (<code class="inline">--files0-from</code>) or chunk the expansion.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-17</div>
+    <div>
+      <p class="ftitle">Errors printed to stdout instead of stderr</p>
+      <p class="fmeta"><span class="sev ok">fixed · e6d4f06 ·#31 · 1 residual &#8594; N-03</span><span class="loc">60-functions.zsh — 9 echo sites</span><span class="srcs">Gemini <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i></span></p>
+      <p class="fbody">Usage/error messages from extract, mkcd, ff, ft, fkill, headers, peek, croot, gitcount pollute pipelines and captures (<code class="inline">var=$(peek missing)</code>).</p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">print -u2 -r -- "…"</code> throughout.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-18</div>
+    <div>
+      <p class="ftitle">Alias-shadowing escape hatch undocumented at point of use</p>
+      <p class="fmeta"><span class="sev info">no fix · already documented</span><span class="loc">20-aliases.zsh:32–35</span><span class="srcs">Muse <i class="y">&#9679;</i></span></p>
+      <p class="fbody"><code class="inline">mkdir -p</code> turns &ldquo;already exists&rdquo; into exit 0; <code class="inline">rm -iv</code> stalls scripted flows. Intentional and AGENTS-sanctioned, but the <code class="inline">command mkdir</code>/<code class="inline">\mkdir</code>/unalias bypass is only implied. Repo scripts already use <code class="inline">command</code> correctly.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Header comment block in the alias file + a GUIDE gotcha; consider <code class="inline">rm -I</code> or an interactive-only guard for <code class="inline">-i</code>.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">CR-20</div>
+    <div>
+      <p class="ftitle">Test gaps: three untested modules, nine untested functions</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">10-history · 50-completion · 70-globals; ports/fanprofile/croot/gitcount/headers/weather/extract/peek/tips</span><span class="srcs">Ox <i class="y">&#9679;</i> · dsV4 <i class="y">&#9679;</i> · Muse <i class="y">&#9685;</i></span></p>
+      <p class="fbody">No HISTSIZE/setopt asserts, zero zstyle asserts, global aliases never exercised; several functions are cheaply sourceable in-process and trivially testable.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Extend test-init with option/history asserts; add a zstyle dump test; behavioral tests for the nine functions (fixture for <code class="inline">ports</code> already exists).</p>
+    </div>
+  </article>
+
+  <!-- ===== TIER 3 ===== -->
+  <div class="tier" data-tier-group="t3"><h3>Tier 3 — backlog &amp; polish</h3><div class="rule"></div></div>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-19</div>
+    <div>
+      <p class="ftitle">Contested: fzf preview placeholders rely on bare <code class="inline">{}</code></p>
+      <p class="fmeta"><span class="sev info">no code fix · fixture 526dd6f ·#32</span><span class="loc">40-fzf.zsh:79–92</span><span class="srcs">Muse <i class="y">&#9679;</i>(Med) · dsV4 <i class="p">&#9685;</i> · Gemini <i class="p">&#9685;</i> · Ox <i class="n">&#9675;</i>(safe)</span></p>
+      <p class="fbody">Ox and dsV4 judge fzf&rsquo;s automatic single-quoting sufficient (spaces, <code class="inline">;</code>, <code class="inline">$()</code>, backticks covered), noting the sole residue is embedded single quotes (upstream fzf#1586) requiring hostile filenames plus hover. Muse argues for quoted placeholders regardless. Genuinely disputed; treat as optional hardening with a targeted test.</p>
+      <p class="ffix"><b>Fix (optional)</b> &nbsp;Quoted placeholder form or <code class="inline">sh -c</code> wrapper; verify against adversarial filenames.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-21</div>
+    <div>
+      <p class="ftitle">GUIDE completion list missing 15 of 23 registrations</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">GUIDE.md:316–325</span><span class="srcs">dsV4 <i class="y">&#9679;</i></span></p>
+      <p class="ffix"><b>Fix</b> &nbsp;Complete the list — at minimum document headline-feature <code class="inline">ztheme</code> completion.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-22</div>
+    <div>
+      <p class="ftitle">qa-features.csv ledger mismatch and template drift</p>
+      <p class="fmeta"><span class="sev info">no fix · next QA pass</span><span class="loc">docs/specs/theming-and-fzf-ui-plan.md:759 · qa-features.csv</span><span class="srcs">dsV4 <i class="y">&#9679;</i> · Gemini <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i></span></p>
+      <p class="fbody">Ledger claims a 39-row matrix; the file has 13. Rows carry <code class="inline">Passed</code> where AGENTS mandates a <code class="inline">Not Run</code> template; coverage omits aliases, completion, cgm/upkg flows, ztheme, zhelp.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Reconcile the claim, reset statuses, expand coverage before the stable-release QA pass.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-23</div>
+    <div>
+      <p class="ftitle">Dead code sweep</p>
+      <p class="fmeta"><span class="sev ok">fixed · e6d4f06 #31 · 526dd6f #32</span><span class="loc">55-ui-helpers.zsh:82–86 · 60:3704–3708 · 25-theme:26–28,162–167</span><span class="srcs">dsV4 <i class="y">&#9679;</i> · Ox <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i></span></p>
+      <p class="fbody">Unused <code class="inline">_ui_has_truecolor</code>/<code class="inline">_ui_has_icons</code> (+ their fallback twins), an unreachable skip-recording branch, and always-false theme re-source blocks.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Delete, or wire up where the intent was real.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-24</div>
+    <div>
+      <p class="ftitle"><code class="inline">ft</code> forces <code class="inline">rg --color=always</code>, leaking ANSI into pipes</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">60-functions.zsh:92</span><span class="srcs">Gemini <i class="y">&#9679;</i></span></p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">--color=auto</code>, matching the grep fallback on the next line.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-25</div>
+    <div>
+      <p class="ftitle"><code class="inline">fkill</code> header renders &ldquo;SIGSIGTERM&rdquo;</p>
+      <p class="fmeta"><span class="sev ok">fixed · 526dd6f ·#32</span><span class="loc">60-functions.zsh:126 · 138</span><span class="srcs">Gemini <i class="y">&#9679;</i></span></p>
+      <p class="ffix"><b>Fix</b> &nbsp;Strip an existing <code class="inline">SIG</code> prefix before re-prefixing.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-26</div>
+    <div>
+      <p class="ftitle">Long-term: decompose the 4,639-line monolith</p>
+      <p class="fmeta"><span class="sev low">deferred · R13 gate</span><span class="loc">60-functions.zsh</span><span class="srcs">Gemini <i class="y">&#9679;</i> · Muse <i class="y">&#9679;</i> · Ox <i class="p">&#9685;</i> · dsV4 <i class="p">&#9685;</i>(not short-term)</span></p>
+      <p class="fbody">Extract <code class="inline">upkg</code>/npkg into dedicated lazy modules following the proven <code class="inline">functions/ztheme</code> pattern; split <code class="inline">upkg()</code> and <code class="inline">_npkg_outdated()</code> into sub-helpers for testability. Removes ~4–5 ms of parse cost and the CR-01 guard question entirely. Largest refactor on this list — schedule deliberately, not opportunistically.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t3">
+    <div class="fid">CR-27</div>
+    <div>
+      <p class="ftitle">Quality backlog: duplication, constants, harness, hygiene</p>
+      <p class="fmeta"><span class="sev med">split · selected fixed #31/#32</span><span class="srcs">multiple suites</span></p>
+      <p class="fbody">Extract shared dusage/bigfiles scaffolding; deduplicate NO_COLOR appends and preview lines; unify term-dimension/locale helpers and the two signature schemes; name the eleven flagged magic numbers; benchmark <code class="inline">ZSH_BENCHMARK_ROOT</code> override + child-exit detection; test-harness fallbacks (<code class="inline">zsh_bin</code>, empty fakebin guard, zselect skip); prune ~45 stale branches; tag the theming release once T8 visual signoff closes; document <code class="inline">skills-lock.json</code>.</p>
+    </div>
+  </article>
+
+  <h3 style="margin-top:40px">Recommended execution order (synthesized)</h3>
+  <div class="scroll"><table>
+    <thead><tr><th class="num">#</th><th>Batch</th><th>Contents</th><th>Why this order</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td><b>One-PR standards batch</b></td><td class="mono">CR-01 · CR-03 · CR-09 (+ test rehash note)</td><td>Each is one line or one small derivation; restores full AGENTS.md compliance</td></tr>
+      <tr><td class="num">2</td><td><b>CI integrity</b></td><td class="mono">CR-02 (+ run-tests.sh)</td><td>Unblocks confident merging of everything else</td></tr>
+      <tr><td class="num">3</td><td><b>Safety batch</b></td><td class="mono">CR-06 · CR-07 · CR-08</td><td>Mechanical, low-risk, closes every &ldquo;medium safety&rdquo; item</td></tr>
+      <tr><td class="num">4</td><td><b>Performance batch</b></td><td class="mono">CR-04 · CR-05 · CR-13 · CR-12</td><td>~30–40% startup + 190&times; fbr; land after CI parity so benchmarks prove it</td></tr>
+      <tr><td class="num">5</td><td><b>Hardening &amp; docs</b></td><td class="mono">CR-10 · CR-11 · CR-14 · CR-15 · CR-16 · CR-17 · CR-18 · CR-20…23</td><td>Independent items; batch freely</td></tr>
+      <tr><td class="num">6</td><td><b>Deliberate refactor</b></td><td class="mono">CR-26 (+ CR-27 backlog)</td><td>Only with the preceding batches banked</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 style="margin-top:44px">Post-remediation review — findings surfaced by the fixes (PRs #31/#32)</h3>
+  <p class="sectionnote" style="margin-bottom:18px">Result of re-reviewing both remediation PRs against AGENTS.md and the validated spec, with the full suite executed independently (1,046 assertions pass). No High or Critical issues were introduced. Three Medium follow-ups and a Low backlog remain; tracked in <a href="../specs/post-remediation-follow-ups.md"><code class="inline">docs/specs/post-remediation-follow-ups.md</code></a>.</p>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">N-01</div>
+    <div>
+      <p class="ftitle"><span class="sev med">medium</span>&nbsp; Non-Linux systems silently lose colored ls/grep/diff aliases</p>
+      <p class="fmeta"><span class="loc">20-aliases.zsh:10 · 42–45</span><span>introduced by 526dd6f (#32, CR-04 zero-probe policy)</span></p>
+      <p class="fbody">The old capability probes enabled <code class="inline">--color=auto</code> wherever supported — including BSD grep/diff on macOS. The OSTYPE gate disables color unconditionally off Linux. Sanctioned by the validated spec&rsquo;s &ldquo;zero-probe GNU/Linux policy,&rdquo; but GUIDE carries no portability note for it, and macOS/BSD are documented Tier-2 platforms.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;Document the Linux-only color stance in GUIDE&rsquo;s platform notes; optionally introduce an invalidation-aware cached capability probe later (spec R8 already sketches the constraints).</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">N-02</div>
+    <div>
+      <p class="ftitle"><span class="sev med">medium</span>&nbsp; run-tests.zsh swallows Ctrl-C and continues to the next suite</p>
+      <p class="fmeta"><span class="loc">scripts/run-tests.zsh:13</span><span>introduced by 00c87e6 (#31, CR-02 runner)</span></p>
+      <p class="fbody"><code class="inline">trap cleanup EXIT INT TERM HUP</code> replaces the default signal action, so an interrupted run proceeds to the following suite instead of aborting — misleading failures stack up after the real interruption.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">trap 'local rc=$?; cleanup; trap - INT TERM; kill -s INT $$' INT</code> (and TERM), keeping EXIT-only for plain cleanup.</p>
+    </div>
+  </article>
+
+  <article class="finding" data-sev="t2">
+    <div class="fid">N-03</div>
+    <div>
+      <p class="ftitle"><span class="sev med">medium</span>&nbsp; Residual stdout diagnostic in _npkg_outdated</p>
+      <p class="fmeta"><span class="loc">60-functions.zsh:4307</span><span>residual from CR-17 (partially fixed · e6d4f06 #31)</span></p>
+      <p class="fbody"><code class="inline">print -r -- "Diagnostic: $(…)"</code> still writes profile-error prose to stdout, violating R6&rsquo;s &ldquo;diagnostics to stderr&rdquo; acceptance whenever output is captured.</p>
+      <p class="ffix"><b>Fix</b> &nbsp;<code class="inline">print -u2 -r --</code>, then assert capture-cleanliness in test-upkg.</p>
+    </div>
+  </article>
+
+  <h3 style="margin-top:30px">Low backlog (accepted, not scheduled)</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>ID</th><th>Item</th><th>Origin</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">N-04</td><td>Triplicated signal-trap scaffold in dusage / bigfiles / _npkg_refresh_index — extract one helper</td><td>#31 review</td></tr>
+      <tr><td class="mono">N-05</td><td>Late-interrupt window can run <code class="inline">break</code> outside its loop before status return (~60-functions.zsh:835)</td><td>#31 review</td></tr>
+      <tr><td class="mono">N-06</td><td>Fallback <code class="inline">_ui_truncate</code> stays print-style while real one is REPLY-style — L4 divergence repeated, not unified</td><td>#32 review</td></tr>
+      <tr><td class="mono">N-07</td><td><code class="inline">zi</code>: chrome-refresh failure returns before the fzf-version diagnostic — silent exit ordering</td><td>#32 review</td></tr>
+      <tr><td class="mono">N-08</td><td>apt/brew/npm/flatpak <code class="inline">--</code> terminators verified only against fake binaries; npm grammar deserves a live check</td><td>#31 review</td></tr>
+      <tr><td class="mono">N-09</td><td>Adversarial fzf placeholder fixture skips when <code class="inline">script(1)</code> is absent (CI keeps util-linux; note only)</td><td>#32 review</td></tr>
+      <tr><td class="mono">N-10</td><td>Zoxide init stderr suppressed even interactively — failure cause invisible behind the generic message</td><td>#32 review</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>synthesized from docs/reviews/*.md · 2026-08-25</span>
+    <span>companion spec: docs/specs/cross-review-consolidation-plan.md</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var root=document.documentElement;
+  var btn=document.getElementById('themeBtn');
+  var stored=null;
+  try{stored=localStorage.getItem('cr-theme')}catch(e){}
+  function apply(mode){
+    if(mode==='light'||mode==='dark'){root.setAttribute('data-theme',mode);btn.textContent='theme: '+mode;}
+    else{root.removeAttribute('data-theme');btn.textContent='theme: auto';}
+  }
+  apply(stored);
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    var next=cur==='dark'?'light':'dark';
+    try{localStorage.setItem('cr-theme',next)}catch(e){}
+    apply(next);
+  });
+
+  var filters=document.querySelectorAll('.filter');
+  var findings=document.querySelectorAll('.finding');
+  var tiers=document.querySelectorAll('.tier');
+  filters.forEach(function(f){
+    f.addEventListener('click',function(){
+      filters.forEach(function(x){x.classList.remove('active')});
+      f.classList.add('active');
+      var t=f.getAttribute('data-tier');
+      findings.forEach(function(a){a.style.display=(t==='all'||a.getAttribute('data-sev')===t)?'':'none'});
+      tiers.forEach(function(g){
+        var gt=g.getAttribute('data-tier-group');
+        var vis=document.querySelectorAll('.finding[data-sev="'+gt+'"]').length>0&&(t==='all'||t===gt);
+        g.style.display=vis?'':'none';
+      });
+    });
+  });
+
+  var links=document.querySelectorAll('nav.toc a');
+  var secs=[].map.call(links,function(a){return document.querySelector(a.getAttribute('href'))});
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(a){a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id)});
+        }
+      });
+    },{rootMargin:'-30% 0px -60% 0px'});
+    secs.forEach(function(s){if(s)io.observe(s)});
+  }
+})();
+</script>
+</body>
+</html>
