@@ -4,7 +4,7 @@
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
 - `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `25-theme.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
-- `functions/ztheme`, `functions/_fbr_format_entry`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, `lib/tips-catalogue.zsh`, and `lib/upkg-registry.zsh` are trusted repo-local lazy helpers. Normal startup registers fixed loaders and lightweight registry/color stubs; command-only rendering, catalogues, registries, fbr formatting, palette, validation, and conversion code is parsed on first use.
+- `functions/ztheme`, `functions/_fbr_format_entry`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` are trusted repo-local lazy helpers. Normal startup registers fixed loaders and lightweight color stubs; command-only rendering, catalogues, fbr formatting, palette, validation, and conversion code is parsed on first use. `lib/upkg-registry.zsh` is a trusted lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Documentation Ownership

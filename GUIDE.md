@@ -78,7 +78,7 @@ Unreadable module files are skipped. The optional credential module is skipped e
 
 The numbered filenames define load order. `50-completion.zsh` assumes an earlier layer already ran `compinit`; `66-compdefs.zsh` becomes a silent no-op when `compdef` is unavailable.
 
-The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, `lib/tips-catalogue.zsh`, and `lib/upkg-registry.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while command-only swatch/export logic, catalogues, registries, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. A configured custom or colored non-default startup loads the pieces it needs before composing finder options.
+The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while command-only swatch/export logic, catalogues, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. `lib/upkg-registry.zsh` is instead a lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available. A configured custom or colored non-default startup loads the theme pieces it needs before composing finder options.
 
 ## Dependencies
 
@@ -379,8 +379,8 @@ It is on demand and installs no prompt or command-cycle hook. Its fixed reposito
 | `mv` | `mv -iv` |
 | `rm` | `rm -iv` |
 | `cat` | `bat --style=numbers --paging=never` when `bat` is present |
-| `grep` | Adds `--color=auto` when supported |
-| `diff` | Adds `--color=auto` when supported |
+| `grep` | Adds `--color=auto` on Linux |
+| `diff` | Adds `--color=auto` on Linux |
 
 Under the zero-probe startup policy, the built-in `ls`, `ll`, and `la` fallbacks and the `grep` and `diff` aliases add automatic color only on Linux. On macOS and BSD they keep the corresponding plain command behavior rather than running capability probes while the shell starts. `lsd`, when installed, remains the preferred listing backend on every platform where it is available.
 
