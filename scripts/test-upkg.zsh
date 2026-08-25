@@ -569,6 +569,7 @@ done
   {
     print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width 2>/dev/null || true'
     print -- "source '$repo_dir/60-functions.zsh'"
+    print -- '_zsh_functions_load || exit 1'
     print -- '_ui_truncate 10 "My File.txt"'
     print -- '_ui_pad left 20 "My File.txt"'
   } > "$fallback_file"
@@ -588,6 +589,7 @@ done
 
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
+  _zsh_functions_load || return 1
 
   assert_contains "${functions[_npkg_pick_installables]}" '_fzf_picker_multi_args add' 'Nix install picker uses the shared live multi-selection footer' || return 1
   assert_contains "${functions[_npkg_remove_picker]}" '--accept-nth=4' 'Nix remove picker asks fzf to return targets directly' || return 1

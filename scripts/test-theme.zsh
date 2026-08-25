@@ -248,7 +248,7 @@ printf "%s" "$1" > "$FZF_PLACEHOLDER_RESULT"' >"$helper"
       command script -qefc 'fzf --bind="start:execute-silent($FZF_PLACEHOLDER_HELPER {})+accept" < "$FZF_PLACEHOLDER_CANDIDATE"' /dev/null >/dev/null
       [[ $(<"$result") == "$hostile" && ! -e $marker ]]
       )
-      assert_status "$?" 0 'fzf bare placeholders preserve hostile arguments without shell execution' || return 1
+      assert_status "$?" 0 'fzf selection placeholders quote hostile arguments without shell execution' || return 1
     else
       print -- 'skip: fzf placeholder fixture requires script(1) for a pseudo-terminal'
     fi
@@ -323,10 +323,12 @@ test_lazy_loading() {
   output=$(run_theme_case '' '
 source '"${repo_dir}"'/55-ui-helpers.zsh
 source '"${repo_dir}"'/60-functions.zsh
-print -r -- "ztheme=${+functions[ztheme]} helpers=${+functions[_ztheme_usage]} colors=$_ZSH_THEME_COLOR_HELPERS_LOADED registry=$_ZSH_THEME_REGISTRY_LOADED palettes=$_ZSH_THEME_BUILTIN_PALETTES_LOADED"
+print -r -- "ztheme=${+functions[ztheme]} helpers=${+functions[_ztheme_usage]} commands=$_ZSH_FUNCTIONS_CATALOGUE_LOADED package-helpers=${+functions[_upkg_usage]} colors=$_ZSH_THEME_COLOR_HELPERS_LOADED registry=$_ZSH_THEME_REGISTRY_LOADED palettes=$_ZSH_THEME_BUILTIN_PALETTES_LOADED"
 ztheme current >/dev/null || exit 27
 _zsh_theme_sgr accent fg ui || exit 28
 print -r -- "helpers=${+functions[_ztheme_usage]} colors=$_ZSH_THEME_COLOR_HELPERS_LOADED registry=$_ZSH_THEME_REGISTRY_LOADED palettes=$_ZSH_THEME_BUILTIN_PALETTES_LOADED sgr=${(V)REPLY}"
+path >/dev/null || exit 31
+print -r -- "commands=$_ZSH_FUNCTIONS_CATALOGUE_LOADED package-helpers=${+functions[_upkg_usage]}"
 source '"${repo_dir}"'/25-theme.zsh
 _zsh_theme_sgr accent fg ui || exit 29
 source '"${repo_dir}"'/60-functions.zsh
@@ -337,9 +339,10 @@ for directory in "${fpath[@]}"; do
 done
 print -r -- "resourced=${(V)REPLY} paths=$function_path_count"')
 
-  assert_equals "${${(f)output}[1]}" 'ztheme=1 helpers=0 colors=0 registry=0 palettes=0' 'startup registers ztheme without parsing command-only or color registry helpers' || return 1
+  assert_equals "${${(f)output}[1]}" 'ztheme=1 helpers=0 commands=0 package-helpers=0 colors=0 registry=0 palettes=0' 'startup registers commands without parsing their implementations or color helpers' || return 1
   assert_equals "${${(f)output}[2]}" 'helpers=1 colors=1 registry=1 palettes=0 sgr=^[[35m' 'first color use loads trusted command, registry, and SGR helpers without fixed palettes under the terminal default' || return 1
-  assert_equals "${${(f)output}[3]}" 'resourced=^[[35m paths=1' 're-sourcing preserves lazy helpers and one private function path' || return 1
+  assert_equals "${${(f)output}[3]}" 'commands=1 package-helpers=1' 'first general command loads the fixed implementation catalogue' || return 1
+  assert_equals "${${(f)output}[4]}" 'resourced=^[[35m paths=1' 're-sourcing preserves lazy helpers and one private function path' || return 1
 }
 
 test_idempotence_and_safety() {

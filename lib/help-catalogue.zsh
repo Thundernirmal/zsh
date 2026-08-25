@@ -66,10 +66,6 @@ _zsh_help_register ls Files 'List directory contents' 'ls [path]' 'ls' 'lsd or G
 _zsh_help_register ll Files 'List all entries with details' 'll [path]' 'll' 'lsd or GNU ls' alias none
 _zsh_help_register la Files 'List entries including hidden files' 'la [path]' 'la' 'lsd or GNU ls' alias none
 _zsh_help_register lt Files 'Show a three-level directory tree' 'lt [path]' 'lt' 'lsd or tree' alias none
-_zsh_help_register mkdir Files 'Create directories, including missing parents' 'mkdir <directory> ...' 'mkdir new-project/src' mkdir alias none
-_zsh_help_register cp Files 'Copy verbosely; confirm overwrites' 'cp <source> <destination>' 'cp config.example config.local' cp alias none
-_zsh_help_register mv Files 'Move verbosely; confirm overwrites' 'mv <source> <destination>' 'mv old-name new-name' mv alias none
-_zsh_help_register rm Files 'Remove verbosely; confirm each path' 'rm <path> ...' 'rm unwanted-file' rm alias none
 _zsh_help_register cat Files 'Print files with bat highlighting' 'cat <file>' 'cat README.md' bat alias none
 _zsh_help_register extract Files 'Unpack a supported archive' 'extract <archive>' 'extract archive.tar.gz' 'tar; format-specific unpackers when needed' function none
 _zsh_help_register peek Files 'Preview a file with bat or cat' 'peek <file>' 'peek README.md' 'bat or cat' function peek

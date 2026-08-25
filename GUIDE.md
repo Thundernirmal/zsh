@@ -69,7 +69,7 @@ Unreadable module files are skipped. The optional credential module is skipped e
 | `40-fzf.zsh` | fzf validation, secure integration cache, structured presentation, previews, and bindings |
 | `50-completion.zsh` | Lightweight global completion styles |
 | `55-ui-helpers.zsh` | Rich terminal rendering and plain fallbacks |
-| `60-functions.zsh` | General helpers, session-only `ztheme`, `upkg`, and optional `npkg` |
+| `60-functions.zsh` | Fixed lazy registrations for general helpers, session-only `ztheme`, `upkg`, and optional `npkg` |
 | `62-cgm.zsh` | Optional Secret Service credential manager |
 | `65-help.zsh` | Fixed lazy-loader registration for `zhelp` |
 | `66-compdefs.zsh` | Command-aware completion definitions |
@@ -78,7 +78,9 @@ Unreadable module files are skipped. The optional credential module is skipped e
 
 The numbered filenames define load order. `50-completion.zsh` assumes an earlier layer already ran `compinit`; `66-compdefs.zsh` becomes a silent no-op when `compdef` is unavailable.
 
-The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while command-only swatch/export logic, catalogues, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. `lib/upkg-registry.zsh` is instead a lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available. A configured custom or colored non-default startup loads the theme pieces it needs before composing finder options.
+The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/functions-catalogue.zsh`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while general command implementations, package workflows, command-only swatch/export logic, catalogues, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. `lib/upkg-registry.zsh` is instead a lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available. A configured custom or colored non-default startup loads the theme pieces it needs before composing finder options.
+
+The first invocation of a general helper such as `ff`, `bigfiles`, `fbr`, `upkg`, or `npkg` loads the single fixed function catalogue. Later calls use the installed implementations directly. This keeps command availability and completion registration cheap during startup without scattering the helper graph across separate shallow files.
 
 ## Dependencies
 
@@ -374,10 +376,6 @@ It is on demand and installs no prompt or command-cycle hook. Its fixed reposito
 | `ll` | Long listing including hidden entries and readable sizes |
 | `la` | Listing including hidden entries |
 | `lt` | Tree to depth 3; defined only with `lsd` or `tree` |
-| `mkdir` | `mkdir -p` |
-| `cp` | `cp -iv` |
-| `mv` | `mv -iv` |
-| `rm` | `rm -iv` |
 | `cat` | `bat --style=numbers --paging=never` when `bat` is present |
 | `grep` | Adds `--color=auto` on Linux |
 | `diff` | Adds `--color=auto` on Linux |
@@ -435,6 +433,8 @@ zi projects
 `z` performs ranked directory jumps. `zi` uses zoxide's interactive picker but is wrapped by the shared fzf version gate.
 
 The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets without replacing zoxide's scoring or candidate generation.
+
+Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata and Zsh version, so warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead.
 
 ### fzf requirement and startup
 
@@ -756,8 +756,8 @@ These are the cross-cutting rules most likely to surprise a new user:
 
 1. **The install path is fixed.** `init.zsh` loads `$HOME/.config/zsh/*.zsh`. A clone elsewhere needs a symlink or a deliberate code change.
 2. **Source order matters.** Source this layer after frameworks when its aliases should win. `~/.zshrc` itself is not versioned here.
-3. **Common commands are redefined.** `mkdir`, `cp`, `mv`, and `rm` are aliases. Use `command <name>` to bypass an alias deliberately.
-4. **Interactive aliases are not a backup.** Later flags such as `-f`, direct binary calls, scripts, and non-interactive shells can bypass prompts. Review destructive commands and keep real backups.
+3. **File operations keep native semantics.** `mkdir`, `cp`, `mv`, and `rm` are not redefined. Add flags deliberately and keep real backups; shell prompts are not a backup strategy.
+4. **Interactive flags are situational.** If you opt into `-i`, remember that later flags such as `-f` can override it. Review the final command line before destructive operations.
 5. **Ordinary globs exclude dotfiles.** Use `*(D)` only when hidden entries are intentional. In contrast, `ff` and `dusage` explicitly include hidden entries by design.
 6. **Leading-space history is convenience, not secret storage.** `HIST_IGNORE_SPACE` reduces accidental persistence but does not protect process arguments, logs, terminal capture, or already-shared history.
 7. **Global aliases expand anywhere.** Unquoted tokens such as `G` or `NUL` can change a command far from its first word. Quote literal occurrences.

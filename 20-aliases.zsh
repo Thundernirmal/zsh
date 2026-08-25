@@ -28,12 +28,6 @@ alias ...='cd ../..'
 alias ....='cd ../../..'
 alias -- -='cd -'
 
-# Safety & productivity
-alias mkdir='mkdir -p'
-alias cp='cp -iv'
-alias mv='mv -iv'
-alias rm='rm -iv'
-
 # File viewing
 if (( $+commands[bat] )); then
   alias cat='bat --style=numbers --paging=never'

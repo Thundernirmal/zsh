@@ -224,6 +224,8 @@ The highest-confidence defects are the startup guard violation (CR-01), redirect
 
 **CR:** CR-26
 
+**Status:** Implemented in the follow-up startup hardening branch. `60-functions.zsh` now exposes one fixed lazy-loader seam for the complete helper graph, while `lib/functions-catalogue.zsh` keeps the interconnected implementations local. The public commands and lightweight package registry remain available at startup; the catalogue is parsed on first command use.
+
 Do not mix this refactor into correctness batches. First record `60-functions.zsh` parse cost and identify a deep interface:
 
 - `upkg` and conditional `npkg` remain the only public package entry points;

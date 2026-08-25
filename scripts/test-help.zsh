@@ -90,7 +90,7 @@ file_contents() {
 
 test_catalogue() {
   local id before_count rc
-  local expected='.. ... .... - z zi mkcd croot ls ll la lt mkdir cp mv rm cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm upkg npkg G L W H T NE NUL tips ztheme zhelp'
+  local expected='.. ... .... - z zi mkcd croot ls ll la lt cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm upkg npkg G L W H T NE NUL tips ztheme zhelp'
 
   assert_equals "${(j: :)_ZSH_HELP_ORDER}" "$expected" 'catalogue covers the public command suite in stable order' || return 1
   assert_unique 'catalogue IDs are unique' "${_ZSH_HELP_ORDER[@]}" || return 1
