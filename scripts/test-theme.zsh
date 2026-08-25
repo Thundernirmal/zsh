@@ -333,6 +333,18 @@ _zsh_theme_signature; print -r -- "$first|$REPLY|${#_ZSH_UI_THEME_NAMES}|${#_ZSH
   [[ ! -e $marker ]]
   assert_status "$?" 0 'theme names are data and cannot execute shell syntax' || return 1
 
+  local hostile_dir="$test_tmp/hostile-theme-root"
+  local hostile_marker="$test_tmp/hostile-theme-loaded"
+  command mkdir -p -- "$hostile_dir/lib"
+  print -r -- ": >${(q)hostile_marker}" >"$hostile_dir/lib/theme-color.zsh"
+  output=$(
+    _ZSH_THEME_MODULE_DIR="$hostile_dir" "$zsh_bin" -dfc \
+      "source ${(q)repo_dir}/25-theme.zsh; print -r -- \"\$_ZSH_THEME_MODULE_DIR\"; _zsh_theme_load_color_helpers"
+  ) || return 1
+  assert_equals "$output" "$repo_dir" 'theme helper directory ignores an inherited environment override' || return 1
+  [[ ! -e $hostile_marker ]]
+  assert_status "$?" 0 'inherited theme helper paths cannot source external code' || return 1
+
   local fakebin="$test_tmp/fakebin" invocation_log="$test_tmp/invocations"
   command mkdir -p -- "$fakebin"
   local tool

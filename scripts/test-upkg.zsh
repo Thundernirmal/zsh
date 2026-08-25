@@ -456,6 +456,7 @@ done
  '
 
   export PATH=$fakebin:$original_path
+  rehash
   export UPKG_TEST_NPM_PREFIX=$tmp_prefix
 
   local fallback_file rich_check_file
@@ -1007,6 +1008,7 @@ case "$*" in
   *) exit 2 ;;
 esac
 '
+  rehash
 
   write_fake npm '
 printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"

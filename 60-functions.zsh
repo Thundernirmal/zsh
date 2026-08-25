@@ -3779,7 +3779,7 @@ upkg() {
 }
 
 # Thin apt-like wrapper around nix profile with optional fzf pickers.
-if command -v nix >/dev/null 2>&1; then
+if (( $+commands[nix] )); then
   _npkg_nix() {
     command nix --extra-experimental-features "nix-command flakes" "$@"
   }
