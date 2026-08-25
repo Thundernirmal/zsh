@@ -316,19 +316,22 @@ test_dusage_oversized_operand_set() {
   local fixture_dir="$tmp_dir/dusage-oversized"
   local path_segment='segment-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-'
   local file_component='operand-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-'
-  integer depth index rc aggregate_bytes arg_max
+  integer depth index rc aggregate_bytes arg_max operand_count operand_bytes
 
   command mkdir -p -- "$fixture_dir"
   for (( depth = 1; depth <= 14; depth++ )); do
     fixture_dir+="/${path_segment}${depth}"
     command mkdir -- "$fixture_dir" || return 1
   done
-  for (( index = 1; index <= 800; index++ )); do
+  arg_max=$(command getconf ARG_MAX) || return 1
+  operand_bytes=$(( ${#fixture_dir} + ${#file_component} + 4 ))
+  operand_count=$(( arg_max / operand_bytes + 2 ))
+
+  for (( index = 1; index <= operand_count; index++ )); do
     print -rn -- "$fixture_dir/${file_component}${index}"$'\0'
   done | command xargs -0 touch -- || return 1
 
-  arg_max=$(command getconf ARG_MAX) || return 1
-  aggregate_bytes=$(( 800 * (${#fixture_dir} + ${#file_component} + 4) ))
+  aggregate_bytes=$(( operand_count * operand_bytes ))
   (( aggregate_bytes > arg_max )) || return 1
 
   dusage "$fixture_dir" 1 >/dev/null
