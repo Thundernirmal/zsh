@@ -259,10 +259,36 @@ printf "%s\n" "$0" >> "$_ZSH_HELP_INVOCATION_LOG"' > "$fakebin/$tool"
   assert_equals "$(file_contents "$invocation_log")" '' 'help module sourcing invokes no external tools' || return 1
 }
 
+test_lazy_catalogue_paths() {
+  local hostile="$tmp_dir/hostile-catalogues"
+  local marker="$tmp_dir/hostile-loaded"
+  local output
+
+  command mkdir -p -- "$hostile/lib"
+  print -r -- ": > ${(q)marker}" >"$hostile/lib/help-catalogue.zsh"
+  print -r -- ": > ${(q)marker}" >"$hostile/lib/tips-catalogue.zsh"
+
+  output=$(
+    _ZSH_HELP_MODULE_DIR=$hostile
+    _ZSH_TIPS_MODULE_DIR=$hostile
+    _ZSH_HELP_CATALOGUE_LOADED=0
+    _ZSH_TIPS_CATALOGUE_LOADED=0
+    source "$repo_dir/65-help.zsh"
+    source "$repo_dir/80-tips.zsh"
+    _zsh_help_load || exit 1
+    _zsh_tips_load || exit 1
+    print -r -- "$_ZSH_HELP_MODULE_DIR|$_ZSH_TIPS_MODULE_DIR"
+  ) || return 1
+  assert_equals "$output" "$repo_dir|$repo_dir" 'lazy catalogue paths stay pinned to the repository' || return 1
+  [[ ! -e $marker ]]
+  assert_status "$?" 0 'hostile inherited catalogue paths cannot source external code' || return 1
+}
+
 test_tips_are_concise() {
-  local tip
+  local tip output
 
   source "$repo_dir/80-tips.zsh"
+  _zsh_tips_load || return 1
   (( ${#_zsh_tip_pool[@]} > 0 && ${#_zsh_tip_pool[@]} <= 60 )) || {
     print -u2 -- 'not ok: tip pool stays focused'
     return 1
@@ -282,6 +308,11 @@ test_tips_are_concise() {
     esac
   done
 
+  functions[_ui_plain_mode]='return 0'
+  _zsh_tip_pool=( "${_zsh_tip_pool[1]}" )
+  output=$(tips) || return 1
+  assert_equals "$output" "tip: ${_zsh_tip_pool[1]}" 'tips renders a deterministic plain-mode entry' || return 1
+
   print -- 'ok: tips stay focused, short, and actionable'
 }
 
@@ -289,12 +320,14 @@ main() {
   source "$repo_dir/25-theme.zsh"
   source "$repo_dir/40-fzf.zsh"
   source "$repo_dir/65-help.zsh"
+  _zsh_help_load || return 1
 
   test_catalogue || return 1
   test_matching || return 1
   test_plain_rendering_and_availability || return 1
   test_palette_queue_and_cancel || return 1
   test_source_has_no_subprocesses || return 1
+  test_lazy_catalogue_paths || return 1
   test_tips_are_concise || return 1
 }
 

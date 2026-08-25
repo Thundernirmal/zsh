@@ -7,7 +7,7 @@ if (( $+commands[lsd] )); then
   alias la='lsd -A'
   alias lt='lsd --tree --depth=3 --group-dirs=first'
 else
-  if command ls --color=auto . >/dev/null 2>&1; then
+  if [[ $OSTYPE == linux* ]]; then
     alias ls='command ls --color=auto'
     alias ll='command ls -lah --color=auto'
     alias la='command ls -A --color=auto'
@@ -39,11 +39,8 @@ if (( $+commands[bat] )); then
   alias cat='bat --style=numbers --paging=never'
 fi
 
-if print -r -- x | command grep --color=auto -e x >/dev/null 2>&1; then
+if [[ $OSTYPE == linux* ]]; then
   alias grep='grep --color=auto'
-fi
-
-if command diff --color=auto /dev/null /dev/null >/dev/null 2>&1; then
   alias diff='diff --color=auto'
 fi
 

@@ -3,6 +3,11 @@
 # can source this module without side effects or errors.
 
 if (( $+functions[compdef] )); then
+  if (( ! $+parameters[_ZSH_UI_THEME_NAMES] )); then
+    source "${${(%):-%N}:A:h}/25-theme.zsh"
+  fi
+  source "${${(%):-%N}:A:h}/lib/upkg-registry.zsh"
+
   typeset -ga _ZSH_UPKG_COMMAND_SPECS=(
     'outdated:Show outdated packages'
     'check:Alias for outdated'
@@ -23,9 +28,6 @@ if (( $+functions[compdef] )); then
     '--dry-run:Preview upgrades or cleanup without changing packages'
     '--help:Show usage help'
   )
-  typeset -ga _ZSH_UPKG_MANAGERS=(
-    apt dnf pacman paru brew flatpak nix npm
-  )
   typeset -ga _ZSH_EXTRACT_EXTENSIONS=(
     tar.bz2 tar.gz tar.xz tar.zst bz2 rar gz tar tbz2 tgz tzst zip Z 7z
   )
@@ -37,9 +39,7 @@ if (( $+functions[compdef] )); then
     'reset:Restore the terminal theme for this session'
     'export:Print safe settings for ~/.zshrc'
   )
-  typeset -ga _ZSH_ZTHEME_NAMES=(
-    catppuccin-mocha catppuccin-latte nord gruvbox-dark terminal
-  )
+  typeset -ga _ZSH_ZTHEME_NAMES=( "${_ZSH_UI_THEME_NAMES[@]}" )
   typeset -ga _ZSH_NPKG_COMMAND_SPECS=(
     'add:Add packages or open the package picker'
     'install:Alias for add'
@@ -263,6 +263,13 @@ if (( $+functions[compdef] )); then
   _zsh_zhelp_commands() {
     local id
     local -a command_specs
+
+    if (( $+functions[_zsh_help_load] )); then
+      _zsh_help_load || {
+        _message 'command or search query'
+        return 0
+      }
+    fi
 
     if (( ! $+parameters[_ZSH_HELP_ORDER] )); then
       _message 'command or search query'

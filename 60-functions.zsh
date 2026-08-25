@@ -101,7 +101,7 @@ ft() {
   fi
 
   if command -v rg >/dev/null 2>&1; then
-    rg --color=always -- "$1" "${2:-.}"
+    rg --color=auto -- "$1" "${2:-.}"
   else
     command grep -rnI --color=auto -- "$1" "${2:-.}" 2>/dev/null
   fi
@@ -123,8 +123,42 @@ fi
 (( $+functions[_fbr_format_entry] )) || autoload -Uz _fbr_format_entry
 
 # Fuzzy kill process
+_fkill_normalize_signal() {
+  emulate -L zsh
+
+  local signal=${1:-15}
+  local signal_name signal_number
+
+  signal=${(U)${signal#-}}
+  signal=${signal#SIG}
+  [[ -n $signal ]] || return 1
+
+  if [[ $signal == <-> ]]; then
+    signal_number=$signal
+    signal_name=$(builtin kill -l "$signal_number" 2>/dev/null) || return 1
+  else
+    signal_number=$(builtin kill -l "$signal" 2>/dev/null) || return 1
+    signal_name=$(builtin kill -l "$signal_number" 2>/dev/null) || return 1
+  fi
+
+  REPLY=$signal_name
+  reply=( "$signal_number" )
+}
+
 fkill() {
   emulate -L zsh
+
+  local signal=${1:-15}
+  local signal_name signal_number
+  local selected pid multi_footer
+  local -a pids fzf_args multi_args context_args
+
+  _fkill_normalize_signal "$signal" || {
+    print -u2 -r -- "fkill: invalid signal: ${1:-}"
+    return 1
+  }
+  signal_name=$REPLY
+  signal_number=$reply[1]
 
   _zsh_require_fzf || return 1
 
@@ -133,11 +167,6 @@ fkill() {
     return 1
   fi
 
-  local signal=${1:-15}
-  local selected pid multi_footer
-  local -a pids fzf_args multi_args context_args
-
-  signal=${signal#-}
   _fzf_picker_multi_args kill
   multi_footer=$REPLY
   multi_args=( "${reply[@]}" )
@@ -149,7 +178,7 @@ fkill() {
     --delimiter=$'\t'
     --with-nth=2..
     --accept-nth=1
-    "--header=Signal: SIG${signal}"
+    "--header=Signal: SIG${signal_name}"
     --header-label=Signal
   )
   selected=$(
@@ -168,7 +197,7 @@ fkill() {
   done <<< "$selected"
 
   (( ${#pids[@]} > 0 )) || return 0
-  kill "-$signal" "${pids[@]}"
+  builtin kill "-$signal_number" "${pids[@]}"
 }
 
 # Quick HTTP header check
@@ -211,7 +240,7 @@ _ui_usage_entry_icon() {
   fi
 }
 
-_ui_safe_text() {
+_ui_safe_text_reply() {
   emulate -L zsh
   setopt MULTIBYTE
 
@@ -243,7 +272,12 @@ _ui_safe_text() {
     esac
   done
 
-  print -r -- "$output"
+  REPLY=$output
+}
+
+_ui_safe_text() {
+  _ui_safe_text_reply "$@"
+  print -r -- "$REPLY"
 }
 
 _ui_safe_truncate() {
@@ -447,9 +481,6 @@ fi
 if ! (( $+functions[_ui_bold] )); then
   _ui_bold() { :; }
 fi
-if ! (( $+functions[_ui_has_icons] )); then
-  _ui_has_icons() { return 1; }
-fi
 if ! (( $+functions[_ui_icon] )); then
   _ui_icon() {
     emulate -L zsh
@@ -513,6 +544,18 @@ if ! (( $+functions[_ui_pad] )); then
       printf '%*s' "$width" "$*"
     else
       printf '%-*s' "$width" "$*"
+    fi
+  }
+fi
+if ! (( $+functions[_ui_pad_reply] )); then
+  _ui_pad_reply() {
+    emulate -L zsh
+    local align=$1 width=$2
+    shift 2
+    if [ "$align" = 'right' ]; then
+      printf -v REPLY '%*s' "$width" "$*"
+    else
+      printf -v REPLY '%-*s' "$width" "$*"
     fi
   }
 fi
@@ -1311,6 +1354,8 @@ _upkg_search_usage() {
   print 'Example: upkg search ripgrep --only npm,flatpak'
 }
 
+source "${${(%):-%N}:A:h}/lib/upkg-registry.zsh"
+
 _upkg_parse_manager_list() {
   emulate -L zsh
 
@@ -1328,15 +1373,12 @@ _upkg_parse_manager_list() {
       return 1
     fi
 
-    case $item in
-      apt|dnf|pacman|paru|brew|flatpak|nix|npm)
-        parsed+=("$item")
-        ;;
-      *)
-        print -u2 -- "Unsupported manager id: $item"
-        return 1
-        ;;
-    esac
+    if (( ${_ZSH_UPKG_MANAGERS[(Ie)$item]} )); then
+      parsed+=("$item")
+    else
+      print -u2 -- "Unsupported manager id: $item"
+      return 1
+    fi
   done
 
   print -l -- "${parsed[@]}"
@@ -3742,21 +3784,9 @@ upkg() {
     _UPKG_SEARCH_ROWS=()
   fi
 
-  for manager in "${_UPKG_SELECTED_MANAGERS[@]}"; do
-    selected_map[$manager]=1
-  done
-  for manager in "${_UPKG_SKIPPED_MANAGERS[@]}"; do
-    skipped_map[$manager]=1
-  done
-
   run_order=( "${_UPKG_SELECTED_MANAGERS[@]}" )
 
   for manager in "${run_order[@]}"; do
-    if [ -n "${skipped_map[$manager]}" ]; then
-      _upkg_record_summary "$manager" 'skipped' ''
-      continue
-    fi
-
     case "${cmd}:${manager}" in
       outdated:apt) _upkg_run_outdated_apt ;;
       outdated:dnf) _upkg_run_outdated_dnf ;;
@@ -4274,7 +4304,7 @@ if (( $+commands[nix] )); then
       command rm -f -- "$profile_error_file"
       trap - INT TERM
       print -u2 -r -- 'Failed to read Nix profile.'
-      [[ -n $profile_error ]] && print -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
+      [[ -n $profile_error ]] && print -u2 -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
       return 1
     }
     command rm -f -- "$profile_error_file"

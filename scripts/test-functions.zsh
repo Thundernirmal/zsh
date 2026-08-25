@@ -482,34 +482,128 @@ test_alias_probes_are_quiet() {
   local fakebin="$tmp_dir/fakebin"
   local stdout_file="$tmp_dir/aliases.stdout"
   local stderr_file="$tmp_dir/aliases.stderr"
+  local invocation_log="$tmp_dir/aliases.invocations"
   local output zsh_bin=${commands[zsh]}
 
   command mkdir -p -- "$fakebin"
 
   print -r -- '#!/bin/sh
+printf "%s\n" ls >> "$ALIAS_PROBE_LOG"
 printf "%s\n" "unsupported ls option" >&2
 exit 2' >"$fakebin/ls"
   print -r -- '#!/bin/sh
+printf "%s\n" grep >> "$ALIAS_PROBE_LOG"
 exit 1' >"$fakebin/grep"
   print -r -- '#!/bin/sh
+printf "%s\n" diff >> "$ALIAS_PROBE_LOG"
 printf "%s\n" "unsupported diff option" >&2
 exit 2' >"$fakebin/diff"
   command chmod +x "$fakebin/ls" "$fakebin/grep" "$fakebin/diff"
 
-  PATH="$fakebin" "$zsh_bin" -fc "source ${(q)repo_dir}/20-aliases.zsh" >"$stdout_file" 2>"$stderr_file"
+  ALIAS_PROBE_LOG=$invocation_log PATH="$fakebin" "$zsh_bin" -fc "source ${(q)repo_dir}/20-aliases.zsh" >"$stdout_file" 2>"$stderr_file"
   assert_status "$?" 0 'alias fallback probes complete when color flags are unsupported' || return 1
 
   output=$(<"$stdout_file")
   assert_equals "$output" '' 'alias fallback probes keep stdout quiet' || return 1
   output=$(<"$stderr_file")
   assert_equals "$output" '' 'alias fallback probes keep stderr quiet' || return 1
+  [[ ! -e $invocation_log ]] || output=$(<"$invocation_log")
+  assert_equals "${output:-}" '' 'alias setup starts no capability-probe subprocesses' || return 1
 }
 
-test_fkill_default_signal() {
+test_small_helper_success_paths() {
+  emulate -L zsh
+
+  local fixture_dir="$tmp_dir/small-helper-success"
+  local fakebin="$tmp_dir/small-helper-bin"
+  local old_path=$PATH output original_dir=$PWD
+
+  command mkdir -p -- "$fixture_dir/repo/nested/path" "$fakebin"
+  print -r -- 'needle' >"$fixture_dir/preview.txt"
+
+  output=$(peek "$fixture_dir/preview.txt") || return 1
+  assert_equals "$output" 'needle' 'peek prints a readable file through its fallback' || return 1
+
+  curl() {
+    [[ $1 == -sSIL && $2 == -- && $3 == 'https://example.invalid/path' ]] || return 9
+    print -r -- 'HTTP/1.1 204 No Content'
+  }
+  output=$(headers 'https://example.invalid/path') || return 1
+  unfunction curl
+  assert_contains "$output" '204 No Content' 'headers follows its successful curl path' || return 1
+
+  command git init -q "$fixture_dir/repo" || return 1
+  print -r -- one >"$fixture_dir/repo/file"
+  command git -C "$fixture_dir/repo" add file || return 1
+  command git -C "$fixture_dir/repo" -c user.name=One -c user.email=one@example.invalid commit -qm one || return 1
+  print -r -- two >>"$fixture_dir/repo/file"
+  command git -C "$fixture_dir/repo" add file || return 1
+  command git -C "$fixture_dir/repo" -c user.name=Two -c user.email=two@example.invalid commit -qm two || return 1
+
+  builtin cd -- "$fixture_dir/repo" || return 1
+  output=$(gitcount) || return 1
+  assert_contains "$output" 'One' 'gitcount reports the first contributor' || return 1
+  assert_contains "$output" 'Two' 'gitcount reports the second contributor' || return 1
+  builtin cd -- "$fixture_dir/repo/nested/path" || return 1
+  croot || return 1
+  assert_equals "$PWD" "$fixture_dir/repo" 'croot enters the repository root from a nested directory' || return 1
+  builtin cd -- "$original_dir" || return 1
+
+  print -r -- '#!/bin/sh
+if [ "$1" = "--color=auto" ]; then
+  printf "%s\n" "clean match"
+else
+  printf "\033[31mforced match\033[0m\n"
+fi' >"$fakebin/rg"
+  command chmod +x -- "$fakebin/rg"
+  PATH="$fakebin:$old_path"
+  rehash
+  output=$(ft needle "$fixture_dir") || return 1
+  PATH=$old_path
+  rehash
+  assert_equals "$output" 'clean match' 'ft keeps redirected ripgrep output free of ANSI escapes' || return 1
+
+  print -r -- '#!/bin/sh
+[ "$*" = "--http1.1 -fsSL https://wttr.in" ] || exit 8
+printf "%s\n" "Clear 20 C"' >"$fakebin/curl"
+  command chmod +x -- "$fakebin/curl"
+  output=$(PATH="$fakebin:$old_path" "$commands[zsh]" -fc "source ${(q)repo_dir}/20-aliases.zsh; eval weather") || return 1
+  assert_equals "$output" 'Clear 20 C' 'weather alias reaches its HTTPS forecast endpoint' || return 1
+
+  local fanprofile_body=${functions[fanprofile]}
+  local platform_fixture="$fixture_dir/platform-profile"
+  local choices_fixture="$fixture_dir/platform-choices"
+  print -r -- balanced >"$platform_fixture"
+  print -r -- 'low-power balanced performance' >"$choices_fixture"
+  fanprofile_body=${fanprofile_body//\/sys\/firmware\/acpi\/platform_profile_choices/$choices_fixture}
+  fanprofile_body=${fanprofile_body//\/sys\/firmware\/acpi\/platform_profile/$platform_fixture}
+  functions[_test_fanprofile]=$fanprofile_body
+  output=$(_test_fanprofile) || return 1
+  unfunction _test_fanprofile
+  assert_equals "$output" 'balanced (platform_profile)' 'fanprofile reports a readable platform profile' || return 1
+}
+
+test_fkill_signals() {
+  local input expected pair
+
+  for pair in '15:TERM:15' '-15:TERM:15' 'TERM:TERM:15' 'SIGTERM:TERM:15'; do
+    input=${pair%%:*}
+    expected=${pair#*:}
+    _fkill_normalize_signal "$input" || return 1
+    assert_equals "$REPLY:$reply[1]" "$expected" "fkill normalizes $input" || return 1
+  done
+
+  typeset -gi FZF_REQUIRE_CALLED=0
+  functions[_zsh_require_fzf]='(( FZF_REQUIRE_CALLED++ )); return 1'
+  fkill SIG >/dev/null 2>"$tmp_dir/fkill-invalid.err"
+  assert_status "$?" 1 'fkill rejects an empty normalized signal' || return 1
+  assert_equals "$FZF_REQUIRE_CALLED" 0 'fkill rejects invalid signals before opening fzf' || return 1
+
   assert_contains "${functions[fkill]}" 'local signal=${1:-15}' 'fkill defaults to SIGTERM' || return 1
   assert_contains "${functions[fkill]}" '--accept-nth=1' 'fkill asks fzf to return PIDs directly' || return 1
   assert_contains "${functions[fkill]}" '_fzf_picker_multi_args kill' 'fkill uses the shared live multi-selection footer' || return 1
   assert_not_contains "${functions[fkill]}" '_fzf_pointer' 'fkill no longer duplicates pointer presentation' || return 1
+  assert_not_contains "${functions[fkill]}" 'SIG${signal}' 'fkill never renders a duplicated SIG prefix' || return 1
 }
 
 test_fbr_worktree_navigation() {
@@ -540,6 +634,11 @@ test_fbr_worktree_navigation() {
 
   _fbr_format_entry worktree-test '21 hours ago' $'Tabbed\tsubject' '/tmp/work tree' '' '' 16 12
   assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\tworktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1
+
+  _fbr_format_entry 'unicode-λ-雪' 'now' $'control-\e[31m' '' '' '' 18 8
+  assert_equals "$REPLY" $'unicode-λ-雪       \tnow     \tcontrol-\\e[31m\t\tunicode-λ-雪' 'fbr preserves Unicode and sanitizes controls byte-for-byte' || return 1
+  _fbr_format_entry '1234567890' '1234567890' subject '' '' '' 5 4
+  assert_equals "$REPLY" $'1...0\t1234\tsubject\t\t1234567890' 'fbr preserves width-boundary truncation byte-for-byte' || return 1
 
   assert_contains "${functions[fbr]}" '--accept-nth=5' 'fbr asks fzf to return the branch field directly' || return 1
   assert_contains "${functions[fbr]}" "git log --oneline --decorate --color=always -20 {5}" 'fbr previews the undecorated branch field' || return 1
@@ -623,7 +722,8 @@ main() {
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
   test_alias_probes_are_quiet || return 1
-  test_fkill_default_signal || return 1
+  test_small_helper_success_paths || return 1
+  test_fkill_signals || return 1
   test_fbr_worktree_navigation || return 1
 }
 

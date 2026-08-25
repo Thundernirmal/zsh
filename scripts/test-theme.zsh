@@ -233,6 +233,25 @@ print -r -- "${(j:|:)reply}"')
       [[ $projected == raw-value ]]
     )
     assert_status "$?" 0 'installed fzf accepts shared arguments and projects stable result fields' || return 1
+
+    if (( $+commands[script] )); then
+      (
+      local fixture_dir="$test_tmp/fzf-placeholder"
+      local helper="$fixture_dir/capture" result="$fixture_dir/result" marker="$fixture_dir/injected" candidate="$fixture_dir/candidate"
+      local hostile="space ; touch $marker ' single-quote"
+      command mkdir -p -- "$fixture_dir"
+      print -r -- '#!/bin/sh
+printf "%s" "$1" > "$FZF_PLACEHOLDER_RESULT"' >"$helper"
+      command chmod +x -- "$helper"
+      print -r -- "$hostile" >"$candidate"
+      export FZF_PLACEHOLDER_HELPER=$helper FZF_PLACEHOLDER_RESULT=$result FZF_PLACEHOLDER_CANDIDATE=$candidate
+      command script -qefc 'fzf --bind="start:execute-silent($FZF_PLACEHOLDER_HELPER {})+accept" < "$FZF_PLACEHOLDER_CANDIDATE"' /dev/null >/dev/null
+      [[ $(<"$result") == "$hostile" && ! -e $marker ]]
+      )
+      assert_status "$?" 0 'fzf bare placeholders preserve hostile arguments without shell execution' || return 1
+    else
+      print -- 'skip: fzf placeholder fixture requires script(1) for a pseudo-terminal'
+    fi
   fi
 }
 

@@ -11,15 +11,21 @@ else
   branch_display=$branch
 fi
 
-branch_display=$(_ui_safe_text "$branch_display")
-branch_field=$(_ui_pad left "$branch_width" "$branch_display")
+_ui_safe_text_reply "$branch_display"
+branch_display=$REPLY
+_ui_pad_reply left "$branch_width" "$branch_display"
+branch_field=$REPLY
 if [[ -n $worktree_path && -n $badge_color ]]; then
   branch_field="${badge_color}[WT]${badge_reset}${branch_field[5,-1]}"
 fi
 
-relative=$(_ui_safe_text "$relative")
-relative_field=$(_ui_pad left "$relative_width" "$relative")
-subject=$(_ui_safe_text "$subject")
-safe_worktree=$(_ui_safe_text "$worktree_path")
+_ui_safe_text_reply "$relative"
+relative=$REPLY
+_ui_pad_reply left "$relative_width" "$relative"
+relative_field=$REPLY
+_ui_safe_text_reply "$subject"
+subject=$REPLY
+_ui_safe_text_reply "$worktree_path"
+safe_worktree=$REPLY
 
 REPLY="$branch_field"$'\t'"$relative_field"$'\t'"$subject"$'\t'"$safe_worktree"$'\t'"$branch"
