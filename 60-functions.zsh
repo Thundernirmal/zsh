@@ -2,65 +2,74 @@
 
 # Extract any archive
 extract() {
+  emulate -L zsh
+
   if [ -z "${1:-}" ]; then
-    echo "Usage: extract <file>"
+    print -u2 -r -- 'Usage: extract <file>'
     return 1
   fi
   if [ ! -f "$1" ]; then
-    echo "'$1' is not a valid file"
+    print -u2 -r -- "'$1' is not a valid file"
     return 1
   fi
-  case $1 in
-    *.tar.bz2)   tar xjf "$1" ;;
-    *.tar.gz)    tar xzf "$1" ;;
-    *.tar.xz)    tar xJf "$1" ;;
-    *.tar.zst)   tar --zstd -xf "$1" ;;
+
+  local archive=${1:A}
+
+  case $archive in
+    *.tar.bz2)   command tar xjf "$archive" ;;
+    *.tar.gz)    command tar xzf "$archive" ;;
+    *.tar.xz)    command tar xJf "$archive" ;;
+    *.tar.zst)   command tar --zstd -xf "$archive" ;;
     *.bz2)
-      command -v bunzip2 >/dev/null 2>&1 || { echo "bunzip2 is required to extract '$1'"; return 1; }
-      bunzip2 "$1"
+      command -v bunzip2 >/dev/null 2>&1 || { print -u2 -r -- "bunzip2 is required to extract '$1'"; return 1; }
+      command bunzip2 "$archive"
       ;;
     *.rar)
-      command -v unrar >/dev/null 2>&1 || { echo "unrar is required to extract '$1'"; return 1; }
-      unrar x "$1"
+      command -v unrar >/dev/null 2>&1 || { print -u2 -r -- "unrar is required to extract '$1'"; return 1; }
+      command unrar x "$archive"
       ;;
     *.gz)
-      command -v gunzip >/dev/null 2>&1 || { echo "gunzip is required to extract '$1'"; return 1; }
-      gunzip "$1"
+      command -v gunzip >/dev/null 2>&1 || { print -u2 -r -- "gunzip is required to extract '$1'"; return 1; }
+      command gunzip "$archive"
       ;;
-    *.tar)       tar xf "$1" ;;
-    *.tbz2)      tar xjf "$1" ;;
-    *.tgz)       tar xzf "$1" ;;
-    *.tzst)      tar --zstd -xf "$1" ;;
+    *.tar)       command tar xf "$archive" ;;
+    *.tbz2)      command tar xjf "$archive" ;;
+    *.tgz)       command tar xzf "$archive" ;;
+    *.tzst)      command tar --zstd -xf "$archive" ;;
     *.zip)
-      command -v unzip >/dev/null 2>&1 || { echo "unzip is required to extract '$1'"; return 1; }
-      unzip "$1"
+      command -v unzip >/dev/null 2>&1 || { print -u2 -r -- "unzip is required to extract '$1'"; return 1; }
+      command unzip "$archive"
       ;;
     *.Z)
-      command -v uncompress >/dev/null 2>&1 || { echo "uncompress is required to extract '$1'"; return 1; }
-      uncompress "$1"
+      command -v uncompress >/dev/null 2>&1 || { print -u2 -r -- "uncompress is required to extract '$1'"; return 1; }
+      command uncompress "$archive"
       ;;
     *.7z)
-      command -v 7z >/dev/null 2>&1 || { echo "7z is required to extract '$1'"; return 1; }
-      7z x "$1"
+      command -v 7z >/dev/null 2>&1 || { print -u2 -r -- "7z is required to extract '$1'"; return 1; }
+      command 7z x "$archive"
       ;;
-    *)           echo "'$1' cannot be extracted via extract()"; return 1 ;;
+    *)           print -u2 -r -- "'$1' cannot be extracted via extract()"; return 1 ;;
   esac
 }
 
 # Create directory and cd into it
 mkcd() {
+  emulate -L zsh
+
   if [ -z "${1:-}" ]; then
-    echo "Usage: mkcd <directory>"
+    print -u2 -r -- 'Usage: mkcd <directory>'
     return 1
   fi
 
-  command mkdir -p "$1" && cd "$1"
+  command mkdir -p -- "$1" && builtin cd -- "$1"
 }
 
 # Find files by name
 ff() {
+  emulate -L zsh
+
   if [ -z "${1:-}" ]; then
-    echo "Usage: ff <pattern> [path]"
+    print -u2 -r -- 'Usage: ff <pattern> [path]'
     return 1
   fi
 
@@ -68,9 +77,10 @@ ff() {
   local search_root=${2:-.}
 
   if [ ! -d "$search_root" ]; then
-    echo "'$search_root' is not a directory"
+    print -u2 -r -- "'$search_root' is not a directory"
     return 1
   fi
+  search_root=${search_root:A}
 
   if command -v fd >/dev/null 2>&1; then
     fd --hidden --follow --glob --ignore-case -- "*$pattern*" "$search_root"
@@ -83,8 +93,10 @@ ff() {
 
 # Find text in files (uses ripgrep if available, falls back to grep)
 ft() {
+  emulate -L zsh
+
   if [ -z "${1:-}" ]; then
-    echo "Usage: ft <pattern> [path]"
+    print -u2 -r -- 'Usage: ft <pattern> [path]'
     return 1
   fi
 
@@ -112,10 +124,12 @@ fi
 
 # Fuzzy kill process
 fkill() {
+  emulate -L zsh
+
   _zsh_require_fzf || return 1
 
   if [ ! -t 0 ] || [ ! -t 1 ]; then
-    echo "fkill requires an interactive terminal"
+    print -u2 -r -- 'fkill requires an interactive terminal'
     return 1
   fi
 
@@ -159,8 +173,10 @@ fkill() {
 
 # Quick HTTP header check
 headers() {
+  emulate -L zsh
+
   if [ -z "${1:-}" ]; then
-    echo "Usage: headers <url>"
+    print -u2 -r -- 'Usage: headers <url>'
     return 1
   fi
 
@@ -169,8 +185,10 @@ headers() {
 
 # Preview file (uses bat if available)
 peek() {
+  emulate -L zsh
+
   if [ -z "${1:-}" ]; then
-    echo "Usage: peek <file>"
+    print -u2 -r -- 'Usage: peek <file>'
     return 1
   fi
 
@@ -352,7 +370,7 @@ fanprofile() {
       1) profile="overboost" ;;
       2) profile="silent" ;;
       *)
-        echo "Unknown ASUS fan profile value: $raw"
+        print -u2 -r -- "Unknown ASUS fan profile value: $raw"
         return 1
         ;;
     esac
@@ -381,7 +399,7 @@ fanprofile() {
   fi
 
   if _ui_plain_mode; then
-    echo "No supported laptop performance profile interface found"
+    print -u2 -r -- 'No supported laptop performance profile interface found'
   else
     _ui_title_line 'Fan Profile' 'unsupported host' warning '󰈐' '*'
     _ui_panel_kv 'Status' 'No supported laptop performance profile interface found' muted text
@@ -514,24 +532,29 @@ fi
 # Disk usage summary for current directory
 dusage() {
   emulate -L zsh
+  setopt localtraps
 
   local target=${1:-.}
   local limit=${2:-20}
   local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
   local size_text percent_text header_meta footer_text display_target
-  local scan_status=0 raw_output_file=''
+  local scan_status=0 signal_status=0 path_list_file='' raw_output_file=''
   local -a entries records lines
+
+  trap 'signal_status=130' INT
+  trap 'signal_status=143' TERM
+  trap 'signal_status=129' HUP
 
   display_target=$(_ui_safe_text "$target")
 
   if [ ! -d "$target" ]; then
-    echo "'$display_target' is not a directory"
+    print -u2 -r -- "'$display_target' is not a directory"
     return 1
   fi
 
   case $limit in
     ''|*[!0-9]*)
-      echo "Usage: dusage [path] [count]"
+      print -u2 -r -- 'Usage: dusage [path] [count]'
       return 1
       ;;
   esac
@@ -542,16 +565,26 @@ dusage() {
     return 0
   fi
 
-  raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/dusage.raw.XXXXXX") || return 1
-  command du -sk --null -- "${entries[@]}" 2>/dev/null >"$raw_output_file"
-  scan_status=$?
+  {
+    path_list_file=$(command mktemp "${TMPDIR:-/tmp}/dusage.paths.XXXXXX") || return 1
+    raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/dusage.raw.XXXXXX") || return 1
 
-  while IFS=$'\t' read -r -d '' kib entry_path; do
-    [[ $kib == <-> ]] || continue
-    records+=("${kib}"$'\t'"${entry_path}")
-  done <"$raw_output_file"
+    for entry_path in "${entries[@]}"; do
+      print -rn -- "$entry_path"$'\0'
+    done >"$path_list_file"
 
-  command rm -f -- "$raw_output_file"
+    command du -sk --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+    scan_status=$?
+
+    while IFS=$'\t' read -r -d '' kib entry_path; do
+      [[ $kib == <-> ]] || continue
+      records+=("${kib}"$'\t'"${entry_path}")
+    done <"$raw_output_file"
+  } always {
+    command rm -f -- "$path_list_file" "$raw_output_file"
+  }
+
+  (( signal_status == 0 )) || return $signal_status
 
   if (( ${#records[@]} == 0 )); then
     (( scan_status != 0 )) && return $scan_status
@@ -649,51 +682,56 @@ dusage() {
 # Largest files in current directory tree
 bigfiles() {
   emulate -L zsh
+  setopt localtraps
 
   local target=${1:-.}
   local limit=${2:-20}
   local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width
-  local find_status=0 scan_status=0 display_target
+  local find_status=0 scan_status=0 signal_status=0 display_target
   local path_list_file='' raw_output_file='' line_count=0
   local -a records lines
+
+  trap 'signal_status=130' INT
+  trap 'signal_status=143' TERM
+  trap 'signal_status=129' HUP
 
   display_target=$(_ui_safe_text "$target")
 
   if [ ! -e "$target" ]; then
-    echo "'$display_target' does not exist"
+    print -u2 -r -- "'$display_target' does not exist"
     return 1
   fi
 
   case $limit in
     ''|*[!0-9]*)
-      echo "Usage: bigfiles [path] [count]"
+      print -u2 -r -- 'Usage: bigfiles [path] [count]'
       return 1
       ;;
   esac
 
-  path_list_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.paths.XXXXXX") || return 1
-  raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.raw.XXXXXX") || {
-    command rm -f -- "$path_list_file"
-    return 1
+  {
+    path_list_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.paths.XXXXXX") || return 1
+    raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/bigfiles.raw.XXXXXX") || return 1
+
+    command find "$target" -type f -print0 2>/dev/null >"$path_list_file"
+    find_status=$?
+
+    if [ -s "$path_list_file" ]; then
+      command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+      scan_status=$?
+    elif (( find_status != 0 )); then
+      return $find_status
+    fi
+
+    while IFS=$'\t' read -r -d '' kib file_path; do
+      [[ $kib == <-> ]] || continue
+      records+=("${kib}"$'\t'"${file_path}")
+    done <"$raw_output_file"
+  } always {
+    command rm -f -- "$path_list_file" "$raw_output_file"
   }
 
-  command find "$target" -type f -print0 2>/dev/null >"$path_list_file"
-  find_status=$?
-
-  if [ -s "$path_list_file" ]; then
-    command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
-    scan_status=$?
-  elif (( find_status != 0 )); then
-    command rm -f -- "$path_list_file" "$raw_output_file"
-    return $find_status
-  fi
-
-  while IFS=$'\t' read -r -d '' kib file_path; do
-    [[ $kib == <-> ]] || continue
-    records+=("${kib}"$'\t'"${file_path}")
-  done <"$raw_output_file"
-
-  command rm -f -- "$path_list_file" "$raw_output_file"
+  (( signal_status == 0 )) || return $signal_status
 
   if (( ${#records[@]} == 0 )); then
     (( scan_status != 0 )) && return $scan_status
@@ -970,20 +1008,24 @@ myip() {
 
 # Jump to the root of the current git repository
 croot() {
+  emulate -L zsh
+
   local root
 
   root=$(git rev-parse --show-toplevel 2>/dev/null) || {
-    echo "Not in a git repo"
+    print -u2 -r -- 'Not in a git repo'
     return 1
   }
 
-  cd "$root" || return
+  builtin cd -- "$root" || return
 }
 
 # Show contributor counts for the current repo history
-function gitcount {
+function gitcount() {
+  emulate -L zsh
+
   git rev-parse --git-dir >/dev/null 2>&1 || {
-    echo "Not in a git repo"
+    print -u2 -r -- 'Not in a git repo'
     return 1
   }
 
@@ -1074,21 +1116,21 @@ _fbr_activate() {
   fi
 
   if command git show-ref --verify --quiet "refs/heads/$branch"; then
-    command git checkout "$branch"
+    command git switch -- "$branch"
     return
   fi
 
   if command git show-ref --verify --quiet "refs/remotes/$branch"; then
     local_branch=${branch#*/}
     if command git show-ref --verify --quiet "refs/heads/$local_branch"; then
-      command git checkout "$local_branch"
+      command git switch -- "$local_branch"
     else
-      command git checkout --track "$branch"
+      command git switch --track -- "$branch"
     fi
     return
   fi
 
-  echo "Branch '$branch' was not found"
+  print -u2 -r -- "Branch '$branch' was not found"
   return 1
 }
 
@@ -1097,12 +1139,12 @@ fbr() {
   _zsh_require_fzf || return 1
 
   if [ ! -t 0 ] || [ ! -t 1 ]; then
-    echo "fbr requires an interactive terminal"
+    print -u2 -r -- 'fbr requires an interactive terminal'
     return 1
   fi
 
   command git rev-parse --git-dir >/dev/null 2>&1 || {
-    echo "Not in a git repo"
+    print -u2 -r -- 'Not in a git repo'
     return 1
   }
 
@@ -2078,7 +2120,7 @@ _upkg_run_search_apt() {
   local -a rows
 
   _upkg_search_progress apt ''
-  output=$(command apt search --names-only "$@" 2>&1)
+  output=$(command apt search --names-only -- "$@" 2>&1)
   rc=$?
   _upkg_search_progress_clear
   output=$(print -r -- "$output" | sed '/^WARNING: apt does not have a stable CLI interface\./d;/^Sorting\.\.\.$/d;/^Full Text Search\.\.\.$/d')
@@ -2252,7 +2294,7 @@ _upkg_run_search_brew() {
   local -A formula_wanted cask_wanted
 
   _upkg_search_progress brew 'formulae'
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula "$@" 2>&1)
+  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula -- "$@" 2>&1)
   rc=$?
   _upkg_search_progress_clear
   if (( rc != 0 )); then
@@ -2271,7 +2313,7 @@ _upkg_run_search_brew() {
   fi
 
   _upkg_search_progress brew 'casks'
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask "$@" 2>&1)
+  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask -- "$@" 2>&1)
   rc=$?
   _upkg_search_progress_clear
   if (( rc != 0 )); then
@@ -2373,7 +2415,7 @@ _upkg_run_search_flatpak() {
   local -a rows
 
   _upkg_search_progress flatpak ''
-  output=$(command flatpak search --columns=application,version,name,description "$@" 2>&1)
+  output=$(command flatpak search --columns=application,version,name,description -- "$@" 2>&1)
   rc=$?
   _upkg_search_progress_clear
 
@@ -2459,7 +2501,7 @@ _upkg_run_search_npm() {
   local -a rows
 
   _upkg_search_progress npm ''
-  output=$(command npm search --parseable "$@" 2>&1)
+  output=$(command npm search --parseable -- "$@" 2>&1)
   rc=$?
   _upkg_search_progress_clear
 
@@ -3819,13 +3861,29 @@ if (( $+commands[nix] )); then
     _npkg_nix eval --impure --raw --expr 'builtins.currentSystem'
   }
 
+  _npkg_cache_dir() {
+    emulate -L zsh
+
+    if [[ -n ${XDG_CACHE_HOME:-} && $XDG_CACHE_HOME == /* ]]; then
+      print -r -- "$XDG_CACHE_HOME/npkg"
+      return 0
+    fi
+    if [[ -n ${HOME:-} && $HOME == /* ]]; then
+      print -r -- "$HOME/.cache/npkg"
+      return 0
+    fi
+
+    print -u2 -r -- 'npkg: HOME and XDG_CACHE_HOME do not provide an absolute cache path.'
+    return 1
+  }
+
   _npkg_attr_cache_file() {
     emulate -L zsh
 
     local system cache_dir
 
     system=$(_npkg_current_system) || return 1
-    cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/npkg
+    cache_dir=$(_npkg_cache_dir) || return 1
 
     print -r -- "${cache_dir}/nixpkgs-attrs-${system}.txt"
   }
@@ -3849,35 +3907,49 @@ if (( $+commands[nix] )); then
 
   _npkg_refresh_index() {
     emulate -L zsh
-    setopt pipefail
+    setopt localtraps pipefail
 
-    local system cache_dir cache_file error_file
+    local system cache_dir cache_file error_file='' temp_file=''
+    local signal_status=0 pipeline_status=0
+
+    trap 'signal_status=130' INT
+    trap 'signal_status=143' TERM
+    trap 'signal_status=129' HUP
 
     if ! command -v jq >/dev/null 2>&1; then
-      echo "jq is required for npkg refresh"
+      print -u2 -r -- 'jq is required for npkg refresh'
       return 1
     fi
 
     system=$(_npkg_current_system) || return 1
-    cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/npkg
+    cache_dir=$(_npkg_cache_dir) || return 1
     cache_file="${cache_dir}/nixpkgs-attrs-${system}.txt"
-    error_file="${cache_file}.err"
 
-    command mkdir -p "$cache_dir" || return 1
+    command mkdir -p -- "$cache_dir" || return 1
 
-    _npkg_nix eval --json "nixpkgs#legacyPackages.${system}" --apply builtins.attrNames 2>"$error_file" |
-      command jq -r '.[]' > "${cache_file}.tmp" || {
-        [ -f "${cache_file}.tmp" ] && command rm -f "${cache_file}.tmp"
+    {
+      temp_file=$(command mktemp "${cache_file}.tmp.XXXXXX") || return 1
+      error_file=$(command mktemp "${cache_file}.err.XXXXXX") || return 1
+
+      _npkg_nix eval --json "nixpkgs#legacyPackages.${system}" --apply builtins.attrNames 2>"$error_file" |
+        command jq -r '.[]' >"$temp_file"
+      pipeline_status=$?
+      (( signal_status == 0 )) || return $signal_status
+
+      if (( pipeline_status != 0 )); then
         if [ -s "$error_file" ]; then
-          command cat "$error_file"
-          command rm -f "$error_file"
+          command cat -- "$error_file" >&2
         fi
         return 1
-      }
+      fi
 
-    command mv "${cache_file}.tmp" "$cache_file" || return 1
-    command rm -f "$error_file"
-    print -r -- "$cache_file"
+      command mv -- "$temp_file" "$cache_file" || return 1
+      temp_file=''
+      print -r -- "$cache_file"
+    } always {
+      [[ -z $temp_file ]] || command rm -f -- "$temp_file"
+      [[ -z $error_file ]] || command rm -f -- "$error_file"
+    }
   }
 
   _npkg_attr_index() {
@@ -3904,15 +3976,15 @@ if (( $+commands[nix] )); then
     local action=$1
 
     if ! command -v jq >/dev/null 2>&1; then
-      echo "jq is required for interactive npkg ${action}"
-      echo "Install jq or use non-interactive commands like 'npkg search <query>'"
+      print -u2 -r -- "jq is required for interactive npkg ${action}"
+      print -u2 -r -- "Install jq or use non-interactive commands like 'npkg search <query>'"
       return 1
     fi
 
     _zsh_require_fzf || return 1
 
     if [ ! -t 0 ] || [ ! -t 1 ]; then
-      echo "Interactive npkg ${action} requires a terminal"
+      print -u2 -r -- "Interactive npkg ${action} requires a terminal"
       return 1
     fi
   }
@@ -4164,7 +4236,7 @@ if (( $+commands[nix] )); then
     _npkg_set_outdated_state partial 0 0 0
 
     if ! command -v jq >/dev/null 2>&1; then
-      echo "jq is required for npkg outdated"
+      print -u2 -r -- 'jq is required for npkg outdated'
       return 1
     fi
 
@@ -4180,7 +4252,7 @@ if (( $+commands[nix] )); then
     local -a installed_versions available_versions statuses unknown_details job_pids
 
     profile_error_file=$(command mktemp "${TMPDIR:-/tmp}/npkg-profile-error.XXXXXX") || {
-      echo "Failed to create temporary storage for npkg outdated."
+      print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
       return 1
     }
     trap 'command rm -f -- "$profile_error_file"; trap - INT TERM; return 130' INT TERM
@@ -4189,7 +4261,7 @@ if (( $+commands[nix] )); then
       profile_error=$(<"$profile_error_file")
       command rm -f -- "$profile_error_file"
       trap - INT TERM
-      echo "Failed to read Nix profile."
+      print -u2 -r -- 'Failed to read Nix profile.'
       [[ -n $profile_error ]] && print -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
       return 1
     }
@@ -4200,7 +4272,7 @@ if (( $+commands[nix] )); then
       type == "object"
       and (((.elements | type) == "object") or ((.elements | type) == "array"))
     ' >/dev/null 2>&1 || {
-      echo "Failed to parse Nix profile JSON."
+      print -u2 -r -- 'Failed to parse Nix profile JSON.'
       return 1
     }
 
@@ -4251,7 +4323,7 @@ if (( $+commands[nix] )); then
           }
       '
     ) || {
-      echo "Failed to parse Nix profile elements."
+      print -u2 -r -- 'Failed to parse Nix profile elements.'
       return 1
     }
 
@@ -4305,11 +4377,11 @@ if (( $+commands[nix] )); then
     echo "Checking $pkg_count package(s) for changes..."
 
     tmp_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-outdated.XXXXXX") || {
-      echo "Failed to create temporary storage for npkg outdated."
+      print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
       return 1
     }
     [[ -n $tmp_dir && -d $tmp_dir ]] || {
-      echo "Failed to create temporary storage for npkg outdated."
+      print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
       return 1
     }
 
@@ -4592,7 +4664,7 @@ if (( $+commands[nix] )); then
         ;;
       search|s)
         if (( $# == 0 )); then
-          echo "Usage: npkg search <query>"
+          print -u2 -r -- 'Usage: npkg search <query>'
           return 1
         fi
 
@@ -4630,7 +4702,7 @@ if (( $+commands[nix] )); then
         _npkg_usage
         ;;
       *)
-        echo "Unknown npkg command: $cmd"
+        print -u2 -r -- "Unknown npkg command: $cmd"
         _npkg_usage
         return 1
         ;;

@@ -188,6 +188,21 @@ exit 99' > "$present_bin/secret-tool"
   assert_equals "$(file_contents "$stderr_file")" '' 'CGM startup stays quiet' || return 1
 }
 
+test_xdg_path_policy() {
+  local safe_home="$tmp_dir/xdg-home"
+  local output rc
+
+  command mkdir -p -- "$safe_home"
+  output=$(HOME="$safe_home" XDG_DATA_HOME=relative _cgm_catalog_root)
+  assert_status "$?" 0 'relative XDG data home falls back safely' || return 1
+  assert_equals "$output" "$safe_home/.local/share/cgm" 'CGM ignores a relative XDG data home' || return 1
+
+  output=$(HOME=relative XDG_DATA_HOME=also-relative _cgm_catalog_root 2>&1)
+  rc=$?
+  assert_status "$rc" 1 'CGM rejects entirely relative catalogue bases' || return 1
+  assert_contains "$output" 'do not provide an absolute path' 'CGM explains the absolute-path requirement' || return 1
+}
+
 test_set_and_catalogue() {
   local secret='set-secret-value'
   local output_file="$tmp_dir/set.stdout"
@@ -563,6 +578,7 @@ main() {
   functions[_cgm_confirm]='return 0'
 
   test_startup_gate || return 1
+  test_xdg_path_policy || return 1
   test_set_and_catalogue || return 1
   test_set_validation_and_rollback || return 1
   test_env_literal_and_catalogue_repair || return 1

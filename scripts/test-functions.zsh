@@ -89,11 +89,15 @@ assert_safe_output_file() {
 
 assert_missing_arg_usage() {
   local command_name=$1 expected_usage=$2
+  local stdout_file="$tmp_dir/${command_name}.missing.stdout"
+  local stderr_file="$tmp_dir/${command_name}.missing.stderr"
   local output rc
 
-  output=$("$command_name" 2>&1)
+  "$command_name" >"$stdout_file" 2>"$stderr_file"
   rc=$?
   assert_status "$rc" 1 "$command_name rejects a missing argument under NOUNSET" || return 1
+  assert_equals "$(<"$stdout_file")" '' "$command_name keeps missing-argument errors off stdout" || return 1
+  output=$(<"$stderr_file")
   assert_contains "$output" "$expected_usage" "$command_name prints usage under NOUNSET" || return 1
 }
 
@@ -104,6 +108,185 @@ test_missing_arguments() {
   assert_missing_arg_usage ft 'Usage: ft <pattern> [path]' || return 1
   assert_missing_arg_usage headers 'Usage: headers <url>' || return 1
   assert_missing_arg_usage peek 'Usage: peek <file>' || return 1
+}
+
+test_local_emulation_and_leading_dash_operands() {
+  local command_name archive_name tool original_dir=$PWD
+  local fixture_dir="$tmp_dir/leading-operands"
+  local fakebin="$tmp_dir/leading-fakebin"
+  local gunzip_log="$tmp_dir/gunzip-args"
+  local old_path=$PATH
+  local EXTRACT_TEST_LOG=$gunzip_log
+
+  for command_name in extract mkcd ff ft fkill headers peek croot gitcount; do
+    assert_contains "${functions[$command_name]}" 'emulate -L zsh' "$command_name isolates caller shell options" || return 1
+    (
+      setopt KSH_ARRAYS SH_WORD_SPLIT NO_UNSET
+      builtin cd -- "$tmp_dir" || exit 2
+      "$command_name" >/dev/null 2>&1
+    )
+    assert_status "$?" 1 "$command_name remains stable under hostile caller options" || return 1
+  done
+
+  command mkdir -p -- "$fixture_dir" "$fakebin"
+  builtin cd -- "$fixture_dir" || return 1
+  mkcd -created || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  assert_equals "$PWD" "$fixture_dir/-created" 'mkcd accepts a leading-dash directory name' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+
+  builtin cd -- "$fixture_dir" || return 1
+  local -a archive_names=(
+    -archive.tar.bz2 -archive.tar.gz -archive.tar.xz -archive.tar.zst
+    -archive.bz2 -archive.rar -archive.gz -archive.tar -archive.zip
+    -archive.Z -archive.7z
+  )
+  for tool in tar bunzip2 unrar gunzip unzip uncompress 7z; do
+    print -r -- '#!/bin/sh
+last=
+for argument in "$@"; do last=$argument; done
+printf "%s\n" "$last" > "$EXTRACT_TEST_LOG"' >"$fakebin/$tool"
+    command chmod +x -- "$fakebin/$tool"
+  done
+  PATH="$fakebin:$old_path"
+  export EXTRACT_TEST_LOG
+  rehash
+  for archive_name in "${archive_names[@]}"; do
+    : >"./$archive_name"
+    extract "$archive_name" || {
+      PATH=$old_path
+      rehash
+      builtin cd -- "$original_dir"
+      return 1
+    }
+    assert_equals "$(<"$gunzip_log")" "$fixture_dir/$archive_name" "extract safely normalizes $archive_name" || return 1
+  done
+  PATH=$old_path
+  rehash
+  builtin cd -- "$original_dir"
+}
+
+test_usage_temp_cleanup() {
+  local fixture_dir="$tmp_dir/usage-cleanup"
+  local fakebin="$tmp_dir/usage-cleanup-bin"
+  local old_path=$PATH old_tmpdir=${TMPDIR-} output rc
+  integer had_tmpdir=${+TMPDIR}
+  local -a leftovers
+
+  command mkdir -p -- "$fixture_dir/entry" "$fakebin"
+  print -r -- '#!/bin/sh
+exit 7' >"$fakebin/du"
+  print -r -- '#!/bin/sh
+exit 7' >"$fakebin/find"
+  command chmod +x -- "$fakebin/du" "$fakebin/find"
+  PATH="$fakebin:$old_path"
+  TMPDIR=$tmp_dir
+  rehash
+
+  output=$(dusage "$fixture_dir" 5 2>&1)
+  rc=$?
+  assert_status "$rc" 7 'dusage preserves a failed scan status' || return 1
+  leftovers=( "$tmp_dir"/dusage.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'dusage removes every temporary file after scan failure' || return 1
+
+  output=$(bigfiles "$fixture_dir" 5 2>&1)
+  rc=$?
+  assert_status "$rc" 7 'bigfiles preserves a failed find status' || return 1
+  leftovers=( "$tmp_dir"/bigfiles.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'bigfiles removes every temporary file after scan failure' || return 1
+  assert_contains "${functions[dusage]}" '--files0-from' 'dusage avoids unbounded argv expansion' || return 1
+
+  PATH=$old_path
+  rehash
+  if (( had_tmpdir )); then
+    TMPDIR=$old_tmpdir
+  else
+    unset TMPDIR
+  fi
+}
+
+test_usage_signal_cleanup() {
+  emulate -L zsh
+  setopt localtraps
+
+  if ! zmodload zsh/zselect 2>/dev/null; then
+    print -- 'ok: usage signal cleanup skipped without zsh/zselect'
+    return 0
+  fi
+
+  local fixture_dir="$tmp_dir/usage-signal"
+  local fakebin="$tmp_dir/usage-signal-bin"
+  local old_path=$PATH old_tmpdir=${TMPDIR-}
+  local started="$tmp_dir/usage-signal-started"
+  local release="$tmp_dir/usage-signal-release"
+  local worker_pid rc
+  integer had_tmpdir=${+TMPDIR} ticks
+  local -a leftovers
+
+  command mkdir -p -- "$fixture_dir/entry" "$fakebin"
+  print -r -- '#!/bin/sh
+: > "$USAGE_SIGNAL_STARTED"
+while [ ! -e "$USAGE_SIGNAL_RELEASE" ]; do :; done
+exit 0' >"$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+
+  PATH="$fakebin:$old_path"
+  TMPDIR=$tmp_dir
+  export USAGE_SIGNAL_STARTED=$started USAGE_SIGNAL_RELEASE=$release
+  rehash
+
+  (dusage "$fixture_dir" 5 >/dev/null 2>&1) &
+  worker_pid=$!
+  ticks=0
+  while [[ ! -e $started ]] && (( ticks < 100 )); do
+    zselect -t 1
+    (( ticks++ ))
+  done
+  [[ -e $started ]] || return 1
+  kill -INT "$worker_pid"
+  : >"$release"
+  wait "$worker_pid" 2>/dev/null
+  rc=$?
+  assert_status "$rc" 130 'dusage preserves SIGINT status' || return 1
+  leftovers=( "$tmp_dir"/dusage.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'dusage removes temporary files after SIGINT' || return 1
+
+  command rm -f -- "$started" "$release" "$fakebin/du"
+  print -r -- '#!/bin/sh
+: > "$USAGE_SIGNAL_STARTED"
+while [ ! -e "$USAGE_SIGNAL_RELEASE" ]; do :; done
+exit 0' >"$fakebin/find"
+  command chmod +x -- "$fakebin/find"
+  rehash
+
+  (bigfiles "$fixture_dir" 5 >/dev/null 2>&1) &
+  worker_pid=$!
+  ticks=0
+  while [[ ! -e $started ]] && (( ticks < 100 )); do
+    zselect -t 1
+    (( ticks++ ))
+  done
+  [[ -e $started ]] || return 1
+  kill -TERM "$worker_pid"
+  : >"$release"
+  wait "$worker_pid" 2>/dev/null
+  rc=$?
+  assert_status "$rc" 143 'bigfiles preserves SIGTERM status' || return 1
+  leftovers=( "$tmp_dir"/bigfiles.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'bigfiles removes temporary files after SIGTERM' || return 1
+
+  PATH=$old_path
+  rehash
+  if (( had_tmpdir )); then
+    TMPDIR=$old_tmpdir
+  else
+    unset TMPDIR
+  fi
+  unset USAGE_SIGNAL_STARTED USAGE_SIGNAL_RELEASE
 }
 
 test_path_empty_entries() {
@@ -281,6 +464,7 @@ test_fkill_default_signal() {
 
 test_fbr_worktree_navigation() {
   local fixture_repo="$tmp_dir/fbr-repo"
+  local remote_repo="$tmp_dir/fbr-remote.git"
   local worktree_dir="$tmp_dir/fbr worktree"
   local original_dir=$PWD branch current_branch first_row formatter_body projected second_row worktree_path
   integer private_fpath_count=0
@@ -323,6 +507,10 @@ test_fbr_worktree_navigation() {
   command git -C "$fixture_repo" add tracked.txt || return 1
   command git -C "$fixture_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
     commit -qm 'Initial commit' || return 1
+  command git init -q --bare "$remote_repo" || return 1
+  command git -C "$fixture_repo" remote add origin "$remote_repo" || return 1
+  command git -C "$fixture_repo" push -q origin HEAD:refs/heads/remote-safe || return 1
+  command git -C "$fixture_repo" fetch -q origin || return 1
   command git -C "$fixture_repo" worktree add -q -b worktree-test "$worktree_dir" || return 1
 
   builtin cd -- "$fixture_repo" || return 1
@@ -349,6 +537,15 @@ test_fbr_worktree_navigation() {
     return 1
   }
 
+  command git update-ref refs/heads/-leading HEAD || return 1
+  _fbr_activate -leading '' || return 1
+  assert_equals "$(command git symbolic-ref --short HEAD)" '-leading' 'fbr safely activates a leading-dash local branch' || return 1
+  command git switch -- "$current_branch" >/dev/null || return 1
+
+  _fbr_activate origin/remote-safe '' || return 1
+  assert_equals "$(command git symbolic-ref --short HEAD)" 'remote-safe' 'fbr safely activates and tracks a remote branch' || return 1
+  command git switch -- "$current_branch" >/dev/null || return 1
+
   _fbr_activate worktree-test "${worktree_paths[worktree-test]}"
   assert_status "$?" 0 'fbr can activate a branch attached to a worktree' || {
     builtin cd -- "$original_dir"
@@ -369,6 +566,9 @@ main() {
   functions[_ui_plain_mode]='return 0'
 
   test_missing_arguments || return 1
+  test_local_emulation_and_leading_dash_operands || return 1
+  test_usage_temp_cleanup || return 1
+  test_usage_signal_cleanup || return 1
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
   test_alias_probes_are_quiet || return 1

@@ -35,7 +35,7 @@ Fuzzy pickers share one rounded frame with unfilled input and footer rows, restr
 
 - Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning.
 - Guarded `zoxide` and `fzf` integration with Ctrl+R, Ctrl+T, and Alt+C bindings.
-- File, search, Git branch navigation with undecorated branch selection and labeled alternate worktrees, network, disk-usage, and process helpers.
+- File, search, Git branch navigation with undecorated branch selection and labeled alternate worktrees, network, disk-usage, and process helpers with pipe-friendly error separation.
 - `upkg` for detected package managers and optional `npkg` helpers for Nix profiles.
 - Optional `cgm` credential storage through Linux Secret Service.
 - Shared themes for rich dashboards and every fzf entry point, with safe session switching through `ztheme` and deterministic plain-text fallbacks.

@@ -124,7 +124,13 @@ if (( $+functions[compdef] )); then
     typeset -ga reply
     reply=()
 
-    cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/npkg
+    if [[ -n ${XDG_CACHE_HOME:-} && $XDG_CACHE_HOME == /* ]]; then
+      cache_dir=$XDG_CACHE_HOME/npkg
+    elif [[ -n ${HOME:-} && $HOME == /* ]]; then
+      cache_dir=$HOME/.cache/npkg
+    else
+      return 1
+    fi
     for cache_file in "$cache_dir"/nixpkgs-attrs-*.txt(N.); do
       [[ -r $cache_file ]] || continue
       while IFS= read -r attribute; do

@@ -217,9 +217,11 @@ test_cached_cgm_names() {
 
 test_cached_npkg_attributes() {
   local cache_root="$tmp_dir/cache"
+  local fallback_home="$tmp_dir/cache-home"
   local fakebin="$tmp_dir/cache-fakebin"
   local invocation_log="$tmp_dir/cache-invocations"
-  local old_path=$PATH rc
+  local old_path=$PATH old_home=${HOME-} rc
+  integer had_home=${+HOME}
   local -a offered
 
   command mkdir -p -- "$cache_root/npkg" "$fakebin"
@@ -254,7 +256,19 @@ printenv _ZSH_COMPLETION_INVOCATION >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/nix"
   assert_equals "${(j: :)offered}" 'zoxide ripgrep bat' 'npkg package completion offers cached attributes' || return 1
   unfunction _wanted
 
+  command mkdir -p -- "$fallback_home/.cache/npkg"
+  print -l -- fallback-package >"$fallback_home/.cache/npkg/nixpkgs-attrs-test.txt"
+  XDG_CACHE_HOME=relative
+  HOME=$fallback_home
+  _zsh_npkg_cached_attributes
+  assert_equals "${(j: :)reply}" 'fallback-package' 'npkg completion ignores a relative XDG cache home' || return 1
+
   PATH=$old_path
+  if (( had_home )); then
+    HOME=$old_home
+  else
+    unset HOME
+  fi
   unset XDG_CACHE_HOME _ZSH_COMPLETION_LOG _ZSH_COMPLETION_INVOCATION
 }
 

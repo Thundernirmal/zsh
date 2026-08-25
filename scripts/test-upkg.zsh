@@ -310,6 +310,96 @@ run_npkg_interrupt_capture() {
   return $rc
 }
 
+test_npkg_cache_safety() {
+  emulate -L zsh
+
+  local cache_root="$tmp_prefix/npkg-cache-safety"
+  local fallback_home="$tmp_prefix/npkg-cache-home"
+  local first_output="$tmp_prefix/npkg-refresh-first"
+  local second_output="$tmp_prefix/npkg-refresh-second"
+  local error_output="$tmp_prefix/npkg-refresh-error"
+  local old_cache_home=${XDG_CACHE_HOME-} old_home=${HOME-}
+  local saved_current_system=${functions[_npkg_current_system]}
+  local saved_nix=${functions[_npkg_nix]}
+  local real_mktemp real_mv
+  local output
+  integer had_cache_home=${+XDG_CACHE_HOME} had_home=${+HOME}
+  integer first_pid second_pid first_status second_status failure_status
+  local -a leftovers
+
+  command mkdir -p -- "$cache_root" "$fallback_home"
+  real_mktemp=$(PATH=$original_path command -v mktemp) || return 1
+  real_mv=$(PATH=$original_path command -v mv) || return 1
+  functions[_npkg_current_system]='print -r -- test-system'
+  functions[_npkg_nix]='print -r -- '\''["zoxide","ripgrep"]'\'''
+
+  XDG_CACHE_HOME=relative
+  HOME=$fallback_home
+  output=$(_npkg_attr_cache_file) || return 1
+  assert_equals "$output" "$fallback_home/.cache/npkg/nixpkgs-attrs-test-system.txt" 'npkg ignores a relative XDG cache home' || return 1
+
+  XDG_CACHE_HOME=$cache_root
+  (_npkg_refresh_index >"$first_output") &
+  first_pid=$!
+  (_npkg_refresh_index >"$second_output") &
+  second_pid=$!
+  wait "$first_pid"
+  first_status=$?
+  wait "$second_pid"
+  second_status=$?
+  assert_status "$first_status" 0 'first concurrent npkg refresh succeeds' || return 1
+  assert_status "$second_status" 0 'second concurrent npkg refresh succeeds' || return 1
+  leftovers=( "$cache_root"/npkg/*.tmp.*(N) "$cache_root"/npkg/*.err.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'concurrent npkg refreshes leave no intermediate files' || return 1
+  assert_equals "$(<"$cache_root/npkg/nixpkgs-attrs-test-system.txt")" $'zoxide\nripgrep' 'concurrent npkg refreshes atomically publish a complete cache' || return 1
+
+  functions[_npkg_nix]='print -u2 -r -- simulated-refresh-failure; return 9'
+  _npkg_refresh_index >"$first_output" 2>"$error_output"
+  failure_status=$?
+  assert_status "$failure_status" 1 'failed npkg refresh returns nonzero' || return 1
+  assert_contains "$(<"$error_output")" 'simulated-refresh-failure' 'failed npkg refresh preserves its diagnostic on stderr' || return 1
+  leftovers=( "$cache_root"/npkg/*.tmp.*(N) "$cache_root"/npkg/*.err.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'failed npkg refresh removes every intermediate file' || return 1
+
+  write_fake mktemp '
+case "$1" in
+  *.err.XXXXXX) exit 8 ;;
+  *) exec '"$real_mktemp"' "$@" ;;
+esac'
+  rehash
+  _npkg_refresh_index >"$first_output" 2>"$error_output"
+  failure_status=$?
+  assert_status "$failure_status" 1 'npkg refresh fails when its second temporary file cannot be created' || return 1
+  leftovers=( "$cache_root"/npkg/*.tmp.*(N) "$cache_root"/npkg/*.err.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'second-temp failure removes the first temporary file' || return 1
+
+  write_fake mktemp "exec $real_mktemp \"\$@\""
+  write_fake mv 'exit 9'
+  rehash
+  functions[_npkg_nix]='print -r -- '\''["zoxide","ripgrep"]'\'''
+  _npkg_refresh_index >"$first_output" 2>"$error_output"
+  failure_status=$?
+  assert_status "$failure_status" 1 'npkg refresh preserves a failed atomic activation' || return 1
+  leftovers=( "$cache_root"/npkg/*.tmp.*(N) "$cache_root"/npkg/*.err.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'failed atomic activation removes every intermediate file' || return 1
+
+  write_fake mv "exec $real_mv \"\$@\""
+  rehash
+
+  functions[_npkg_current_system]=$saved_current_system
+  functions[_npkg_nix]=$saved_nix
+  if (( had_cache_home )); then
+    XDG_CACHE_HOME=$old_cache_home
+  else
+    unset XDG_CACHE_HOME
+  fi
+  if (( had_home )); then
+    HOME=$old_home
+  else
+    unset HOME
+  fi
+}
+
 main() {
   local output cmd_status route state_role npm_stdout npm_stderr
   local npkg_profile_file="$tmp_prefix/npkg-profile.json"
@@ -319,20 +409,20 @@ main() {
   local default_brew_script='
 case "$*" in
   "outdated") printf "%s\n" "wget (1.24.5) < 1.25.0" ; printf "%s\n" "ghostty (1.2.3) < 1.2.4" ;;
-  "search --formula ripgrep") printf "%s\n" "ripgrep" ;;
-  "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
-  "search --formula broad")
+  "search --formula -- ripgrep") printf "%s\n" "ripgrep" ;;
+  "search --cask -- ripgrep") printf "%s\n" "ripgrep-app" ;;
+  "search --formula -- broad")
     i=1
     while [ "$i" -le 55 ]; do
       printf "pkg%s\n" "$i"
       i=$((i + 1))
     done
     ;;
-  "search --cask broad") printf "%s\n" "No casks found for \"broad\"" >&2 ; exit 1 ;;
-  "search --formula overlap") printf "%s\n" "overlap" ;;
-  "search --cask overlap") printf "%s\n" "overlap" ;;
-  "search --formula nomatch") printf "%s\n" "No formulae found for \"nomatch\"" >&2 ; exit 1 ;;
-  "search --cask nomatch") printf "%s\n" "No casks found for \"nomatch\"" >&2 ; exit 1 ;;
+  "search --cask -- broad") printf "%s\n" "No casks found for \"broad\"" >&2 ; exit 1 ;;
+  "search --formula -- overlap") printf "%s\n" "overlap" ;;
+  "search --cask -- overlap") printf "%s\n" "overlap" ;;
+  "search --formula -- nomatch") printf "%s\n" "No formulae found for \"nomatch\"" >&2 ; exit 1 ;;
+  "search --cask -- nomatch") printf "%s\n" "No casks found for \"nomatch\"" >&2 ; exit 1 ;;
   "info --formula ripgrep")
     printf "%s\n" "==> ripgrep: stable 14.1.1 (bottled), HEAD"
     ;;
@@ -376,7 +466,7 @@ esac
   write_fake flatpak '
 case "$*" in
   "remote-ls --updates") printf "%s\n" "org.example.App stable" ;;
-  "search --columns=application,version,name,description ripgrep") printf "org.example.Ripgrep\t14.1.1\tRipgrep Viewer\tRemote ripgrep browser\n" ;;
+  "search --columns=application,version,name,description -- ripgrep") printf "org.example.Ripgrep\t14.1.1\tRipgrep Viewer\tRemote ripgrep browser\n" ;;
   "update") printf "%s\n" "flatpak upgrade" ;;
   *) exit 2 ;;
 esac
@@ -386,14 +476,15 @@ write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
   "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
-  "search --parseable help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
-  "search --parseable managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
-  "search --parseable ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
-  "search --parseable ripgrep viewer")
-    [ "$#" -eq 4 ] || exit 3
+  "search --parseable -- help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
+  "search --parseable -- managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
+  "search --parseable -- ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
+  "search --parseable -- ripgrep viewer")
+    [ "$#" -eq 5 ] || exit 3
     printf "ripgrep-viewer\tMulti-term search result\tnpm-user\t2024-01-01\t5.6.7\tripgrep viewer\n"
     ;;
-  "search --parseable upgrade") printf "upgrade-helper\tSearches packages named after commands\tnpm-user\t2024-01-01\t1.2.3\tupgrade\n" ;;
+  "search --parseable -- upgrade") printf "upgrade-helper\tSearches packages named after commands\tnpm-user\t2024-01-01\t1.2.3\tupgrade\n" ;;
+  "search --parseable -- -leading") printf "leading-safe\tLeading-dash query\tnpm-user\t2024-01-01\t1.0.0\tleading\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -678,8 +769,8 @@ done
 
   write_fake brew '
 case "$*" in
-  "search --formula ripgrep") printf "%s\n" "Error: simulated brew search failure" >&2; exit 1 ;;
-  "search --cask ripgrep") printf "%s\n" "ripgrep-app" ;;
+  "search --formula -- ripgrep") printf "%s\n" "Error: simulated brew search failure" >&2; exit 1 ;;
+  "search --cask -- ripgrep") printf "%s\n" "ripgrep-app" ;;
   "info --cask ripgrep-app") printf "%s\n" "==> ripgrep-app (Ripgrep App): 1.2.3" ;;
   *) exit 2 ;;
 esac
@@ -736,6 +827,11 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'search supports double-dash to stop option parsing' || return 1
   assert_contains "$output" 'upgrade-helper' 'double-dash search passes literal query terms through' || return 1
+
+  output=$(upkg --only=npm search -- -leading)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'search accepts a leading-dash query' || return 1
+  assert_contains "$output" 'leading-safe' 'backend option terminators protect leading-dash queries' || return 1
 
   output=$(upkg search ripgrep viewer --only=npm)
   cmd_status=$?
@@ -1017,7 +1113,7 @@ esac
   write_fake npm '
 printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
 case "$*" in
-  "search --parseable clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
+  "search --parseable -- clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
   "cache npx ls") printf "%s\n" "npx-cache-key-one: test-package" "npx-cache-key-two: another-package" ;;
   "cache npx rm npx-cache-key-one npx-cache-key-two") printf "%s\n" "MUTATING npm npx cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm npx cache removed" ;;
   "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
@@ -1036,7 +1132,7 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'search accepts clean as a literal query' || return 1
   assert_contains "$output" 'clean-package' 'clean keyword searches still reach npm' || return 1
-  assert_contains "$(<"$clean_log")" 'npm search --parseable clean' 'search passes clean to the npm backend' || return 1
+  assert_contains "$(<"$clean_log")" 'npm search --parseable -- clean' 'search passes clean to the npm backend' || return 1
 
   : > "$clean_log"
   output=$(run_upkg_with_managers 'apt dnf pacman paru brew flatpak nix npm' clean --dry-run --only=apt,dnf,pacman,paru,brew,flatpak,nix,npm)
@@ -1365,6 +1461,7 @@ esac
     local -a leftover_tmp
 
     command mkdir -p -- "$npkg_tmp_dir"
+    test_npkg_cache_safety || return 1
     TMPDIR=$npkg_tmp_dir
     functions[_ui_is_rich_terminal]='return 1'
     functions[_ui_plain_mode]='return 0'
@@ -1592,7 +1689,7 @@ case "$*" in
     printf "%s\n" "Listing..."
     printf "%s\n" "ripgrep/stable 14.1.1-2 amd64 [upgradable from: 14.1.1-1]"
     ;;
-  "search --names-only ripgrep")
+  "search --names-only -- ripgrep")
     printf "%s\n" "Sorting..."
     printf "%s\n" "Full Text Search..."
     printf "%s\n" "ripgrep/stable 14.1.1-1 amd64"

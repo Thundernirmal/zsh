@@ -90,17 +90,17 @@ _cgm_require_export_name() {
 _cgm_catalog_root() {
   emulate -L zsh
 
-  if [[ -n ${XDG_DATA_HOME:-} ]]; then
+  if [[ -n ${XDG_DATA_HOME:-} && $XDG_DATA_HOME == /* ]]; then
     print -r -- "$XDG_DATA_HOME/cgm"
     return 0
   fi
 
-  if [[ -n ${HOME:-} ]]; then
+  if [[ -n ${HOME:-} && $HOME == /* ]]; then
     print -r -- "$HOME/.local/share/cgm"
     return 0
   fi
 
-  _cgm_error 'HOME and XDG_DATA_HOME are both unset; the credential catalogue has no safe location.'
+  _cgm_error 'HOME and XDG_DATA_HOME do not provide an absolute path; the credential catalogue has no safe location.'
   return 1
 }
 
@@ -128,7 +128,7 @@ _cgm_prepare_catalog() {
     return 1
   fi
 
-  command mkdir -p -- "$entries" || {
+  ( umask 077; command mkdir -p -- "$entries" ) || {
     _cgm_error "could not create the credential catalogue: $entries"
     return 1
   }
