@@ -382,6 +382,8 @@ It is on demand and installs no prompt or command-cycle hook. Its fixed reposito
 | `grep` | Adds `--color=auto` when supported |
 | `diff` | Adds `--color=auto` when supported |
 
+Under the zero-probe startup policy, the built-in `ls`, `ll`, and `la` fallbacks and the `grep` and `diff` aliases add automatic color only on Linux. On macOS and BSD they keep the corresponding plain command behavior rather than running capability probes while the shell starts. `lsd`, when installed, remains the preferred listing backend on every platform where it is available.
+
 ### Git extras
 
 | Alias | Expansion |
