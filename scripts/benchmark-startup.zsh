@@ -48,18 +48,30 @@ benchmark_mode() {
 
   for (( run = 1; run <= warmups; run++ )); do
     if [[ $mode == interactive ]]; then
-      command "$zsh_binary" -dfi < "$benchmark_input" >/dev/null 2>&1
+      command "$zsh_binary" -dfi < "$benchmark_input" >/dev/null 2>&1 || {
+        print -u2 -r -- "benchmark ${mode} warmup ${run} failed"
+        return 1
+      }
     else
-      command "$zsh_binary" -df < "$benchmark_input" >/dev/null 2>&1
+      command "$zsh_binary" -df < "$benchmark_input" >/dev/null 2>&1 || {
+        print -u2 -r -- "benchmark ${mode} warmup ${run} failed"
+        return 1
+      }
     fi
   done
 
   for (( run = 1; run <= iterations; run++ )); do
     started=$EPOCHREALTIME
     if [[ $mode == interactive ]]; then
-      command "$zsh_binary" -dfi < "$benchmark_input" >/dev/null 2>&1
+      command "$zsh_binary" -dfi < "$benchmark_input" >/dev/null 2>&1 || {
+        print -u2 -r -- "benchmark ${mode} sample ${run} failed"
+        return 1
+      }
     else
-      command "$zsh_binary" -df < "$benchmark_input" >/dev/null 2>&1
+      command "$zsh_binary" -df < "$benchmark_input" >/dev/null 2>&1 || {
+        print -u2 -r -- "benchmark ${mode} sample ${run} failed"
+        return 1
+      }
     fi
     elapsed_us=$(( (EPOCHREALTIME - started) * 1000000 ))
     samples+=( $elapsed_us )

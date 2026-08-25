@@ -3,7 +3,8 @@
 set -u
 
 repo_dir=${0:A:h:h}
-zsh_bin=${commands[zsh]}
+zsh_bin=${commands[zsh]:-$(command -v zsh)}
+[[ -n $zsh_bin ]] || { print -u2 -- 'fatal: zsh is unavailable'; exit 1; }
 tmp_home=$(mktemp -d) || { print -u2 -- 'fatal: mktemp failed for tmp_home'; exit 1; }
 [ -n "$tmp_home" ] || { print -u2 -- 'fatal: mktemp returned empty tmp_home'; exit 1; }
 
@@ -155,7 +156,13 @@ prepare_fzf_fakebin() {
 
   command mkdir -p -- "$fakebin" || return 1
   for tool in zsh chmod mkdir mktemp mv rm ls grep diff; do
-    command ln -s -- "${commands[$tool]}" "$fakebin/$tool" || return 1
+    local tool_path=${commands[$tool]:-}
+    [[ -n $tool_path ]] || tool_path=$(command -v "$tool")
+    [[ -n $tool_path ]] || {
+      print -u2 -r -- "fatal: test fixture requires $tool"
+      return 1
+    }
+    command ln -s -- "$tool_path" "$fakebin/$tool" || return 1
   done
 
   print -r -- '#!/bin/sh

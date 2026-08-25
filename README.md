@@ -64,4 +64,4 @@ This repository does not manage Oh My Zsh, Starship, PATH setup, `compinit`, or 
 - [`AGENTS.md`](./AGENTS.md) — repository maintenance rules and required verification
 - [`docs/specs/`](./docs/specs/) — historical design and remediation records
 
-For changes, follow the documentation ownership rules and run the complete verification sequence in [`GUIDE.md`](./GUIDE.md#maintenance-and-verification).
+For changes, follow the documentation ownership rules and run `zsh scripts/run-tests.zsh`; the maintenance contract is in [`GUIDE.md`](./GUIDE.md#maintenance-and-verification).

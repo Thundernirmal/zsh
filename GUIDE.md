@@ -806,21 +806,13 @@ When user-facing behavior changes, update every affected surface without copying
 
 ### Required checks
 
-Run these in order:
+Run the repository-owned ordered sequence:
 
 ```sh
-zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry
-zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh
-sh -n scripts/check-deps.sh
-zsh scripts/test-init.zsh
-zsh scripts/test-theme.zsh
-zsh scripts/test-functions.zsh
-zsh scripts/test-cgm.zsh
-zsh scripts/test-upkg.zsh
-zsh scripts/test-completions.zsh
-zsh scripts/test-help.zsh
-zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
+zsh scripts/run-tests.zsh
 ```
+
+The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
 
 The environment check is optional because it reflects the current machine rather than repository correctness:
 

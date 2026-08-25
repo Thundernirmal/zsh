@@ -1,6 +1,7 @@
 name: Checks
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -11,6 +12,7 @@ jobs:
   verify:
     name: Verify Zsh config
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -21,50 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zsh
 
-      - name: Check Zsh syntax
-        run: zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry
-
-      - name: Check dependency script syntax
-        run: sh -n scripts/check-deps.sh
-
-      - name: Check init smoke test syntax
-        run: zsh -n scripts/test-init.zsh
-
-      - name: Check theme regression test syntax
-        run: zsh -n scripts/test-theme.zsh
-
-      - name: Run init smoke test
-        run: zsh scripts/test-init.zsh
-
-      - name: Run theme regression tests
-        run: zsh scripts/test-theme.zsh
-
-      - name: Check function regression test syntax
-        run: zsh -n scripts/test-functions.zsh
-
-      - name: Run function regression tests
-        run: zsh scripts/test-functions.zsh
-
-      - name: Check credential manager regression test syntax
-        run: zsh -n scripts/test-cgm.zsh
-
-      - name: Run credential manager regression tests
-        run: zsh scripts/test-cgm.zsh
-
-      - name: Check upkg smoke test syntax
-        run: zsh -n scripts/test-upkg.zsh
-
-      - name: Run upkg smoke test
-        run: zsh scripts/test-upkg.zsh
-
-      - name: Check completion regression test syntax
-        run: zsh -n scripts/test-completions.zsh
-
-      - name: Run completion regression tests
-        run: zsh scripts/test-completions.zsh
-
-      - name: Check help regression test syntax
-        run: zsh -n scripts/test-help.zsh
-
-      - name: Run help regression tests
-        run: zsh scripts/test-help.zsh
+      # The regression suites provide isolated fake binaries for integrations;
+      # the live dependency audit remains an optional host-environment check.
+      - name: Run required checks
+        run: zsh scripts/run-tests.zsh

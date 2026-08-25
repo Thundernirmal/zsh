@@ -220,8 +220,12 @@ run_npkg_interrupt_capture() {
   local output_file="$tmp_prefix/npkg-interrupt-output"
   local harness_pid signaler_pid rc
 
+  typeset -gi NPKG_INTERRUPT_SKIPPED=0
   command rm -f -- "$worker_started" "$unrelated_stop" "$output_file"
-  zmodload zsh/zselect || return 1
+  if ! zmodload zsh/zselect 2>/dev/null; then
+    NPKG_INTERRUPT_SKIPPED=1
+    return 0
+  fi
 
   (
     emulate -L zsh
@@ -1528,11 +1532,15 @@ esac
 
     run_npkg_interrupt_capture "$npkg_tmp_dir"
     cmd_status=$?
-    output=$NPKG_INTERRUPT_OUTPUT
     assert_status "$cmd_status" 0 'npkg interrupt regression harness completes' || return 1
-    assert_contains "$output" 'status=130' 'npkg outdated returns 130 from its main function after Ctrl+C' || return 1
-    assert_contains "$output" 'unrelated_alive=1' 'npkg outdated does not wait for or terminate unrelated background jobs' || return 1
-    assert_contains "$output" 'leftovers=0' 'npkg outdated removes temporary files after Ctrl+C' || return 1
+    if (( NPKG_INTERRUPT_SKIPPED )); then
+      print -- 'skip: zsh/zselect unavailable; npkg interrupt regression not run'
+    else
+      output=$NPKG_INTERRUPT_OUTPUT
+      assert_contains "$output" 'status=130' 'npkg outdated returns 130 from its main function after Ctrl+C' || return 1
+      assert_contains "$output" 'unrelated_alive=1' 'npkg outdated does not wait for or terminate unrelated background jobs' || return 1
+      assert_contains "$output" 'leftovers=0' 'npkg outdated removes temporary files after Ctrl+C' || return 1
+    fi
 
     leftover_tmp=( "$npkg_tmp_dir"/*(N) )
     assert_equals "${#leftover_tmp[@]}" 0 'npkg outdated removes temporary files after every normal result' || return 1
