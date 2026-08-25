@@ -122,6 +122,15 @@ test_registration() {
   assert_equals "${_comps[npkg]-}" '' 'npkg is not registered when its function is unavailable' || return 1
 
   npkg() { :; }
+  _npkg_cache_dir() {
+    if [[ -n ${XDG_CACHE_HOME:-} && $XDG_CACHE_HOME == /* ]]; then
+      print -r -- "$XDG_CACHE_HOME/npkg"
+    elif [[ -n ${HOME:-} && $HOME == /* ]]; then
+      print -r -- "$HOME/.cache/npkg"
+    else
+      return 1
+    fi
+  }
   source "$repo_dir/66-compdefs.zsh"
   assert_equals "${_comps[npkg]-}" '_zsh_npkg' 'npkg is registered when its function exists' || return 1
 }
