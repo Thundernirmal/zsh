@@ -38,22 +38,11 @@
 
 ## Verification
 
-Run these in order after edits:
-
-1. `zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry`
-2. `zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh`
-3. `sh -n scripts/check-deps.sh`
-4. `zsh scripts/test-init.zsh`
-5. `zsh scripts/test-theme.zsh`
-6. `zsh scripts/test-functions.zsh`
-7. `zsh scripts/test-cgm.zsh`
-8. `zsh scripts/test-upkg.zsh`
-9. `zsh scripts/test-completions.zsh`
-10. `zsh scripts/test-help.zsh`
-11. `zsh -fc 'source "$HOME/.config/zsh/init.zsh"'`
+Run `zsh scripts/run-tests.zsh` after edits. The runner is the executable source of truth for the ordered syntax checks, regression suites, and fixed-install-path smoke test used by CI.
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
 - `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `secret-tool`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
+- `skills-lock.json` records maintainer skill provenance only; it is not a runtime dependency or package-manager lockfile.
 
 ## Manual QA Checklist
 

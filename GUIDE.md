@@ -569,7 +569,7 @@ Names must match `[A-Z_][A-Z0-9_]*`. CGM rejects Zsh special, read-only, and non
 - No plaintext fallback exists.
 - Sourcing the module does not contact Secret Service, unlock a keyring, or read the catalogue.
 - `cgm list`, completion, status output, and help never retrieve or display values.
-- The name-only catalogue lives under `${XDG_DATA_HOME:-$HOME/.local/share}/cgm/entries/`; directories are mode `0700` and empty markers are `0600`.
+- The name-only catalogue lives under `${XDG_DATA_HOME:-$HOME/.local/share}/cgm/entries/`; directories are created under `umask 077`, remain mode `0700`, and empty markers are `0600`. `XDG_DATA_HOME` is used only when absolute; a relative value falls back to an absolute `$HOME/.local/share`, and the operation fails when neither base is safe.
 - Secret loading disables inherited Zsh xtrace locally and restores the caller's state afterward.
 - `cgm env --all` retrieves and validates every value before exporting any, so one failure leaves the environment unchanged.
 
@@ -733,7 +733,7 @@ Bare install names become `nixpkgs#<name>`. Flake references, paths, and argumen
 
 `npkg refresh` and `npkg outdated` require `jq`. Interactive add, find, and remove also require a real terminal and supported fzf.
 
-The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. Building it evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns. Tab marks multiple packages, and the footer updates the selected count before Enter confirms the add or remove operation.
+The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. `XDG_CACHE_HOME` is used only when absolute; a relative value falls back to an absolute `$HOME/.cache`. Refreshes build per-call temporary files in the cache directory and publish a complete index atomically, so concurrent or interrupted refreshes do not expose partial data. Building the cache evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns. Tab marks multiple packages, and the footer updates the selected count before Enter confirms the add or remove operation.
 
 ### Outdated semantics
 
@@ -778,6 +778,8 @@ These are the cross-cutting rules most likely to surprise a new user:
 21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows are Linux-oriented.
 22. **Network helpers contact external services.** `weather` requests `wttr.in`, `myip` requests `ifconfig.me`, and `headers` contacts the URL supplied by the user.
 23. **Automation must load the layer explicitly.** Aliases and functions are interactive shell features; scripts should call real binaries or source `init.zsh` inside Zsh.
+24. **Helper failures stay on stderr.** Successful data remains pipeable on stdout; usage errors, missing dependencies, and invalid paths do not contaminate command substitutions.
+25. **Leading-dash inputs are data.** File helpers normalize archive paths, directory helpers terminate options, and package search backends separate wrapper flags from query terms.
 
 ## Maintenance and verification
 
@@ -806,21 +808,13 @@ When user-facing behavior changes, update every affected surface without copying
 
 ### Required checks
 
-Run these in order:
+Run the repository-owned ordered sequence:
 
 ```sh
-zsh -n *.zsh lib/*.zsh functions/ztheme functions/_fbr_format_entry
-zsh -n scripts/benchmark-startup.zsh scripts/test-theme.zsh
-sh -n scripts/check-deps.sh
-zsh scripts/test-init.zsh
-zsh scripts/test-theme.zsh
-zsh scripts/test-functions.zsh
-zsh scripts/test-cgm.zsh
-zsh scripts/test-upkg.zsh
-zsh scripts/test-completions.zsh
-zsh scripts/test-help.zsh
-zsh -fc 'source "$HOME/.config/zsh/init.zsh"'
+zsh scripts/run-tests.zsh
 ```
+
+The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
 
 The environment check is optional because it reflects the current machine rather than repository correctness:
 

@@ -30,6 +30,7 @@ _zsh_tip_pool=(
   "Run headers <url> to follow redirects and print HTTP headers"
   "Use G, L, or W to pipe to grep, less, or wc -l"
   "Use NE to hide stderr or NUL to hide all output"
+  "Use command substitutions safely; helper errors stay on stderr"
   "Press Tab after a custom command to see valid arguments"
 )
 
