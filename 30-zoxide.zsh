@@ -28,12 +28,81 @@ _zsh_zoxide_refresh_fzf_opts() {
   typeset -g _ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE=$signature
 }
 
+typeset -gi _ZSH_ZOXIDE_CACHE_SCHEMA=2
+
+_zsh_zoxide_cache_file_for_path() {
+  emulate -L zsh
+
+  local zoxide_path=$1 cache_home
+  local -A file_info
+
+  if [[ -n ${XDG_CACHE_HOME:-} && $XDG_CACHE_HOME == /* ]]; then
+    cache_home=$XDG_CACHE_HOME
+  elif [[ -n ${HOME:-} && $HOME == /* ]]; then
+    cache_home=$HOME/.cache
+  else
+    return 1
+  fi
+
+  zmodload zsh/stat 2>/dev/null || return 1
+  zstat -H file_info -- "$zoxide_path" 2>/dev/null || return 1
+  REPLY="${cache_home}/zsh/zoxide/init-${_ZSH_ZOXIDE_CACHE_SCHEMA}-${file_info[device]}-${file_info[inode]}-${file_info[size]}-${file_info[mtime]}-${file_info[ctime]}-zsh-${ZSH_VERSION}.zsh"
+}
+
+_zsh_zoxide_cache_file_is_safe() {
+  emulate -L zsh
+
+  local cache_file=$1 cache_dir=${1:h}
+  local -A file_info dir_info
+
+  [[ -f $cache_file && -r $cache_file && -O $cache_file && ! -L $cache_file ]] || return 1
+  [[ -d $cache_dir && -O $cache_dir && ! -L $cache_dir ]] || return 1
+  zmodload zsh/stat 2>/dev/null || return 1
+  zstat -H file_info -- "$cache_file" 2>/dev/null || return 1
+  zstat -H dir_info -- "$cache_dir" 2>/dev/null || return 1
+  (( (file_info[mode] & 0022) == 0 && (dir_info[mode] & 0022) == 0 ))
+}
+
+_zsh_zoxide_cache_header_matches() {
+  emulate -L zsh
+
+  local cache_file=$1 zoxide_path=$2 schema_line path_line
+  {
+    IFS= read -r schema_line && IFS= read -r path_line
+  } < "$cache_file" || return 1
+
+  [[ $schema_line == "# zsh-zoxide-cache ${_ZSH_ZOXIDE_CACHE_SCHEMA}" ]] || return 1
+  [[ $path_line == "# path ${(q)zoxide_path}" ]]
+}
+
+_zsh_zoxide_activate_file() {
+  emulate -L zsh
+
+  local integration_file=$1 zoxide_path=$2
+  typeset -gi _ZSH_ZOXIDE_CACHE_LOADED_STATUS=1
+  typeset -g _ZSH_ZOXIDE_CACHE_LOADED_SCHEMA=''
+  typeset -g _ZSH_ZOXIDE_CACHE_LOADED_PATH=''
+
+  if [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
+    source "$integration_file"
+  else
+    source "$integration_file" 2>/dev/null
+  fi
+
+  (( _ZSH_ZOXIDE_CACHE_LOADED_STATUS == 0 )) || return 1
+  [[ $_ZSH_ZOXIDE_CACHE_LOADED_SCHEMA == $_ZSH_ZOXIDE_CACHE_SCHEMA ]] || return 1
+  [[ $_ZSH_ZOXIDE_CACHE_LOADED_PATH == "$zoxide_path" ]] || return 1
+  (( $+functions[z] && $+functions[zi] && $+functions[__zoxide_zi] ))
+}
+
 if (( $+commands[zoxide] )); then
   if [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
     _zsh_zoxide_refresh_fzf_opts
   fi
 
-  typeset _zsh_zoxide_init_output
+  typeset _zsh_zoxide_init_output _zsh_zoxide_path=${commands[zoxide]:A}
+  typeset _zsh_zoxide_cache_file='' _zsh_zoxide_cache_dir=''
+  typeset _zsh_zoxide_temp_file='' _zsh_zoxide_zsh_path=${commands[zsh]:-}
   typeset _zsh_zoxide_function_name
   typeset -a _zsh_zoxide_function_names=(
     z zi __zoxide_pwd __zoxide_cd __zoxide_hook __zoxide_doctor
@@ -51,18 +120,71 @@ if (( $+commands[zoxide] )); then
   integer _zsh_zoxide_had_precmd_functions=${+precmd_functions}
   integer _zsh_zoxide_had_chpwd_functions=${+chpwd_functions}
   integer _zsh_zoxide_init_status
-  _zsh_zoxide_init_output=$(zoxide init zsh 2>/dev/null)
-  _zsh_zoxide_init_status=$?
+  if _zsh_zoxide_cache_file_for_path "$_zsh_zoxide_path"; then
+    _zsh_zoxide_cache_file=$REPLY
+  fi
 
-  if (( _zsh_zoxide_init_status == 0 )) && [[ -n $_zsh_zoxide_init_output ]]; then
-    if [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
-      eval "$_zsh_zoxide_init_output"
-    else
-      eval "$_zsh_zoxide_init_output" 2>/dev/null
-    fi
+  if [[ -n $_zsh_zoxide_cache_file ]] &&
+    _zsh_zoxide_cache_file_is_safe "$_zsh_zoxide_cache_file" &&
+    _zsh_zoxide_cache_header_matches "$_zsh_zoxide_cache_file" "$_zsh_zoxide_path"; then
+    _zsh_zoxide_activate_file "$_zsh_zoxide_cache_file" "$_zsh_zoxide_path"
     _zsh_zoxide_init_status=$?
   else
-    (( _zsh_zoxide_init_status == 0 )) && _zsh_zoxide_init_status=1
+    _zsh_zoxide_init_output=$(command "$_zsh_zoxide_path" init zsh 2>/dev/null)
+    _zsh_zoxide_init_status=$?
+
+    if (( _zsh_zoxide_init_status == 0 )) && [[ -n ${_zsh_zoxide_init_output//[[:space:]]/} ]] && [[ -n $_zsh_zoxide_zsh_path ]]; then
+      if [[ -n $_zsh_zoxide_cache_file ]]; then
+        _zsh_zoxide_cache_dir=${_zsh_zoxide_cache_file:h}
+        if command mkdir -p -- "$_zsh_zoxide_cache_dir" 2>/dev/null &&
+          [[ -d $_zsh_zoxide_cache_dir && -O $_zsh_zoxide_cache_dir && ! -L $_zsh_zoxide_cache_dir ]] &&
+          command chmod 700 -- "$_zsh_zoxide_cache_dir" 2>/dev/null; then
+          _zsh_zoxide_temp_file=$(command mktemp "$_zsh_zoxide_cache_dir/.integration.XXXXXX" 2>/dev/null)
+        fi
+      fi
+      if [[ -z $_zsh_zoxide_temp_file ]]; then
+        _zsh_zoxide_temp_file=$(command mktemp "${TMPDIR:-/tmp}/zoxide-zsh.XXXXXX" 2>/dev/null)
+      fi
+
+      if [[ -n $_zsh_zoxide_temp_file ]]; then
+        {
+          print -r -- "# zsh-zoxide-cache ${_ZSH_ZOXIDE_CACHE_SCHEMA}"
+          print -r -- "# path ${(q)_zsh_zoxide_path}"
+          print -r -- "$_zsh_zoxide_init_output"
+          # Reaching this marker and installing the public functions is the
+          # runtime contract. zoxide's generated final conditional may return
+          # 1 normally when compdef is unavailable.
+          print -r -- 'typeset -gi _ZSH_ZOXIDE_CACHE_LOADED_STATUS=0'
+          print -r -- "typeset -g _ZSH_ZOXIDE_CACHE_LOADED_SCHEMA=${(q)_ZSH_ZOXIDE_CACHE_SCHEMA}"
+          print -r -- "typeset -g _ZSH_ZOXIDE_CACHE_LOADED_PATH=${(q)_zsh_zoxide_path}"
+        } >| "$_zsh_zoxide_temp_file" || _zsh_zoxide_init_status=1
+
+        if (( _zsh_zoxide_init_status == 0 )) &&
+          ! command "$_zsh_zoxide_zsh_path" -fn "$_zsh_zoxide_temp_file" >/dev/null 2>&1; then
+          _zsh_zoxide_init_status=1
+        fi
+
+        if (( _zsh_zoxide_init_status == 0 )); then
+          if [[ -n $_zsh_zoxide_cache_file ]] &&
+            command mv -f -- "$_zsh_zoxide_temp_file" "$_zsh_zoxide_cache_file" 2>/dev/null; then
+            _zsh_zoxide_temp_file=''
+            _zsh_zoxide_activate_file "$_zsh_zoxide_cache_file" "$_zsh_zoxide_path"
+          else
+            _zsh_zoxide_activate_file "$_zsh_zoxide_temp_file" "$_zsh_zoxide_path"
+          fi
+          _zsh_zoxide_init_status=$?
+        fi
+      else
+        _zsh_zoxide_init_status=1
+      fi
+    else
+      (( _zsh_zoxide_init_status == 0 )) && _zsh_zoxide_init_status=1
+    fi
+  fi
+
+  [[ -n $_zsh_zoxide_temp_file ]] && command rm -f -- "$_zsh_zoxide_temp_file"
+  if (( _zsh_zoxide_init_status != 0 )) && [[ -n $_zsh_zoxide_cache_file ]]; then
+    command rm -f -- "$_zsh_zoxide_cache_file" 2>/dev/null
   fi
 
   if (( _zsh_zoxide_init_status != 0 )); then
@@ -103,7 +225,9 @@ if (( $+commands[zoxide] )); then
     }
   fi
 
-  unset _zsh_zoxide_init_output _zsh_zoxide_init_status \
+  unset _zsh_zoxide_init_output _zsh_zoxide_init_status _zsh_zoxide_path \
+    _zsh_zoxide_cache_file _zsh_zoxide_cache_dir _zsh_zoxide_temp_file \
+    _zsh_zoxide_zsh_path \
     _zsh_zoxide_function_name _zsh_zoxide_function_names \
     _zsh_zoxide_saved_functions _zsh_zoxide_had_functions \
     _zsh_zoxide_saved_precmd_functions _zsh_zoxide_saved_chpwd_functions \

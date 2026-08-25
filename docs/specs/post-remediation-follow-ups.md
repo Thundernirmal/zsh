@@ -69,7 +69,7 @@ PRs #31 and #31+#32 fixed 21 of the 27 consolidated cross-review findings, close
 | N-08 | Verify apt/brew/npm/flatpak `--` terminators against real CLIs once, record results | Manual QA item; npm grammar quirkiest |
 | N-09 | Adversarial fzf placeholder fixture skips without `script(1)` | CI image includes util-linux; note only |
 | N-10 | Zoxide init stderr suppressed even interactively | Consider surfacing captured stderr after the generic interactive diagnostic |
-| N-11 | CR-26 lazy upkg/npkg decomposition | Stays behind R13's two-consecutive-benchmark gate; parse-proxy evidence recorded in the validated spec |
+| N-11 | ~~CR-26 lazy upkg/npkg decomposition~~ | Completed: one fixed catalogue loader preserves the public command interface and defers the interconnected implementation graph until first use |
 
 ## Explicit non-work
 

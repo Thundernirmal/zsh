@@ -362,7 +362,7 @@ printf "%s\n" "$@" > "$GLOB_STUB_LOG"' > "$fakebin/rm"
   assert_equals "$output" $'.git\n.hidden\ntree\nvisible' 'explicit (D) glob includes hidden entries' || return 1
 
   output=$(<"$glob_log")
-  assert_equals "$output" $'-iv\n-rf\ntree\nvisible' 'stubbed destructive command receives visible matches only' || return 1
+  assert_equals "$output" $'-rf\ntree\nvisible' 'native destructive command receives visible matches only' || return 1
 
   [[ -e "$fixture_dir/visible" && -e "$fixture_dir/.hidden" && -d "$fixture_dir/.git" ]] || {
     print -u2 -- 'not ok: destructive-command fixture never removes real files'
@@ -508,7 +508,7 @@ print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:
 
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 1 'warm startup reuses the cached version result' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 1 'warm startup does not regenerate fzf integration' || return 1
-  assert_matching_lines "$(file_contents "$process_log")" 'zsh:-fn ' 1 'warm startup does not repeat syntax validation' || return 1
+  assert_matching_lines "$(file_contents "$process_log")" '/zsh/fzf/.integration.' 1 'warm startup does not repeat fzf syntax validation' || return 1
 
   cache_files=( "$cache_root"/zsh/fzf/integration-*.zsh(N) )
   assert_equals "${#cache_files[@]}" 1 'cold startup creates one persistent integration cache file' || return 1
@@ -545,7 +545,7 @@ print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:
   assert_no_output "$stderr_file" 'changed fzf binary cache rebuild stays quiet' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 3 'changed fzf binary invalidates the cached version result' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 3 'changed fzf binary invalidates generated integration' || return 1
-  assert_matching_lines "$(file_contents "$process_log")" 'zsh:-fn ' 3 'only cold and invalidated caches receive syntax validation' || return 1
+  assert_matching_lines "$(file_contents "$process_log")" '/zsh/fzf/.integration.' 3 'only cold and invalidated fzf caches receive syntax validation' || return 1
 
   command rm -rf -- "$case_dir"
 }
@@ -936,7 +936,8 @@ esac' >"$fakebin/zoxide"
   command chmod +x -- "$fakebin/zoxide"
 
   for mode in success fail empty malformed runtime; do
-    ZOXIDE_TEST_MODE=$mode PATH="$fakebin" "$zsh_bin" -fc '
+    ZOXIDE_TEST_MODE=$mode XDG_CACHE_HOME="$tmp_home/zoxide-$mode-cache" \
+      PATH="$fakebin:${zsh_bin:h}" "$zsh_bin" -fc '
       source "$1/25-theme.zsh"
       unset _ZO_FZF_OPTS
       precmd_functions=(kept-precmd)
@@ -953,6 +954,35 @@ esac' >"$fakebin/zoxide"
     fi
     assert_no_output "$stderr_file" "non-interactive zoxide $mode startup stays quiet" || return 1
   done
+}
+
+test_zoxide_persistent_startup_cache() {
+  local case_dir="$tmp_home/zoxide-persistent-cache"
+  local fakebin="$case_dir/bin" cache_root="$case_dir/cache"
+  local log_file="$case_dir/invocations" stdout_file="$case_dir/stdout" output phase
+  local -a cache_files
+
+  command mkdir -p -- "$fakebin"
+  print -r -- '#!/bin/sh
+printf "%s\n" "$*" >> "$ZOXIDE_TEST_LOG"
+printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }"' >"$fakebin/zoxide"
+  command chmod +x -- "$fakebin/zoxide"
+
+  for phase in cold warm; do
+    ZOXIDE_TEST_LOG="$log_file" XDG_CACHE_HOME="$cache_root" \
+      PATH="$fakebin:${zsh_bin:h}" "$zsh_bin" -fc '
+        source "$1/25-theme.zsh"
+        source "$1/30-zoxide.zsh"
+        print -r -- "z=$+functions[z] zi=$+functions[zi]"
+      ' zsh "$repo_dir" >"$stdout_file" 2>/dev/null
+    assert_status "$?" 0 "$phase zoxide cache startup exits cleanly" || return 1
+    output=$(<"$stdout_file")
+    assert_equals "$output" 'z=1 zi=1' "$phase zoxide cache startup retains integration" || return 1
+  done
+
+  assert_matching_lines "$(file_contents "$log_file")" 'init zsh' 1 'warm startup does not regenerate zoxide integration' || return 1
+  cache_files=( "$cache_root"/zsh/zoxide/init-*.zsh(N) )
+  assert_equals "${#cache_files[@]}" 1 'cold startup creates one validated zoxide cache file' || return 1
 }
 
 main() {
@@ -975,6 +1005,7 @@ main() {
   test_runner_signal_exit || return 1
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
+  test_zoxide_persistent_startup_cache || return 1
   test_glob_policy || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1

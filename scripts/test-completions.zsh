@@ -200,6 +200,7 @@ test_extract_completion_drift() {
   local -a dispatch_extensions
 
   source "$repo_dir/60-functions.zsh"
+  _zsh_functions_load || return 1
   for line in "${(f)functions[extract]}"; do
     if [[ $line == *'(*.'*') '* ]]; then
       extension=${line#*\(\*.}

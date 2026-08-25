@@ -1,4 +1,5 @@
-# Lazy registration for on-demand tips.
+# Lazy registration for on-demand tips. Destructive file operations deliberately
+# keep their native command semantics instead of relying on bypassable aliases.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
 typeset -gi _ZSH_TIPS_CATALOGUE_LOADED=${_ZSH_TIPS_CATALOGUE_LOADED:-0}

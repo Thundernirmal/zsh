@@ -115,7 +115,7 @@ test_local_emulation_and_leading_dash_operands() {
   local fixture_dir="$tmp_dir/leading-operands"
   local fakebin="$tmp_dir/leading-fakebin"
   local gunzip_log="$tmp_dir/gunzip-args"
-  local old_path=$PATH
+  local old_path=$PATH output
   local EXTRACT_TEST_LOG=$gunzip_log
 
   for command_name in extract mkcd ff ft fkill headers peek croot gitcount; do
@@ -138,6 +138,12 @@ test_local_emulation_and_leading_dash_operands() {
     builtin cd -- "$original_dir"
     return 1
   }
+
+  builtin cd -- "$fixture_dir" || return 1
+  command mkdir -- -scan
+  print -r -- data > -scan/file.txt
+  output=$(bigfiles -scan 1) || return 1
+  assert_contains "$output" 'file.txt' 'bigfiles canonicalizes a leading-dash target before find' || return 1
 
   builtin cd -- "$fixture_dir" || return 1
   local -a archive_names=(
@@ -641,7 +647,7 @@ test_fbr_worktree_navigation() {
   assert_equals "$REPLY" $'1...0\t1234\tsubject\t\t1234567890' 'fbr preserves width-boundary truncation byte-for-byte' || return 1
 
   assert_contains "${functions[fbr]}" '--accept-nth=5' 'fbr asks fzf to return the branch field directly' || return 1
-  assert_contains "${functions[fbr]}" "git log --oneline --decorate --color=always -20 {5}" 'fbr previews the undecorated branch field' || return 1
+  assert_contains "${functions[fbr]}" "git log --oneline --decorate --color=always -20 {5}" 'fbr relies on fzf quoting the undecorated branch preview field' || return 1
   assert_contains "${functions[fbr]}" '_fzf_picker_preview_args Log' 'fbr uses the shared responsive preview policy' || return 1
   assert_not_contains "${functions[fbr]}" '38;5;116' 'fbr worktree badges no longer embed a raw palette color' || return 1
 
