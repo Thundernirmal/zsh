@@ -567,7 +567,7 @@ done
   rich_check_file="$tmp_prefix/rich-check.zsh"
 
   {
-    print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_has_icons _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width 2>/dev/null || true'
+    print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width 2>/dev/null || true'
     print -- "source '$repo_dir/60-functions.zsh'"
     print -- '_ui_truncate 10 "My File.txt"'
     print -- '_ui_pad left 20 "My File.txt"'
@@ -603,7 +603,6 @@ done
   output=$(_npkg_fzf_preview_window 60)
   assert_contains "$output" 'down,40%,border-top,wrap-word' 'npkg picker uses the shared compact lower preview on narrow terminals' || return 1
 
-  functions[_ui_has_icons]='return 1'
   output=$(_ui_status_icon 'matches found')
   assert_contains "$output" '?' 'matches found status uses a dedicated fallback icon' || return 1
   output=$(_ui_status_icon 'no matches')
@@ -1466,7 +1465,6 @@ esac
   functions[_ui_color]=':'
   functions[_ui_reset]=':'
   functions[_ui_bold]=':'
-  functions[_ui_has_icons]='return 1'
 
   output=$(ports)
   cmd_status=$?
@@ -1693,7 +1691,6 @@ esac
   functions[_ui_color]=':'
   functions[_ui_reset]=':'
   functions[_ui_bold]=':'
-  functions[_ui_has_icons]='return 1'
   functions[_ui_title_line]=':'
   functions[_ui_panel_kv]=':'
   functions[_ui_section_break]=':'

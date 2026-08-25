@@ -79,14 +79,6 @@ _ui_ascii_mode() {
   [[ ${_ZSH_UI_GLYPH_TIER:-ascii} == ascii ]]
 }
 
-_ui_has_truecolor() {
-  [[ ${_ZSH_UI_COLOR_DEPTH:-ansi} == truecolor ]]
-}
-
-_ui_has_icons() {
-  _ui_is_rich_terminal && [[ ${_ZSH_UI_GLYPH_TIER:-ascii} == nerd ]]
-}
-
 _ui_color() {
   emulate -L zsh
 
@@ -210,7 +202,7 @@ _ui_repeat() {
   print -nr -- "$out"
 }
 
-_ui_truncate() {
+_ui_truncate_reply() {
   emulate -L zsh
 
   local width=$1
@@ -221,7 +213,7 @@ _ui_truncate() {
   integer left right
 
   (( width > 0 )) || {
-    print -r -- ''
+    REPLY=''
     return 0
   }
 
@@ -230,12 +222,12 @@ _ui_truncate() {
   fi
 
   if (( ${#text} <= width )); then
-    print -r -- "$text"
+    REPLY=$text
     return 0
   fi
 
   if (( width <= ${#marker} + 1 )); then
-    print -r -- "${text[1,width]}"
+    REPLY=${text[1,width]}
     return 0
   fi
 
@@ -243,13 +235,18 @@ _ui_truncate() {
   right=$(( width - ${#marker} - left ))
 
   if (( right > 0 )); then
-    print -r -- "${text[1,left]}${marker}${text[-$right,-1]}"
+    REPLY="${text[1,left]}${marker}${text[-$right,-1]}"
   else
-    print -r -- "${text[1,left]}${marker}"
+    REPLY="${text[1,left]}${marker}"
   fi
 }
 
-_ui_pad() {
+_ui_truncate() {
+  _ui_truncate_reply "$@"
+  print -r -- "$REPLY"
+}
+
+_ui_pad_reply() {
   emulate -L zsh
 
   # 'right' = right-align text (leading spaces); 'left' = left-align (trailing spaces)
@@ -257,16 +254,22 @@ _ui_pad() {
   local width=$2
   shift 2
 
-  local text=$(_ui_truncate "$width" "$*")
+  _ui_truncate_reply "$width" "$*"
+  local text=$REPLY
   local padding=$(( width - ${#text} ))
 
   (( padding < 0 )) && padding=0
 
   if [[ $align == right ]]; then
-    printf '%*s%s' "$padding" '' "$text"
+    printf -v REPLY '%*s%s' "$padding" '' "$text"
   else
-    printf '%s%*s' "$text" "$padding" ''
+    printf -v REPLY '%s%*s' "$text" "$padding" ''
   fi
+}
+
+_ui_pad() {
+  _ui_pad_reply "$@"
+  print -nr -- "$REPLY"
 }
 
 _ui_human_bytes() {

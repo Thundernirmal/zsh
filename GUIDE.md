@@ -311,20 +311,16 @@ The global layer is intentionally small:
 - repeated slash cleanup
 - process details for `kill <Tab>`
 
-Command-specific completion covers:
+Command-specific completion covers the complete public command set:
 
 ```zsh
-upkg <Tab>
-upkg --only=<Tab>
-npkg <Tab>
-cgm env <Tab>
-extract <Tab>
-ff pattern <Tab>
-fkill <Tab>
-zhelp <Tab>
+upkg      npkg       cgm        ztheme     zhelp      tips
+extract   peek       mkcd       ff         ft         headers
+dusage    bigfiles   fkill      fbr        croot      path
+ports     myip       gitcount   fanprofile
 ```
 
-The definitions understand subcommands, aliases, manager lists, archive suffixes, directories, counts, URLs, and signals. `npkg` completion may read an existing attribute cache, and `cgm` completion reads the name-only catalogue. Pressing Tab never runs Nix, refreshes a cache, contacts Secret Service, or retrieves a credential value.
+`npkg` and `cgm` are registered only when their optional commands are available. The definitions understand subcommands, aliases, manager lists, archive suffixes, directories, counts, URLs, and signals. `npkg` completion may read an existing attribute cache, and `cgm` completion reads the name-only catalogue. Pressing Tab never runs Nix, refreshes a cache, contacts Secret Service, or retrieves a credential value.
 
 If the parent `~/.zshrc` has not run `compinit`, command-specific completion is not registered. Heavy menu selection, grouped listings, and global coloured completion lists are intentionally omitted because they made completion noticeably slower.
 
@@ -347,7 +343,7 @@ The default result set hides commands that cannot run in the current shell. `--a
 
 In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
-Sourcing `65-help.zsh` only registers data. Availability checks and subprocesses are deferred until `zhelp` is called.
+Sourcing `65-help.zsh` registers only a fixed repository-local loader. The catalogue, availability checks, and any subprocesses are deferred until `zhelp` is called; command completion loads catalogue data only when zhelp completion is invoked.
 
 ### tips
 
@@ -357,7 +353,7 @@ Sourcing `65-help.zsh` only registers data. Availability checks and subprocesses
 tip: Run mkcd <dir> to create and enter a directory
 ```
 
-It is on demand and installs no prompt or command-cycle hook. Run it again for another hint.
+It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Run it again for another hint.
 
 ## Aliases
 
@@ -536,10 +532,11 @@ All three commands apply the safe-text contract described in [Terminal output mo
 
 #### fkill and fbr
 
-`fkill` requires a terminal and defaults to `SIGTERM` (`15`), allowing graceful shutdown. Pass `9` only when force is necessary:
+`fkill` requires a terminal and defaults to `SIGTERM` (`15`), allowing graceful shutdown. Numeric and named forms are normalized, so `15`, `-15`, `TERM`, and `SIGTERM` all select the same signal. Invalid signals fail before the picker opens. Pass `9` only when force is necessary:
 
 ```zsh
 fkill
+fkill SIGTERM
 fkill 9
 ```
 

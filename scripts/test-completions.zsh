@@ -183,7 +183,7 @@ test_static_values() {
   spec_values "${_ZSH_ZTHEME_COMMAND_SPECS[@]}"
   values=( "${reply[@]}" )
   assert_equals "${(j: :)values}" 'list current show use reset export' 'ztheme completion covers every public subcommand' || return 1
-  assert_equals "${(j: :)_ZSH_ZTHEME_NAMES}" 'catppuccin-mocha catppuccin-latte nord gruvbox-dark terminal' 'ztheme completion uses a static built-in theme list' || return 1
+  assert_equals "${(j: :)_ZSH_ZTHEME_NAMES}" "${(j: :)_ZSH_UI_THEME_NAMES}" 'ztheme completion reuses the built-in theme owner' || return 1
   assert_unique 'ztheme completion values are unique' "${_ZSH_ZTHEME_NAMES[@]}" || return 1
 
   spec_values "${_ZSH_CGM_COMMAND_SPECS[@]}"
@@ -193,6 +193,22 @@ test_static_values() {
 
   assert_equals "${(j: :)_ZSH_EXTRACT_EXTENSIONS}" 'tar.bz2 tar.gz tar.xz tar.zst bz2 rar gz tar tbz2 tgz tzst zip Z 7z' 'extract completion covers every supported extension' || return 1
   assert_unique 'extract extensions are unique' "${_ZSH_EXTRACT_EXTENSIONS[@]}" || return 1
+}
+
+test_extract_completion_drift() {
+  local line extension
+  local -a dispatch_extensions
+
+  source "$repo_dir/60-functions.zsh"
+  for line in "${(f)functions[extract]}"; do
+    if [[ $line == *'(*.'*') '* ]]; then
+      extension=${line#*\(\*.}
+      extension=${extension%%\)*}
+      dispatch_extensions+=( "$extension" )
+    fi
+  done
+
+  assert_equals "${(j: :)dispatch_extensions}" "${(j: :)_ZSH_EXTRACT_EXTENSIONS}" 'extract completion stays synchronized with dispatch suffixes' || return 1
 }
 
 test_cached_cgm_names() {
@@ -308,6 +324,7 @@ main() {
   test_registration || return 1
   test_zhelp_values || return 1
   test_static_values || return 1
+  test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1
   test_cached_cgm_names || return 1
   test_source_has_no_subprocesses || return 1

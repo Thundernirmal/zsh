@@ -867,6 +867,64 @@ test_fzf_dependency_checker() {
   done
 }
 
+test_owned_module_settings() {
+  HOME="$tmp_home" "$zsh_bin" -fc '
+    source "$1/10-history.zsh"
+    [[ $HISTSIZE == 100000 && $SAVEHIST == 100000 && $HISTFILE == "$HOME/.zsh_history" ]] || exit 11
+    [[ -o appendhistory && -o sharehistory && -o histignorealldups && -o histfindnodups ]] || exit 12
+    [[ -o histignorespace && -o histreduceblanks ]] || exit 13
+
+    source "$1/50-completion.zsh"
+    local -a values
+    zstyle -a ":completion:*" matcher-list values || exit 14
+    [[ "${(j: :)values}" == "m:{a-zA-Z}={A-Za-z}" ]] || exit 15
+    zstyle -t ":completion:*" squeeze-slashes || exit 16
+    zstyle -s ":completion:*:*:*:*:processes" command process_command || exit 17
+    [[ $process_command == *"ps -u"* && $process_command == *"-o pid,user,comm,cmd"* ]] || exit 18
+
+    source "$1/70-globals.zsh"
+    [[ ${(v)galiases[G]} == "| grep" ]] || exit 19
+    [[ ${(v)galiases[L]} == "| less" ]] || exit 20
+    [[ ${(v)galiases[NUL]} == ">/dev/null 2>&1" ]] || exit 21
+  ' zsh "$repo_dir"
+  assert_status "$?" 0 'history, completion, and global-alias modules retain their owned settings' || return 1
+}
+
+test_zoxide_init_outcomes() {
+  local fakebin="$tmp_home/zoxide-outcomes"
+  local mode stdout_file="$tmp_home/zoxide.stdout" stderr_file="$tmp_home/zoxide.stderr" output
+
+  command mkdir -p -- "$fakebin"
+  print -r -- '#!/bin/sh
+case "$ZOXIDE_TEST_MODE" in
+  success) printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }" ;;
+  fail) printf "%s\n" "generation failed" >&2; exit 7 ;;
+  empty) exit 0 ;;
+  malformed) printf "%s\n" "if (" ;;
+  runtime) printf "%s\n" "z() { :; }" "chpwd_functions+=(half-installed)" "false" ;;
+esac' >"$fakebin/zoxide"
+  command chmod +x -- "$fakebin/zoxide"
+
+  for mode in success fail empty malformed runtime; do
+    ZOXIDE_TEST_MODE=$mode PATH="$fakebin" "$zsh_bin" -fc '
+      source "$1/25-theme.zsh"
+      unset _ZO_FZF_OPTS
+      precmd_functions=(kept-precmd)
+      chpwd_functions=(kept-chpwd)
+      source "$1/30-zoxide.zsh"
+      print -r -- "z=$+functions[z] zi=$+functions[zi] precmd=${(j:,:)precmd_functions} chpwd=${(j:,:)chpwd_functions} registry=$_ZSH_THEME_REGISTRY_LOADED zo=${+_ZO_FZF_OPTS}"
+    ' zsh "$repo_dir" >"$stdout_file" 2>"$stderr_file"
+    assert_status "$?" 0 "zoxide $mode fixture sources deterministically" || return 1
+    output=$(<"$stdout_file")
+    if [[ $mode == success ]]; then
+      assert_equals "$output" 'z=1 zi=1 precmd=kept-precmd chpwd=kept-chpwd registry=0 zo=0' 'successful command-mode zoxide init defers finder chrome' || return 1
+    else
+      assert_equals "$output" 'z=0 zi=0 precmd=kept-precmd chpwd=kept-chpwd registry=0 zo=0' "zoxide $mode leaves no partial integration" || return 1
+    fi
+    assert_no_output "$stderr_file" "non-interactive zoxide $mode startup stays quiet" || return 1
+  done
+}
+
 main() {
   local -a high_risk_aliases
   local high_risk_alias_setup
@@ -884,6 +942,8 @@ main() {
 
   run_init_case 'clean init smoke test' || return 1
   run_init_case 'high-risk alias init smoke test' "$high_risk_alias_setup" || return 1
+  test_owned_module_settings || return 1
+  test_zoxide_init_outcomes || return 1
   test_glob_policy || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1
