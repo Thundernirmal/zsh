@@ -538,12 +538,12 @@ dusage() {
   local limit=${2:-20}
   local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
   local size_text percent_text header_meta footer_text display_target
-  local scan_status=0 signal_status=0 path_list_file='' raw_output_file=''
+  local scan_status=0 path_list_file='' raw_output_file=''
   local -a entries records lines
 
-  trap 'signal_status=130' INT
-  trap 'signal_status=143' TERM
-  trap 'signal_status=129' HUP
+  trap 'return 130' INT
+  trap 'return 143' TERM
+  trap 'return 129' HUP
 
   display_target=$(_ui_safe_text "$target")
 
@@ -583,8 +583,6 @@ dusage() {
   } always {
     command rm -f -- "$path_list_file" "$raw_output_file"
   }
-
-  (( signal_status == 0 )) || return $signal_status
 
   if (( ${#records[@]} == 0 )); then
     (( scan_status != 0 )) && return $scan_status
@@ -687,13 +685,13 @@ bigfiles() {
   local target=${1:-.}
   local limit=${2:-20}
   local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width
-  local find_status=0 scan_status=0 signal_status=0 display_target
+  local find_status=0 scan_status=0 display_target
   local path_list_file='' raw_output_file='' line_count=0
   local -a records lines
 
-  trap 'signal_status=130' INT
-  trap 'signal_status=143' TERM
-  trap 'signal_status=129' HUP
+  trap 'return 130' INT
+  trap 'return 143' TERM
+  trap 'return 129' HUP
 
   display_target=$(_ui_safe_text "$target")
 
@@ -730,8 +728,6 @@ bigfiles() {
   } always {
     command rm -f -- "$path_list_file" "$raw_output_file"
   }
-
-  (( signal_status == 0 )) || return $signal_status
 
   if (( ${#records[@]} == 0 )); then
     (( scan_status != 0 )) && return $scan_status
@@ -3464,7 +3460,7 @@ upkg() {
         shift
         if (( $# == 0 )); then
           print -u2 -- 'Missing value for --only'
-          _upkg_usage
+          _upkg_usage >&2
           return 1
         fi
         only_raw=$1
@@ -3473,7 +3469,7 @@ upkg() {
         only_raw=${1#--only=}
         if [ -z "$only_raw" ]; then
           print -u2 -- 'Missing value for --only'
-          _upkg_usage
+          _upkg_usage >&2
           return 1
         fi
         ;;
@@ -3481,7 +3477,7 @@ upkg() {
         shift
         if (( $# == 0 )); then
           print -u2 -- 'Missing value for --skip'
-          _upkg_usage
+          _upkg_usage >&2
           return 1
         fi
         skip_raw=$1
@@ -3490,7 +3486,7 @@ upkg() {
         skip_raw=${1#--skip=}
         if [ -z "$skip_raw" ]; then
           print -u2 -- 'Missing value for --skip'
-          _upkg_usage
+          _upkg_usage >&2
           return 1
         fi
         ;;
@@ -3510,7 +3506,7 @@ upkg() {
           break
         fi
         print -u2 -- "Unknown argument: --"
-        _upkg_usage
+        _upkg_usage >&2
         return 1
         ;;
       help)
@@ -3529,7 +3525,7 @@ upkg() {
         else
           if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
             print -u2 -- "Unexpected extra command: $1"
-            _upkg_usage
+            _upkg_usage >&2
             return 1
           fi
           raw_cmd=$1
@@ -3540,7 +3536,7 @@ upkg() {
           query_parts+=("$1")
         else
           print -u2 -- "Unknown argument: $1"
-          _upkg_usage
+          _upkg_usage >&2
           return 1
         fi
         ;;
@@ -3575,7 +3571,7 @@ upkg() {
       :
     else
       print -u2 -- '--dry-run is only valid with the default outdated check, plan, upgrade, or clean'
-      _upkg_usage
+      _upkg_usage >&2
       return 1
     fi
   fi
@@ -3910,11 +3906,11 @@ if (( $+commands[nix] )); then
     setopt localtraps pipefail
 
     local system cache_dir cache_file error_file='' temp_file=''
-    local signal_status=0 pipeline_status=0
+    local pipeline_status=0
 
-    trap 'signal_status=130' INT
-    trap 'signal_status=143' TERM
-    trap 'signal_status=129' HUP
+    trap 'return 130' INT
+    trap 'return 143' TERM
+    trap 'return 129' HUP
 
     if ! command -v jq >/dev/null 2>&1; then
       print -u2 -r -- 'jq is required for npkg refresh'
@@ -3934,8 +3930,6 @@ if (( $+commands[nix] )); then
       _npkg_nix eval --json "nixpkgs#legacyPackages.${system}" --apply builtins.attrNames 2>"$error_file" |
         command jq -r '.[]' >"$temp_file"
       pipeline_status=$?
-      (( signal_status == 0 )) || return $signal_status
-
       if (( pipeline_status != 0 )); then
         if [ -s "$error_file" ]; then
           command cat -- "$error_file" >&2
@@ -4703,7 +4697,7 @@ if (( $+commands[nix] )); then
         ;;
       *)
         print -u2 -r -- "Unknown npkg command: $cmd"
-        _npkg_usage
+        _npkg_usage >&2
         return 1
         ;;
     esac

@@ -402,6 +402,8 @@ esac'
 
 main() {
   local output cmd_status route state_role npm_stdout npm_stderr
+  local parser_stdout="$tmp_prefix/upkg-parser.stdout"
+  local parser_stderr="$tmp_prefix/upkg-parser.stderr"
   local npkg_profile_file="$tmp_prefix/npkg-profile.json"
   local npkg_eval_file="$tmp_prefix/npkg-evaluations.json"
   local npkg_eval_log="$tmp_prefix/npkg-evaluations.log"
@@ -797,6 +799,18 @@ esac
   assert_status "$cmd_status" 1 'search requires a query' || return 1
   assert_contains "$output" 'Usage: upkg search <query>' 'search missing query shows usage' || return 1
   assert_not_contains "$output" 'Commands:' 'search missing query avoids full help dump' || return 1
+
+  upkg --only >"$parser_stdout" 2>"$parser_stderr"
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'missing upkg option values fail' || return 1
+  assert_equals "$(<"$parser_stdout")" '' 'upkg parser failures keep stdout clean' || return 1
+  assert_contains "$(<"$parser_stderr")" 'Usage: upkg [command]' 'upkg parser failures keep actionable usage on stderr' || return 1
+
+  upkg help >"$parser_stdout" 2>"$parser_stderr"
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'upkg help remains successful' || return 1
+  assert_contains "$(<"$parser_stdout")" 'Usage: upkg [command]' 'upkg help remains on stdout' || return 1
+  assert_equals "$(<"$parser_stderr")" '' 'upkg help keeps stderr clean' || return 1
 
   output=$(upkg managers --dry-run 2>&1)
   cmd_status=$?

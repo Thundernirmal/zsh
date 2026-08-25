@@ -255,6 +255,23 @@ exit 0' >"$fakebin/du"
   leftovers=( "$tmp_dir"/dusage.*(N) )
   assert_equals "${#leftovers[@]}" 0 'dusage removes temporary files after SIGINT' || return 1
 
+  command rm -f -- "$started" "$release"
+  (dusage "$fixture_dir" 5 >/dev/null 2>&1) &
+  worker_pid=$!
+  ticks=0
+  while [[ ! -e $started ]] && (( ticks < 100 )); do
+    zselect -t 1
+    (( ticks++ ))
+  done
+  [[ -e $started ]] || return 1
+  kill -HUP "$worker_pid"
+  : >"$release"
+  wait "$worker_pid" 2>/dev/null
+  rc=$?
+  assert_status "$rc" 129 'dusage preserves SIGHUP status' || return 1
+  leftovers=( "$tmp_dir"/dusage.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'dusage removes temporary files after SIGHUP' || return 1
+
   command rm -f -- "$started" "$release" "$fakebin/du"
   print -r -- '#!/bin/sh
 : > "$USAGE_SIGNAL_STARTED"
@@ -287,6 +304,32 @@ exit 0' >"$fakebin/find"
     unset TMPDIR
   fi
   unset USAGE_SIGNAL_STARTED USAGE_SIGNAL_RELEASE
+}
+
+test_dusage_oversized_operand_set() {
+  emulate -L zsh
+
+  local fixture_dir="$tmp_dir/dusage-oversized"
+  local path_segment='segment-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-'
+  local file_component='operand-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-'
+  integer depth index rc aggregate_bytes arg_max
+
+  command mkdir -p -- "$fixture_dir"
+  for (( depth = 1; depth <= 14; depth++ )); do
+    fixture_dir+="/${path_segment}${depth}"
+    command mkdir -- "$fixture_dir" || return 1
+  done
+  for (( index = 1; index <= 800; index++ )); do
+    print -rn -- "$fixture_dir/${file_component}${index}"$'\0'
+  done | command xargs -0 touch -- || return 1
+
+  arg_max=$(command getconf ARG_MAX) || return 1
+  aggregate_bytes=$(( 800 * (${#fixture_dir} + ${#file_component} + 4) ))
+  (( aggregate_bytes > arg_max )) || return 1
+
+  dusage "$fixture_dir" 1 >/dev/null
+  rc=$?
+  assert_status "$rc" 0 'dusage completes with an operand set larger than ARG_MAX' || return 1
 }
 
 test_path_empty_entries() {
@@ -569,6 +612,7 @@ main() {
   test_local_emulation_and_leading_dash_operands || return 1
   test_usage_temp_cleanup || return 1
   test_usage_signal_cleanup || return 1
+  test_dusage_oversized_operand_set || return 1
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
   test_alias_probes_are_quiet || return 1
