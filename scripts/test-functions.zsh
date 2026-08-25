@@ -223,6 +223,7 @@ test_usage_signal_cleanup() {
   local old_path=$PATH old_tmpdir=${TMPDIR-}
   local started="$tmp_dir/usage-signal-started"
   local release="$tmp_dir/usage-signal-release"
+  local status_file="$tmp_dir/usage-signal-status"
   local worker_pid rc
   integer had_tmpdir=${+TMPDIR} ticks
   local -a leftovers
@@ -239,7 +240,7 @@ exit 0' >"$fakebin/du"
   export USAGE_SIGNAL_STARTED=$started USAGE_SIGNAL_RELEASE=$release
   rehash
 
-  (dusage "$fixture_dir" 5 >/dev/null 2>&1) &
+  (dusage "$fixture_dir" 5 >/dev/null 2>&1; rc=$?; print -r -- "$rc" >"$status_file"; exit $rc) &
   worker_pid=$!
   ticks=0
   while [[ ! -e $started ]] && (( ticks < 100 )); do
@@ -252,11 +253,12 @@ exit 0' >"$fakebin/du"
   wait "$worker_pid" 2>/dev/null
   rc=$?
   assert_status "$rc" 130 'dusage preserves SIGINT status' || return 1
+  assert_equals "$(<"$status_file")" 130 'dusage returns SIGINT status from its function body' || return 1
   leftovers=( "$tmp_dir"/dusage.*(N) )
   assert_equals "${#leftovers[@]}" 0 'dusage removes temporary files after SIGINT' || return 1
 
-  command rm -f -- "$started" "$release"
-  (dusage "$fixture_dir" 5 >/dev/null 2>&1) &
+  command rm -f -- "$started" "$release" "$status_file"
+  (dusage "$fixture_dir" 5 >/dev/null 2>&1; rc=$?; print -r -- "$rc" >"$status_file"; exit $rc) &
   worker_pid=$!
   ticks=0
   while [[ ! -e $started ]] && (( ticks < 100 )); do
@@ -269,10 +271,11 @@ exit 0' >"$fakebin/du"
   wait "$worker_pid" 2>/dev/null
   rc=$?
   assert_status "$rc" 129 'dusage preserves SIGHUP status' || return 1
+  assert_equals "$(<"$status_file")" 129 'dusage returns SIGHUP status from its function body' || return 1
   leftovers=( "$tmp_dir"/dusage.*(N) )
   assert_equals "${#leftovers[@]}" 0 'dusage removes temporary files after SIGHUP' || return 1
 
-  command rm -f -- "$started" "$release" "$fakebin/du"
+  command rm -f -- "$started" "$release" "$status_file" "$fakebin/du"
   print -r -- '#!/bin/sh
 : > "$USAGE_SIGNAL_STARTED"
 while [ ! -e "$USAGE_SIGNAL_RELEASE" ]; do :; done
@@ -280,7 +283,7 @@ exit 0' >"$fakebin/find"
   command chmod +x -- "$fakebin/find"
   rehash
 
-  (bigfiles "$fixture_dir" 5 >/dev/null 2>&1) &
+  (bigfiles "$fixture_dir" 5 >/dev/null 2>&1; rc=$?; print -r -- "$rc" >"$status_file"; exit $rc) &
   worker_pid=$!
   ticks=0
   while [[ ! -e $started ]] && (( ticks < 100 )); do
@@ -293,6 +296,7 @@ exit 0' >"$fakebin/find"
   wait "$worker_pid" 2>/dev/null
   rc=$?
   assert_status "$rc" 143 'bigfiles preserves SIGTERM status' || return 1
+  assert_equals "$(<"$status_file")" 143 'bigfiles returns SIGTERM status from its function body' || return 1
   leftovers=( "$tmp_dir"/bigfiles.*(N) )
   assert_equals "${#leftovers[@]}" 0 'bigfiles removes temporary files after SIGTERM' || return 1
 

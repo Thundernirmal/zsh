@@ -385,6 +385,12 @@ esac'
 
   write_fake mv "exec $real_mv \"\$@\""
   rehash
+  functions[_npkg_nix]='kill -HUP $$; print -r -- '\''["zoxide","ripgrep"]'\'''
+  _npkg_refresh_index >"$first_output" 2>"$error_output"
+  failure_status=$?
+  assert_status "$failure_status" 129 'npkg refresh returns SIGHUP status from its function body' || return 1
+  leftovers=( "$cache_root"/npkg/*.tmp.*(N) "$cache_root"/npkg/*.err.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'npkg refresh removes every intermediate file after SIGHUP' || return 1
 
   functions[_npkg_current_system]=$saved_current_system
   functions[_npkg_nix]=$saved_nix

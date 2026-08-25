@@ -538,12 +538,14 @@ dusage() {
   local limit=${2:-20}
   local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
   local size_text percent_text header_meta footer_text display_target
-  local scan_status=0 path_list_file='' raw_output_file=''
+  local scan_status=0 signal_status=0 path_list_file='' raw_output_file=''
   local -a entries records lines
 
-  trap 'return 130' INT
-  trap 'return 143' TERM
-  trap 'return 129' HUP
+  # Signal traps escape every nested renderer loop, then return the recorded status.
+  while true; do
+  trap 'signal_status=130; break 1000' INT
+  trap 'signal_status=143; break 1000' TERM
+  trap 'signal_status=129; break 1000' HUP
 
   display_target=$(_ui_safe_text "$target")
 
@@ -675,6 +677,10 @@ dusage() {
   _ui_color muted
   print -r -- "$footer_text"
   _ui_reset
+  break
+  done
+
+  (( signal_status == 0 )) || return $signal_status
 }
 
 # Largest files in current directory tree
@@ -685,13 +691,15 @@ bigfiles() {
   local target=${1:-.}
   local limit=${2:-20}
   local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width
-  local find_status=0 scan_status=0 display_target
+  local find_status=0 scan_status=0 signal_status=0 display_target
   local path_list_file='' raw_output_file='' line_count=0
   local -a records lines
 
-  trap 'return 130' INT
-  trap 'return 143' TERM
-  trap 'return 129' HUP
+  # Signal traps escape every nested renderer loop, then return the recorded status.
+  while true; do
+  trap 'signal_status=130; break 1000' INT
+  trap 'signal_status=143; break 1000' TERM
+  trap 'signal_status=129; break 1000' HUP
 
   display_target=$(_ui_safe_text "$target")
 
@@ -824,6 +832,10 @@ bigfiles() {
   _ui_color muted
   print -r -- "$footer_text"
   _ui_reset
+  break
+  done
+
+  (( signal_status == 0 )) || return $signal_status
 }
 
 # Show listening ports and owning processes
@@ -3906,11 +3918,13 @@ if (( $+commands[nix] )); then
     setopt localtraps pipefail
 
     local system cache_dir cache_file error_file='' temp_file=''
-    local pipeline_status=0
+    local pipeline_status=0 signal_status=0
 
-    trap 'return 130' INT
-    trap 'return 143' TERM
-    trap 'return 129' HUP
+    # Signal traps escape the pipeline boundary, then return the recorded status.
+    while true; do
+    trap 'signal_status=130; break 1000' INT
+    trap 'signal_status=143; break 1000' TERM
+    trap 'signal_status=129; break 1000' HUP
 
     if ! command -v jq >/dev/null 2>&1; then
       print -u2 -r -- 'jq is required for npkg refresh'
@@ -3944,6 +3958,10 @@ if (( $+commands[nix] )); then
       [[ -z $temp_file ]] || command rm -f -- "$temp_file"
       [[ -z $error_file ]] || command rm -f -- "$error_file"
     }
+    break
+    done
+
+    (( signal_status == 0 )) || return $signal_status
   }
 
   _npkg_attr_index() {
