@@ -1584,12 +1584,15 @@ esac
     assert_equals "$(<"$NPKG_TEST_EVAL_LOG")" '' 'zero-count profile performs no evaluation' || return 1
 
     set_npkg_fixture '__FAIL__' '{}'
-    run_npkg_outdated_capture
+    local profile_stdout="$tmp_prefix/npkg-profile-failure.stdout"
+    local profile_stderr="$tmp_prefix/npkg-profile-failure.stderr"
+    npkg outdated >"$profile_stdout" 2>"$profile_stderr"
     cmd_status=$?
-    output=$NPKG_TEST_OUTPUT
+    output=$(<"$profile_stderr")
     assert_status "$cmd_status" 1 'total profile read failure returns nonzero' || return 1
     assert_equals "$_NPKG_OUTDATED_STATE" partial 'profile read failure exposes partial state' || return 1
     assert_contains "$output" 'simulated profile read failure' 'profile read failure preserves its diagnostic' || return 1
+    assert_equals "$(<"$profile_stdout")" '' 'profile read failure keeps stdout empty' || return 1
     assert_not_contains "$output" 'Everything is up to date.' 'profile read failure never prints success' || return 1
 
     set_npkg_fixture '{"elements":' '{}'

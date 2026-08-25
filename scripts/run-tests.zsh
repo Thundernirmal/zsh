@@ -8,9 +8,21 @@ typeset smoke_home=''
 
 cleanup() {
   [[ -n $smoke_home ]] && command rm -rf -- "$smoke_home"
+  return 0
 }
 
-trap cleanup EXIT INT TERM HUP
+handle_signal() {
+  local signal_status=$1
+
+  cleanup
+  trap - EXIT INT TERM HUP
+  exit $signal_status
+}
+
+trap cleanup EXIT
+trap 'handle_signal 130' INT
+trap 'handle_signal 143' TERM
+trap 'handle_signal 129' HUP
 
 builtin cd -- "$repo_dir"
 

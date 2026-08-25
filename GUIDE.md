@@ -71,14 +71,14 @@ Unreadable module files are skipped. The optional credential module is skipped e
 | `55-ui-helpers.zsh` | Rich terminal rendering and plain fallbacks |
 | `60-functions.zsh` | General helpers, session-only `ztheme`, `upkg`, and optional `npkg` |
 | `62-cgm.zsh` | Optional Secret Service credential manager |
-| `65-help.zsh` | Command catalogue and `zhelp` |
+| `65-help.zsh` | Fixed lazy-loader registration for `zhelp` |
 | `66-compdefs.zsh` | Command-aware completion definitions |
 | `70-globals.zsh` | Global pipe and redirection aliases |
-| `80-tips.zsh` | Hook-free, on-demand tips |
+| `80-tips.zsh` | Fixed lazy-loader registration for hook-free, on-demand tips |
 
 The numbered filenames define load order. `50-completion.zsh` assumes an earlier layer already ran `compinit`; `66-compdefs.zsh` becomes a silent no-op when `compdef` is unavailable.
 
-The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, and `lib/theme-*.zsh` files are lazy implementation helpers rather than startup modules. `60-functions.zsh` registers their fixed command paths once, while command-only swatch/export logic, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. A configured custom or colored non-default startup loads the pieces it needs before composing finder options.
+The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, `lib/tips-catalogue.zsh`, and `lib/upkg-registry.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while command-only swatch/export logic, catalogues, registries, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. A configured custom or colored non-default startup loads the pieces it needs before composing finder options.
 
 ## Dependencies
 
@@ -504,7 +504,7 @@ ff config .
 ft TODO src
 ```
 
-The ripgrep branch requests coloured matches even when redirected. For machine parsing, call `rg` directly with the desired `--color` mode.
+Both search backends use automatic color, so redirected and piped results contain no ANSI color escapes.
 
 #### fanprofile
 
@@ -788,8 +788,8 @@ Keep each surface at one level:
 |---|---|
 | `README.md` | Purpose, five-minute setup, requirements summary, and links |
 | `GUIDE.md` | Full behavior, examples, dependencies, safety boundaries, and gotchas |
-| `zhelp` catalogue | One-line command discovery, usage, example, and availability |
-| `80-tips.zsh` | Short, actionable reminders only |
+| `lib/help-catalogue.zsh` | One-line command discovery, usage, example, and availability |
+| `lib/tips-catalogue.zsh` | Short, actionable reminders for user-facing actions only |
 | `docs/specs/` | Historical decisions and acceptance criteria |
 
 When user-facing behavior changes, update every affected surface without copying long explanations between them.

@@ -4,15 +4,15 @@
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
 - `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `25-theme.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
-- `functions/ztheme`, `functions/_fbr_format_entry`, and `lib/theme-*.zsh` are trusted repo-local lazy helpers. Normal startup registers `ztheme`, the fbr row formatter, and lightweight registry/color stubs; command-only rendering, fbr formatting, palette, validation, and conversion code is parsed on first use.
+- `functions/ztheme`, `functions/_fbr_format_entry`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, `lib/tips-catalogue.zsh`, and `lib/upkg-registry.zsh` are trusted repo-local lazy helpers. Normal startup registers fixed loaders and lightweight registry/color stubs; command-only rendering, catalogues, registries, fbr formatting, palette, validation, and conversion code is parsed on first use.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Documentation Ownership
 
 - `README.md` is the short entrypoint: purpose, five-minute setup, requirements summary, and links. Do not turn it into a second command reference.
 - `GUIDE.md` is the complete user reference. Keep detailed behavior, examples, dependency notes, safety boundaries, and gotchas there.
-- `65-help.zsh` keeps `zhelp` records terse: one clear summary, usage, editable example, dependency label, and live availability.
-- `80-tips.zsh` contains short, actionable reminders. Do not use tips for implementation notes, release history, or long edge-case explanations.
+- `65-help.zsh` registers the fixed `zhelp` loader; `lib/help-catalogue.zsh` keeps its records terse: one clear summary, usage, editable example, dependency label, and live availability.
+- `80-tips.zsh` registers the fixed `tips` loader; `lib/tips-catalogue.zsh` contains short, actionable reminders. Add tips only for user-facing actions that users can perform. Do not use tips for implementation notes, release history, or long edge-case explanations.
 - `docs/specs/` contains historical decisions and acceptance criteria. Mark implemented specs clearly and link readers to `GUIDE.md` for current usage.
 - Link between surfaces instead of copying long explanations. When behavior changes, update each affected surface at its intended level of detail.
 
@@ -32,7 +32,7 @@
 - `40-fzf.zsh` should stay safe in non-prompt startup paths. Keep the `fzf --zsh` init guarded so `zsh -i -c ...` does not hit `can't change option: zle` warnings.
 - `50-completion.zsh` only tunes `zstyle`s; it assumes the main `~/.zshrc` / Oh My Zsh layer already ran `compinit`.
 - Keep `50-completion.zsh` lightweight. Heavy completion UI options were intentionally removed because they made completion lists noticeably slower.
-- `80-tips.zsh` defines an on-demand `tips` shell function. Keep it hook-free; prompt hooks were removed because they added latency for every command cycle.
+- `80-tips.zsh` registers the on-demand `tips` shell function, and `lib/tips-catalogue.zsh` defines its first-use implementation and reminders. Keep both hook-free; prompt hooks were removed because they added latency for every command cycle.
 - `62-cgm.zsh` must remain entirely optional. `init.zsh` skips the whole module when `secret-tool` is absent; when available, sourcing must not contact Secret Service or read the catalogue. Never add a plaintext secret fallback, reveal command, `eval`-based export, completion path that retrieves values, or secret-loading path that leaves Zsh `xtrace` enabled.
 - Changes in `20-aliases.zsh` are high impact: it intentionally redefines common interactive commands such as `mkdir`, `cp`, `mv`, and `rm`.
 

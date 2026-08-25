@@ -5,7 +5,7 @@
 | Status | Implemented (batches 1–6); CR-26 deferred by its interface gate |
 | Validation date | 2026-08-25 |
 | Baseline | `71fce91` on `chore/25` |
-| Input | [`cross-review-consolidation-plan.md`](./cross-review-consolidation-plan.md) |
+| Input | Local cross-review consolidation of CR-01 through CR-27; the adjudicated findings are preserved below |
 | Current user reference | [`GUIDE.md`](../../GUIDE.md) |
 
 > This specification adjudicates the 27 consolidated cross-review findings against the current source, tests, documentation, and repository rules. The implementation outcome is recorded below; [`GUIDE.md`](../../GUIDE.md) remains the current user reference.

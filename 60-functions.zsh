@@ -4304,7 +4304,7 @@ if (( $+commands[nix] )); then
       command rm -f -- "$profile_error_file"
       trap - INT TERM
       print -u2 -r -- 'Failed to read Nix profile.'
-      [[ -n $profile_error ]] && print -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
+      [[ -n $profile_error ]] && print -u2 -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
       return 1
     }
     command rm -f -- "$profile_error_file"

@@ -112,6 +112,36 @@ file_contents() {
   [[ -f $file ]] && print -r -- "$(<"$file")"
 }
 
+test_runner_signal_exit() {
+  local fixture_root="$tmp_home/runner-signal"
+  local fakebin="$fixture_root/fakebin"
+  local call_log="$fixture_root/zsh-calls"
+  local output_file="$fixture_root/output"
+  local cmd_status call_count
+
+  command mkdir -p -- "$fixture_root/scripts" "$fixture_root/lib" "$fixture_root/functions" "$fakebin" || return 1
+  command cp -- "$repo_dir/scripts/run-tests.zsh" "$fixture_root/scripts/run-tests.zsh" || return 1
+  command touch -- "$fixture_root/init.zsh" "$fixture_root/lib/fixture.zsh" \
+    "$fixture_root/functions/ztheme" "$fixture_root/functions/_fbr_format_entry" || return 1
+  print -r -- '#!/bin/sh
+printf "%s\n" "$*" >> "$RUNNER_SIGNAL_CALL_LOG"
+kill -INT "$PPID"
+exit 0' >"$fakebin/zsh"
+  command chmod +x -- "$fakebin/zsh"
+
+  RUNNER_SIGNAL_CALL_LOG=$call_log PATH="$fakebin:$PATH" \
+    "$zsh_bin" "$fixture_root/scripts/run-tests.zsh" >"$output_file" 2>&1
+  cmd_status=$?
+
+  if [[ $cmd_status != 130 ]]; then
+    command cat -- "$output_file" >&2
+    print -u2 -r -- "runner calls: $(file_contents "$call_log")"
+  fi
+  assert_status "$cmd_status" 130 'ordered test runner preserves SIGINT status' || return 1
+  call_count=$(command wc -l <"$call_log")
+  assert_equals "${call_count//[[:space:]]/}" 1 'ordered test runner stops after SIGINT' || return 1
+}
+
 run_init_case() {
   local label=$1
   local setup=${2-}
@@ -942,6 +972,7 @@ main() {
 
   run_init_case 'clean init smoke test' || return 1
   run_init_case 'high-risk alias init smoke test' "$high_risk_alias_setup" || return 1
+  test_runner_signal_exit || return 1
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
   test_glob_policy || return 1
