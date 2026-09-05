@@ -159,7 +159,7 @@ Pipes, redirects, narrow terminals, non-UTF-8 locales, and dumb terminals receiv
 | `ZSH_UI_GLYPHS=auto` | Select `auto`, `nerd`, `unicode`, or `ascii` dashboard and finder glyphs independently of color |
 | `ZSH_UI_CUSTOM_COLORS` | Provide all semantic roles as a validated associative array for the `custom` theme |
 | `NO_COLOR=1` | Force dashboards to plain output and fzf to its no-color presentation |
-| `NO_NERD_FONT=1` | Keep colour but use ordinary Unicode rather than private-use Nerd Font glyphs |
+| `NO_NERD_FONT=1` | Downgrade Nerd Font tiers to ordinary Unicode without touching color |
 | `zhelp --plain` | Force the stable plain help view |
 
 Set theme variables before sourcing `init.zsh`. `terminal` is the default. Invalid names and incomplete or malformed custom palettes fall back to it without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents.
@@ -178,14 +178,16 @@ Set theme variables before sourcing `init.zsh`. `terminal` is the default. Inval
 
 The fixed palette values are adapted from the MIT-licensed [Catppuccin](https://catppuccin.com/palette/), [Nord](https://github.com/nordtheme/nord), and [Gruvbox](https://github.com/morhetz/gruvbox) projects. The resolver emits RGB when `COLORTERM` is `truecolor` or `24bit`, xterm-256 values when `TERM` contains `256color`, and deterministic ANSI colors otherwise. It uses no terminal query or source-time subprocess.
 
-Glyph selection is independent of palette and color depth:
+Glyph selection is independent of palette and color depth. UTF-8 support alone does not prove private-use icons exist in the font, so automatic mode stays with ordinary Unicode and Nerd Font icons are an explicit opt-in:
 
 | Mode | Behavior |
 |---|---|
-| `auto` | Nerd Font symbols in UTF-8 locales; ordinary Unicode when `NO_NERD_FONT` is set; ASCII outside UTF-8 |
+| `auto` | Ordinary Unicode in UTF-8 locales; ASCII outside UTF-8 |
 | `nerd` | Private-use Nerd Font icons plus Unicode structure symbols |
 | `unicode` | Ordinary Unicode only, with no private-use glyphs |
 | `ascii` | ASCII pointers, markers, separators, and status symbols only |
+
+`NO_NERD_FONT=1` records that the terminal lacks private-use glyphs and downgrades even an explicit `nerd` tier to Unicode. Verify the resolved tier and its sample symbols with `ztheme current` before settling on a mode.
 
 Selection, focus, success, warning, and danger retain text, pointer, marker, label, or status-word cues rather than relying only on color. `NO_NERD_FONT` affects symbols, not color; `NO_COLOR` affects repository-managed color, not picker availability.
 
@@ -245,7 +247,7 @@ Inherited widget, general/path/directory completion, and `_ZO_FZF_OPTS` values a
 
 ```zsh
 ztheme list                 # list built-ins and mark active/default themes
-ztheme current              # show theme, layout, glyph, depth, and option layers
+ztheme current              # show theme, layout, glyph tier with a sample, depth, and option layers
 ztheme show nord            # show semantic role values or terminal swatches
 ztheme use nord             # switch dashboards and future fzf launches now
 ztheme reset                # restore the terminal theme now
@@ -495,7 +497,7 @@ Finder presentation is compiled separately from the trusted integration cache. C
 | Ctrl+R | Select a history entry and insert it for editing |
 | Alt+C | Select a directory and change to it |
 
-Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R uses `?` to toggle its full-command preview. In preview pickers, Ctrl+P toggles the preview and Ctrl+/ toggles word wrapping; the established Ctrl+R `?` binding remains available.
+Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
@@ -579,7 +581,7 @@ fkill 9
 fkill --all 15
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed widths, so subjects begin in one stable column even when branch names differ; long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
+`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and combining marks as zero. Long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
 
 ## Credential manager: cgm
 

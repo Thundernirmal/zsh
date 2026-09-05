@@ -47,7 +47,7 @@ for theme in catppuccin-mocha catppuccin-latte nord gruvbox-dark; do
 done
 print -r -- "loaded=$_ZSH_THEME_BUILTIN_PALETTES_LOADED colors=${#_ZSH_THEME_COLORS}"')
   assert_status "$?" 0 'every fixed built-in defines valid RGB values' || return 1
-  assert_equals "${${(f)output}[1]}" 'terminal||terminal|terminal|truecolor|nerd' 'defaults resolve to the terminal theme, truecolor, and Nerd glyphs' || return 1
+  assert_equals "${${(f)output}[1]}" 'terminal||terminal|terminal|truecolor|unicode' 'defaults resolve to the terminal theme, truecolor, and Unicode glyphs' || return 1
   assert_equals "${${(f)output}[2]}" 'themes=5 roles=15 colors=0' 'startup defers fixed palette data until a color is requested' || return 1
   assert_equals "${${(f)output}[3]}" 'loaded=1 colors=60' 'first fixed-color lookup loads every built-in palette' || return 1
 }
@@ -62,7 +62,7 @@ _zsh_theme_sgr accent fg; print -r -- "${(V)REPLY}"
 _zsh_theme_sgr_for_theme catppuccin-latte text fg ansi; print -r -- "${(V)REPLY}"
 _zsh_theme_sgr_for_theme terminal base bg truecolor; print -r -- "${(V)REPLY}"
 _zsh_theme_signature; print -r -- "$REPLY"')
-  assert_equals "$output" $'#cba6f7\n183\n9\n^[[38;2;203;166;247m\n^[[30m\n^[[49m\ncatppuccin-mocha:catppuccin-mocha:truecolor:nerd:compact:' 'theme APIs resolve deterministic RGB, 256, active/named SGR, and signature values' || return 1
+  assert_equals "$output" $'#cba6f7\n183\n9\n^[[38;2;203;166;247m\n^[[30m\n^[[49m\ncatppuccin-mocha:catppuccin-mocha:truecolor:unicode:compact:' 'theme APIs resolve deterministic RGB, 256, active/named SGR, and signature values' || return 1
 
   output=$(run_theme_case '' '
 _zsh_theme_color_value base ui truecolor; print -r -- "$REPLY"
@@ -96,7 +96,7 @@ test_fallbacks_and_modes() {
   local output
   output=$(run_theme_case 'typeset -g ZSH_UI_THEME=unknown; typeset -g ZSH_FZF_THEME=also-unknown; typeset -g ZSH_FZF_LAYOUT=huge; typeset -g ZSH_UI_GLYPHS=emoji' '
 print -r -- "$ZSH_UI_THEME|$ZSH_FZF_THEME|$ZSH_FZF_LAYOUT|$ZSH_UI_GLYPHS|$_ZSH_UI_GLYPH_TIER|${#_ZSH_THEME_RESOLUTION_ISSUES}"')
-  assert_equals "$output" 'terminal|terminal|compact|auto|nerd|4' 'unknown public settings fall back without partial application' || return 1
+  assert_equals "$output" 'terminal|terminal|compact|auto|unicode|4' 'unknown public settings fall back without partial application' || return 1
 
   output=$(NO_COLOR=1 NO_NERD_FONT=1 TERM=xterm-256color COLORTERM=truecolor LANG=en_US.UTF-8 \
     "$zsh_bin" -dfc "source ${(q)repo_dir}/25-theme.zsh; print -r -- \"\$_ZSH_UI_COLOR_DEPTH|\$_ZSH_UI_GLYPH_TIER\"")
@@ -114,6 +114,21 @@ for key in pointer marker gutter scrollbar separator wrap; do
 done
 print -r -- "$glyphs"')
   assert_equals "$output" '>,+,|,|,-,>,' 'ASCII glyph mode contains only the frozen ASCII symbols' || return 1
+}
+
+test_glyph_tier_selection() {
+  local output
+  output=$(run_theme_case '' '
+print -r -- "$_ZSH_UI_GLYPH_TIER"')
+  assert_equals "$output" 'unicode' 'auto defaults to ordinary Unicode in UTF-8 locales' || return 1
+
+  output=$(run_theme_case 'typeset -g ZSH_UI_GLYPHS=nerd' '
+print -r -- "$_ZSH_UI_GLYPH_TIER"')
+  assert_equals "$output" 'nerd' 'Nerd Font icons stay available as an explicit preference' || return 1
+
+  output=$(NO_NERD_FONT=1 TERM=xterm-256color COLORTERM=truecolor LANG=en_US.UTF-8 \
+    "$zsh_bin" -dfc "typeset -g ZSH_UI_GLYPHS=nerd; source ${(q)repo_dir}/25-theme.zsh; print -r -- \"\$_ZSH_UI_GLYPH_TIER\"")
+  assert_equals "$output" 'unicode' 'NO_NERD_FONT downgrades even an explicit Nerd Font tier' || return 1
 }
 
 test_dashboard_renderer() {
@@ -351,7 +366,7 @@ test_idempotence_and_safety() {
 _zsh_theme_signature; first=$REPLY
 source '"${repo_dir}"'/25-theme.zsh
 _zsh_theme_signature; print -r -- "$first|$REPLY|${#_ZSH_UI_THEME_NAMES}|${#_ZSH_THEME_COLORS}"')
-  assert_equals "$output" 'terminal:terminal:truecolor:nerd:compact:|terminal:terminal:truecolor:nerd:compact:|5|0' 're-sourcing is idempotent after an unsafe theme name fallback' || return 1
+  assert_equals "$output" 'terminal:terminal:truecolor:unicode:compact:|terminal:terminal:truecolor:unicode:compact:|5|0' 're-sourcing is idempotent after an unsafe theme name fallback' || return 1
   [[ ! -e $marker ]]
   assert_status "$?" 0 'theme names are data and cannot execute shell syntax' || return 1
 
@@ -387,6 +402,7 @@ main() {
   test_color_resolution || return 1
   test_custom_palette || return 1
   test_fallbacks_and_modes || return 1
+  test_glyph_tier_selection || return 1
   test_dashboard_renderer || return 1
   test_fzf_compiler || return 1
   test_picker_presentation || return 1

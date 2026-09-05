@@ -202,15 +202,88 @@ _ui_repeat() {
   print -nr -- "$out"
 }
 
+# Terminal-cell width of one code point: 0 for combining and format marks,
+# 2 for East Asian wide and fullwidth ranges, 1 otherwise. The ranges follow
+# the usual wcwidth tables. Pure Zsh so per-row measurement never spawns a
+# subprocess.
+_ui_char_width() {
+  emulate -L zsh
+
+  integer code=$1
+  if (( (code >= 0x0300 && code <= 0x036F) ||
+        (code >= 0x0483 && code <= 0x0489) ||
+        (code >= 0x0591 && code <= 0x05BD) ||
+        code == 0x05BF || (code >= 0x05C1 && code <= 0x05C2) ||
+        (code >= 0x05C4 && code <= 0x05C5) || code == 0x05C7 ||
+        (code >= 0x0610 && code <= 0x061A) ||
+        (code >= 0x064B && code <= 0x065F) || code == 0x0670 ||
+        (code >= 0x06D6 && code <= 0x06DC) ||
+        (code >= 0x06DF && code <= 0x06E4) ||
+        (code >= 0x06E7 && code <= 0x06E8) ||
+        (code >= 0x06EA && code <= 0x06ED) ||
+        (code >= 0x200B && code <= 0x200F) ||
+        (code >= 0x202A && code <= 0x202E) ||
+        (code >= 0x20D0 && code <= 0x20FF) ||
+        (code >= 0x3099 && code <= 0x309A) ||
+        (code >= 0xFE00 && code <= 0xFE0F) ||
+        (code >= 0xFE20 && code <= 0xFE2F) || code == 0xFEFF )); then
+    REPLY=0
+  elif (( (code >= 0x1100 && code <= 0x115F) ||
+          code == 0x2329 || code == 0x232A ||
+          (code >= 0x2E80 && code <= 0x303E) ||
+          (code >= 0x3041 && code <= 0x33FF) ||
+          (code >= 0x3400 && code <= 0x4DBF) ||
+          (code >= 0x4E00 && code <= 0xA4CF) ||
+          (code >= 0xAC00 && code <= 0xD7A3) ||
+          (code >= 0xF900 && code <= 0xFAFF) ||
+          (code >= 0xFE10 && code <= 0xFE19) ||
+          (code >= 0xFE30 && code <= 0xFE4F) ||
+          (code >= 0xFF00 && code <= 0xFF60) ||
+          (code >= 0xFFE0 && code <= 0xFFE6) ||
+          (code >= 0x20000 && code <= 0x2FFFD) ||
+          (code >= 0x30000 && code <= 0x3FFFD) )); then
+    REPLY=2
+  else
+    REPLY=1
+  fi
+}
+
+# Terminal-cell width of already-sanitized text. Visible escapes are plain
+# ASCII, so they measure one cell per character; wide characters measure two
+# and combining marks zero. Pure Zsh, no subprocesses.
+_ui_display_width() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local text=$1 char
+  local non_ascii_pattern='*[^ -~]*'
+  integer index code width=0
+
+  if [[ $text != ${~non_ascii_pattern} ]]; then
+    REPLY=${#text}
+    return 0
+  fi
+
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( width += REPLY ))
+  done
+  REPLY=$width
+}
+
 _ui_truncate_reply() {
   emulate -L zsh
+  setopt MULTIBYTE
 
   local width=$1
   shift
 
   local text="$*"
   local marker='…'
-  integer left right
+  local char prefix='' suffix=''
+  integer index code char_width text_width marker_width left right prefix_width suffix_width
 
   (( width > 0 )) || {
     REPLY=''
@@ -221,24 +294,59 @@ _ui_truncate_reply() {
     marker='...'
   fi
 
-  if (( ${#text} <= width )); then
+  _ui_display_width "$text"
+  text_width=$REPLY
+  if (( text_width <= width )); then
     REPLY=$text
     return 0
   fi
 
-  if (( width <= ${#marker} + 1 )); then
-    REPLY=${text[1,width]}
+  _ui_display_width "$marker"
+  marker_width=$REPLY
+  if (( width <= marker_width + 1 )); then
+    prefix=''
+    prefix_width=0
+    for (( index = 1; index <= ${#text}; index++ )); do
+      char=${text[$index]}
+      printf -v code '%d' "'$char"
+      _ui_char_width $code
+      char_width=$REPLY
+      (( prefix_width + char_width > width )) && break
+      prefix+=$char
+      (( prefix_width += char_width ))
+    done
+    REPLY=$prefix
     return 0
   fi
 
-  left=$(( (width - ${#marker}) / 2 ))
-  right=$(( width - ${#marker} - left ))
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
 
-  if (( right > 0 )); then
-    REPLY="${text[1,left]}${marker}${text[-$right,-1]}"
-  else
-    REPLY="${text[1,left]}${marker}"
-  fi
+  prefix=''
+  prefix_width=0
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( prefix_width + char_width > left )) && break
+    prefix+=$char
+    (( prefix_width += char_width ))
+  done
+
+  suffix=''
+  suffix_width=0
+  for (( index = ${#text}; index >= 1; index-- )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( suffix_width + char_width > right )) && break
+    suffix="${char}${suffix}"
+    (( suffix_width += char_width ))
+  done
+
+  REPLY="${prefix}${marker}${suffix}"
 }
 
 _ui_truncate() {
@@ -256,14 +364,19 @@ _ui_pad_reply() {
 
   _ui_truncate_reply "$width" "$*"
   local text=$REPLY
-  local padding=$(( width - ${#text} ))
+  local text_width
+  integer padding_width
 
-  (( padding < 0 )) && padding=0
+  _ui_display_width "$text"
+  text_width=$REPLY
+  padding_width=$(( width - text_width ))
+
+  (( padding_width < 0 )) && padding_width=0
 
   if [[ $align == right ]]; then
-    printf -v REPLY '%*s%s' "$padding" '' "$text"
+    printf -v REPLY '%*s%s' "$padding_width" '' "$text"
   else
-    printf -v REPLY '%s%*s' "$text" "$padding" ''
+    printf -v REPLY '%s%*s' "$text" "$padding_width" ''
   fi
 }
 

@@ -557,6 +557,43 @@ test_control_character_paths() {
   done
 }
 
+test_display_width() {
+  local width padded truncated
+
+  _ui_display_width 'hello'
+  assert_equals "$REPLY" 5 'narrow text measures one cell per character' || return 1
+  _ui_display_width 'a雪b'
+  assert_equals "$REPLY" 4 'wide CJK characters measure two cells' || return 1
+  _ui_display_width $'e\u0301'
+  assert_equals "$REPLY" 1 'combining marks add no cells' || return 1
+  _ui_display_width '\n'
+  assert_equals "$REPLY" 2 'sanitized visible escapes measure their shown cells' || return 1
+
+  _ui_char_width 0x41
+  assert_equals "$REPLY" 1 'ASCII measures one cell' || return 1
+  _ui_char_width 0x4E00
+  assert_equals "$REPLY" 2 'CJK Unified Ideographs measure two cells' || return 1
+  _ui_char_width 0x0301
+  assert_equals "$REPLY" 0 'combining code points measure zero cells' || return 1
+  assert_not_contains "${functions[_ui_display_width]}" 'command ' 'cell measurement spawns no subprocesses' || return 1
+  assert_not_contains "${functions[_ui_char_width]}" '$(' 'cell tables use no command substitution' || return 1
+
+  _ui_pad_reply left 6 'a雪'
+  padded=$REPLY
+  assert_equals "$padded" 'a雪   ' 'padding aligns by cells rather than characters' || return 1
+  _ui_display_width "$padded"
+  assert_equals "$REPLY" 6 'padded CJK rows fill the requested cells' || return 1
+
+  truncated=$(_ui_safe_truncate 6 'ab雪cd')
+  assert_equals "$truncated" 'ab雪cd' 'fitting CJK text is left whole' || return 1
+  truncated=$(_ui_safe_truncate 5 'ab雪cd')
+  assert_equals "$truncated" 'a...d' 'CJK truncation keeps whole cells around the marker' || return 1
+  _ui_display_width "$truncated"
+  assert_equals "$REPLY" 5 'truncated CJK rows fit the requested cells' || return 1
+  truncated=$(_ui_safe_truncate 3 $'e\u0301x')
+  assert_equals "$truncated" $'e\u0301x' 'combining sequences survive truncation' || return 1
+}
+
 test_alias_probes_are_quiet() {
   local fakebin="$tmp_dir/fakebin"
   local stdout_file="$tmp_dir/aliases.stdout"
@@ -763,7 +800,7 @@ test_fbr_worktree_navigation() {
   assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\tworktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1
 
   _fbr_format_entry 'unicode-λ-雪' 'now' $'control-\e[31m' '' '' '' 18 8
-  assert_equals "$REPLY" $'unicode-λ-雪       \tnow     \tcontrol-\\e[31m\t\tunicode-λ-雪' 'fbr preserves Unicode and sanitizes controls byte-for-byte' || return 1
+  assert_equals "$REPLY" $'unicode-λ-雪      \tnow     \tcontrol-\\e[31m\t\tunicode-λ-雪' 'fbr pads CJK rows by terminal cells while sanitizing controls byte-for-byte' || return 1
   _fbr_format_entry '1234567890' '1234567890' subject '' '' '' 5 4
   assert_equals "$REPLY" $'1...0\t1234\tsubject\t\t1234567890' 'fbr preserves width-boundary truncation byte-for-byte' || return 1
 
@@ -922,6 +959,7 @@ main() {
   test_dusage_oversized_operand_set || return 1
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
+  test_display_width || return 1
   test_alias_probes_are_quiet || return 1
   test_small_helper_success_paths || return 1
   test_fkill_signals || return 1

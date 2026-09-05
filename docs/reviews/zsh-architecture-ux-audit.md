@@ -134,6 +134,8 @@ The README gives the source snippet but omits a concrete clone/setup step. The e
 
 **Fix:** default auto to ordinary Unicode; make Nerd Font icons an explicit preference. Keep a compact preview in setup/help so the user can verify their choice.
 
+**Status (2026-09-05): fixed.** `auto` now resolves to Unicode in UTF-8 locales (ASCII outside them); Nerd Font icons require `ZSH_UI_GLYPHS=nerd`, while `NO_NERD_FONT=1` downgrades even an explicit `nerd` tier. `ztheme current` prints the resolved tier with a compact pointer/marker/gutter sample. Covered by `test_glyph_tier_selection` plus updated default/signature/fallback/idempotence expectations.
+
 [Evidence: glyph resolver](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/25-theme.zsh#L105-L132).
 
 ### M6 — Display width uses character count instead of terminal cells
@@ -143,6 +145,8 @@ The README gives the source snippet but omits a concrete clone/setup step. The e
 Padding and truncation use `${#text}`. Wide CJK characters and combining sequences do not occupy one terminal cell per character, so columns can misalign or wrap despite the numeric width calculation.
 
 **Fix:** introduce one display-width primitive and use it consistently after control-character sanitization. Verify narrow, wide-character and combining-character fixtures. Do not add per-row external processes just to calculate width.
+
+**Status (2026-09-05): fixed.** `_ui_char_width`/`_ui_display_width` in `55-ui-helpers.zsh` measure terminal cells purely in Zsh (wide CJK as two, combining marks as zero) and drive `_ui_truncate_reply`, `_ui_pad_reply`, and `_ui_safe_truncate` (with a character-count fallback when the helper is unavailable). Covered by `test_display_width` (narrow, CJK, combining, escape fixtures plus aligned pad/truncate rows) and a cell-based `fbr` CJK fixture.
 
 [Evidence: truncation and padding](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/55-ui-helpers.zsh#L216-L288).
 
@@ -163,7 +167,7 @@ Padding and truncation use `${#text}`. Wide CJK characters and combining sequenc
 
 These recommendations are grounded in [help implementation](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/lib/help-catalogue.zsh), [fzf configuration](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/40-fzf.zsh), [commands](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/lib/functions-catalogue.zsh), [CGM](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/62-cgm.zsh) and [completions](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/66-compdefs.zsh). They are not all defects; several deliberately change documented behavior.
 
-**Status (2026-09-05): discovery rows fixed.** Help discovery ships `upkg-plan`, `npkg-remove`, and `cgm-env` action entries that resolve through their parent command; the palette now receives the whole eligible catalogue with the CLI query as a seed so clearing it broadens results (plain search stays filtered); and plain listings name hidden unavailable commands with a pointer to `zhelp --all`. Covered by `test_action_entries_and_browsing`. History-search bindings, command `--help` flags, network timeouts, credential status, search-backend flags, extraction options, and Nix completion caching remain open and are staged separately.
+**Status (2026-09-05): discovery rows fixed.** Help discovery ships `upkg-plan`, `npkg-remove`, and `cgm-env` action entries that resolve through their parent command; the palette now receives the whole eligible catalogue with the CLI query as a seed so clearing it broadens results (plain search stays filtered); and plain listings name hidden unavailable commands with a pointer to `zhelp --all`. The history row is fixed too: Ctrl+R uses the shared Ctrl+P preview toggle and Ctrl+/ wrap binding, leaving `?` searchable (covered by `preview_keys`). Covered by `test_action_entries_and_browsing`. Remaining UX rows (command `--help` flags, network timeouts, credential status, search-backend flags, extraction options, Nix completion caching) stay open for the next stage.
 
 ## What to preserve
 
@@ -184,3 +188,7 @@ These recommendations are grounded in [help implementation](https://github.com/T
 5. **Maintenance:** split the catalogue while preserving startup characteristics and existing command contracts. Add real fzf PTY coverage at the supported minimum and a newer version, plus representative terminal widths, NO_COLOR, Unicode/ASCII and cancellation paths. Real backend compatibility checks should remain separate from destructive package operations.
 
 Visual polish is already relatively mature. The next meaningful upgrade is making every selection, status and recovery path trustworthy.
+
+## Remediation verification log
+
+- 2026-09-05, compatibility stage: reviewed the inherited uncommitted M5/M6 and history-binding changes. Corrected an invalid Zsh pattern in the width fast path and restored completion-path reporting in `ztheme current`. The complete `zsh scripts/run-tests.zsh` runner passed under a 240-second timeout and a 1 GiB per-process virtual-memory limit. WSL crash diagnosis is outside this remediation at the maintainer’s request.

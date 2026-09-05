@@ -98,7 +98,7 @@ _fzf_export_config() {
   [[ -n $_FZF_INHERITED_CTRL_T_OPTS ]] && FZF_CTRL_T_OPTS+=" $_FZF_INHERITED_CTRL_T_OPTS"
   [[ -n ${NO_COLOR:-} ]] && FZF_CTRL_T_OPTS+=' --no-color'
 
-  _zsh_theme_fzf_context_args History 'Type to filter history' 'Enter insert  ? preview  Ctrl-/ wrap  Esc close'
+  _zsh_theme_fzf_context_args History 'Type to filter history' 'Enter insert  Ctrl-P preview  Ctrl-/ wrap  Esc close'
   context_args=( "${reply[@]}" )
   args=(
     "${context_args[@]}"
@@ -107,7 +107,7 @@ _fzf_export_config() {
     '--preview=echo {}'
     '--preview-window=down,3,hidden,wrap-word'
     --preview-label=Command
-    '--bind=?:toggle-preview,ctrl-/:toggle-preview-wrap-word'
+    '--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word'
   )
   _zsh_theme_join_shell_args "${args[@]}"
   export FZF_CTRL_R_OPTS=$REPLY

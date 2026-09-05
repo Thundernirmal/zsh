@@ -107,14 +107,17 @@ _zsh_theme_resolve_glyph_tier() {
     auto)
       if ! _zsh_theme_locale_is_utf8; then
         REPLY=ascii
-      elif [[ -n ${NO_NERD_FONT:-} ]]; then
-        REPLY=unicode
       else
-        REPLY=nerd
+        REPLY=unicode
       fi
       ;;
     *) return 1 ;;
   esac
+  # NO_NERD_FONT records that the terminal lacks private-use glyphs, so it
+  # always wins over a Nerd Font tier however that tier was requested.
+  if [[ -n ${NO_NERD_FONT:-} && $REPLY == nerd ]]; then
+    REPLY=unicode
+  fi
 }
 
 _zsh_theme_terminal_code() {

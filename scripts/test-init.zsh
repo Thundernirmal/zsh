@@ -812,11 +812,13 @@ nocolor=0
 [[ $FZF_DEFAULT_OPTS == *--no-color && $FZF_CTRL_T_OPTS == *--no-color && $FZF_CTRL_R_OPTS == *--no-color && $FZF_ALT_C_OPTS == *--no-color && $FZF_COMPLETION_OPTS == *--no-color && $FZF_COMPLETION_PATH_OPTS == *--no-color && $FZF_COMPLETION_DIR_OPTS == *--no-color && $_ZO_FZF_OPTS == *--no-color ]] && nocolor=1
 preview_plain=0
 [[ $FZF_CTRL_T_OPTS == *--color=never* && $FZF_CTRL_T_OPTS != *--color=always* ]] && preview_plain=1
+preview_keys=0
+[[ $FZF_CTRL_R_OPTS == *ctrl-p:toggle-preview* && $FZF_CTRL_R_OPTS != *"?:toggle-preview"* ]] && preview_keys=1
 
 source "$HOME/.config/zsh/40-fzf.zsh"
 duplicates=0
 [[ $FZF_DEFAULT_OPTS == *--user-default*--user-default* || $FZF_COMPLETION_PATH_OPTS == *--user-paths*--user-paths* || $_ZO_FZF_OPTS == *--user-zoxide*--user-zoxide* ]] && duplicates=1
-print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain duplicates=$duplicates"' > "$script_file"
+print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain preview_keys=$preview_keys duplicates=$duplicates"' > "$script_file"
 
   HOME="$tmp_home" \
     XDG_CACHE_HOME="$case_dir/cache" \
@@ -832,7 +834,7 @@ print -r -- "structured=$structured contexts=$contexts completion=$completion pr
   diagnostics=$(file_contents "$stderr_file")
 
   assert_status "$cmd_status" 0 'theme-aware fzf option fixture completes' || return 1
-  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
+  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 preview_keys=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
   assert_equals "$diagnostics" '' 'theme-aware fzf option refresh stays quiet' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 1 'theme/layout/no-color refresh does not repeat version validation' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 1 'theme/layout/no-color refresh does not regenerate integration' || return 1

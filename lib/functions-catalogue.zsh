@@ -363,7 +363,8 @@ _ui_safe_truncate() {
   local marker='…'
   local token pair quad prefix='' suffix=''
   local -a tokens
-  integer index left right token_length
+  integer index left right token_width prefix_width suffix_width text_width marker_width
+  integer have_display_width=$(( $+functions[_ui_display_width] ))
 
   (( width > 0 )) || {
     print -r -- ''
@@ -374,12 +375,22 @@ _ui_safe_truncate() {
     marker='...'
   fi
 
-  if (( ${#text} <= width )); then
+  if (( have_display_width )); then
+    _ui_display_width "$text"
+    text_width=$REPLY
+    _ui_display_width "$marker"
+    marker_width=$REPLY
+  else
+    text_width=${#text}
+    marker_width=${#marker}
+  fi
+
+  if (( text_width <= width )); then
     print -r -- "$text"
     return 0
   fi
 
-  if (( width <= ${#marker} )); then
+  if (( width <= marker_width )); then
     print -r -- "${marker[1,width]}"
     return 0
   fi
@@ -407,20 +418,34 @@ _ui_safe_truncate() {
     tokens+=("$token")
   done
 
-  left=$(( (width - ${#marker}) / 2 ))
-  right=$(( width - ${#marker} - left ))
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
 
+  prefix_width=0
   for token in "${tokens[@]}"; do
-    token_length=${#token}
-    (( ${#prefix} + token_length <= left )) || break
+    if (( have_display_width )); then
+      _ui_display_width "$token"
+      token_width=$REPLY
+    else
+      token_width=${#token}
+    fi
+    (( prefix_width + token_width <= left )) || break
     prefix+=$token
+    (( prefix_width += token_width ))
   done
 
+  suffix_width=0
   for (( index = ${#tokens[@]}; index >= 1; index-- )); do
     token=${tokens[$index]}
-    token_length=${#token}
-    (( ${#suffix} + token_length <= right )) || break
+    if (( have_display_width )); then
+      _ui_display_width "$token"
+      token_width=$REPLY
+    else
+      token_width=${#token}
+    fi
+    (( suffix_width + token_width <= right )) || break
     suffix="${token}${suffix}"
+    (( suffix_width += token_width ))
   done
 
   print -r -- "${prefix}${marker}${suffix}"

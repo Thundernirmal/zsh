@@ -2,6 +2,7 @@
 # First-use availability checks use Zsh's prehashed command table.
 
 _zsh_tip_pool=(
+  "Run ztheme current to preview glyphs; Nerd Font icons require ZSH_UI_GLYPHS=nerd"
   "Use .., ..., or .... to move up one, two, or three directories"
   "Use - to return to the previous directory"
   "Run dirs -v to inspect the directory stack"
@@ -51,7 +52,7 @@ fi
 
 if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
   _zsh_tip_pool+=(
-    "Press Ctrl+R to insert a history entry for editing"
+    "Press Ctrl+R to insert history; Ctrl+P toggles its preview and ? stays searchable"
     "Press Ctrl+T to insert a selected file path"
     "Press Alt+C to select and enter a directory"
     "Type in the unfilled fzf input row to filter; use the footer for keys"
