@@ -24,7 +24,13 @@ The configuration is a GNU/Linux-focused layer that is sourced by a machine-loca
 
 ## Setup and scope
 
-The repository is expected at `~/.config/zsh` because `init.zsh` loads modules from that fixed location. Add this near the end of `~/.zshrc`:
+The repository is expected at `~/.config/zsh` because `init.zsh` loads modules from that fixed location. Clone it into an empty target directory:
+
+```sh
+git clone https://github.com/Thundernirmal/zsh.git "$HOME/.config/zsh"
+```
+
+Add this near the end of `~/.zshrc`:
 
 ```zsh
 if [ -r "$HOME/.config/zsh/init.zsh" ]; then
@@ -32,10 +38,18 @@ if [ -r "$HOME/.config/zsh/init.zsh" ]; then
 fi
 ```
 
-Source it after Oh My Zsh when these aliases and functions should override framework defaults. Reload with:
+Source it after Oh My Zsh when these aliases and functions should override framework defaults. Without a framework, run `compinit` before the snippet so Tab completion registers:
+
+```zsh
+autoload -Uz compinit && compinit -i
+```
+
+Reload and verify with:
 
 ```zsh
 exec zsh
+$HOME/.config/zsh/scripts/check-deps.sh
+zdoctor
 ```
 
 The shared layer manages:
@@ -54,7 +68,7 @@ It does not manage:
 - `compinit` startup
 - non-Zsh shells
 
-Unreadable module files are skipped. The optional credential module is skipped entirely when `secret-tool` is absent at startup.
+Unreadable module files are skipped. The optional credential module is skipped entirely when `secret-tool` is absent at startup. Either silence means a degraded shell without an error, so run `zdoctor` when a feature is missing: it reports install location, unreadable modules, completion readiness, tool availability, glyph settings, and integration status, and returns nonzero while a real failure is present.
 
 ## Module layout
 
@@ -63,13 +77,13 @@ Unreadable module files are skipped. The optional credential module is skipped e
 | Module | Responsibility |
 |---|---|
 | `10-history.zsh` | Shared 100,000-entry history |
-| `20-aliases.zsh` | Navigation, file, Git, and weather aliases |
+| `20-aliases.zsh` | Navigation, file, and Git aliases |
 | `25-theme.zsh` | Semantic palette registry, validation, color depth, glyphs, and reusable fzf presentation fragments |
 | `30-zoxide.zsh` | Guarded zoxide initialization and `zi` fzf gate |
 | `40-fzf.zsh` | fzf validation, secure integration cache, structured presentation, previews, and bindings |
 | `50-completion.zsh` | Lightweight global completion styles |
 | `55-ui-helpers.zsh` | Rich terminal rendering and plain fallbacks |
-| `60-functions.zsh` | Fixed lazy registrations for general helpers, session-only `ztheme`, `upkg`, and optional `npkg` |
+| `60-functions.zsh` | Fixed lazy registrations for general helpers, session-only `ztheme`, `upkg`, optional `npkg`, and `zdoctor` |
 | `62-cgm.zsh` | Optional Secret Service credential manager |
 | `65-help.zsh` | Fixed lazy-loader registration for `zhelp` |
 | `66-compdefs.zsh` | Command-aware completion definitions |
@@ -78,9 +92,9 @@ Unreadable module files are skipped. The optional credential module is skipped e
 
 The numbered filenames define load order. `50-completion.zsh` assumes an earlier layer already ran `compinit`; `66-compdefs.zsh` becomes a silent no-op when `compdef` is unavailable.
 
-The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/functions-catalogue.zsh`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while general command implementations, package workflows, command-only swatch/export logic, catalogues, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. `lib/upkg-registry.zsh` is instead a lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available. A configured custom or colored non-default startup loads the theme pieces it needs before composing finder options.
+The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/functions-*.zsh`, `lib/command-registry.zsh`, `lib/ui-width-data.zsh`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while general command implementations, package workflows, command-only swatch/export logic, catalogues, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. `lib/upkg-registry.zsh` is instead a lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available. A configured custom or colored non-default startup loads the theme pieces it needs before composing finder options.
 
-The first invocation of a general helper such as `ff`, `bigfiles`, `fbr`, `upkg`, or `npkg` loads the single fixed function catalogue. Later calls use the installed implementations directly. This keeps command availability and completion registration cheap during startup without scattering the helper graph across separate shallow files.
+General helpers load their fixed domain on first use: files/search, system diagnostics/network, Git, package orchestration/backend adapters, or Nix. Shared presentation fallbacks load once. Calling `mkcd` or `path` leaves package implementations unloaded; later calls use installed implementations directly. All paths remain fixed beneath the repository. Disk scanners collect records plus explicit state, diagnostics, and exit status before choosing a rich or plain renderer; both preserve partial-scan failures. `lib/command-registry.zsh` is data-only and shared by help and command-name completion; it records canonical names and descriptive mutation categories without authorizing any operation.
 
 ## Dependencies
 
@@ -116,6 +130,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 | `rg` | Faster `ft` content search | Recursive `grep` |
 | `jq` | `npkg refresh`, `npkg outdated`, and Nix pickers | Those workflows are unavailable; basic Nix commands still work |
 | `secret-tool` | Defines `cgm` | The entire module is skipped |
+| `gdbus` | Explicit `cgm check` backend health probe | Health check explains the missing GLib tool; storage and loading still work |
 | `nix` | Defines `npkg` and the `upkg` Nix backend | Nix commands are absent |
 | `nix-collect-garbage` | `upkg clean --only nix` | Nix cleanup reports a failure |
 | `unzip`, `unrar`, `7z`, and related tools | Format-specific extraction | `extract` reports the missing tool when used |
@@ -145,7 +160,7 @@ Pipes, redirects, narrow terminals, non-UTF-8 locales, and dumb terminals receiv
 | `ZSH_UI_GLYPHS=auto` | Select `auto`, `nerd`, `unicode`, or `ascii` dashboard and finder glyphs independently of color |
 | `ZSH_UI_CUSTOM_COLORS` | Provide all semantic roles as a validated associative array for the `custom` theme |
 | `NO_COLOR=1` | Force dashboards to plain output and fzf to its no-color presentation |
-| `NO_NERD_FONT=1` | Keep colour but use ordinary Unicode rather than private-use Nerd Font glyphs |
+| `NO_NERD_FONT=1` | Downgrade Nerd Font tiers to ordinary Unicode without touching color |
 | `zhelp --plain` | Force the stable plain help view |
 
 Set theme variables before sourcing `init.zsh`. `terminal` is the default. Invalid names and incomplete or malformed custom palettes fall back to it without evaluating input as shell code. The `terminal` palette prefers terminal-default backgrounds and ANSI accents.
@@ -164,16 +179,18 @@ Set theme variables before sourcing `init.zsh`. `terminal` is the default. Inval
 
 The fixed palette values are adapted from the MIT-licensed [Catppuccin](https://catppuccin.com/palette/), [Nord](https://github.com/nordtheme/nord), and [Gruvbox](https://github.com/morhetz/gruvbox) projects. The resolver emits RGB when `COLORTERM` is `truecolor` or `24bit`, xterm-256 values when `TERM` contains `256color`, and deterministic ANSI colors otherwise. It uses no terminal query or source-time subprocess.
 
-Glyph selection is independent of palette and color depth:
+Glyph selection is independent of palette and color depth. UTF-8 support alone does not prove private-use icons exist in the font, so automatic mode stays with ordinary Unicode and Nerd Font icons are an explicit opt-in:
 
 | Mode | Behavior |
 |---|---|
-| `auto` | Nerd Font symbols in UTF-8 locales; ordinary Unicode when `NO_NERD_FONT` is set; ASCII outside UTF-8 |
+| `auto` | Ordinary Unicode in UTF-8 locales; ASCII outside UTF-8 |
 | `nerd` | Private-use Nerd Font icons plus Unicode structure symbols |
 | `unicode` | Ordinary Unicode only, with no private-use glyphs |
 | `ascii` | ASCII pointers, markers, separators, and status symbols only |
 
-Selection, focus, success, warning, and danger retain text, pointer, marker, label, or status-word cues rather than relying only on color. `NO_NERD_FONT` affects symbols, not color; `NO_COLOR` affects repository-managed color, not picker availability.
+`NO_NERD_FONT=1` records that the terminal lacks private-use glyphs and downgrades even an explicit `nerd` tier to Unicode. Verify the resolved tier and its sample symbols with `ztheme current` before settling on a mode.
+
+Selection, focus, success, warning, and danger retain text, pointer, marker, label, or status-word cues rather than relying only on color. `NO_NERD_FONT` affects symbols, not color; `NO_COLOR` affects repository-managed color, not picker availability. The no-color options explicitly reset the footer to terminal-default foreground to work around fzf 0.68.0’s incomplete no-color theme.
 
 ### Custom palette contract
 
@@ -231,7 +248,7 @@ Inherited widget, general/path/directory completion, and `_ZO_FZF_OPTS` values a
 
 ```zsh
 ztheme list                 # list built-ins and mark active/default themes
-ztheme current              # show theme, layout, glyph, depth, and option layers
+ztheme current              # show theme, layout, glyph tier with a sample, depth, and option layers
 ztheme show nord            # show semantic role values or terminal swatches
 ztheme use nord             # switch dashboards and future fzf launches now
 ztheme reset                # restore the terminal theme now
@@ -341,9 +358,11 @@ zhelp --plain file     # stable text for a pipe or log
 zhelp --help
 ```
 
-The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. Exact names show usage, an example, and live availability.
+The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. A plain listing that hides entries says how many are unavailable and points at `zhelp --all`. Exact names show usage, an example, and live availability.
 
-In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
+The catalogue also carries action entries for multi-step workflows: `upkg-plan` (preview upgrades), `npkg-remove` (remove a Nix package), and `cgm-env` (load credentials) resolve through their parent command, so they disappear together when the parent is unavailable.
+
+In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. A CLI query only seeds the picker's search text; the whole eligible catalogue stays browsable, so clearing the query broadens results instead of trapping the selection in the pre-filtered rows. Piped or redirected search keeps the deterministic substring filter. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
 Sourcing `65-help.zsh` registers only a fixed repository-local loader. The catalogue, availability checks, and any subprocesses are deferred until `zhelp` is called; command completion loads catalogue data only when zhelp completion is invoked.
 
@@ -356,6 +375,19 @@ tip: Run mkcd <dir> to create and enter a directory
 ```
 
 It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Run it again for another hint.
+
+### zdoctor
+
+`zdoctor` checks the setup and reports problems without changing anything:
+
+```zsh
+zdoctor              # local checks only
+zdoctor --network    # also probe the myip and weather endpoints
+zdoctor --secrets    # also check secret-tool (values are never retrieved)
+zdoctor --help
+```
+
+It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. The exit status is nonzero while any failure is present; warnings alone keep it zero.
 
 ## Aliases
 
@@ -401,11 +433,17 @@ Under the zero-probe startup policy, the built-in `ls`, `ll`, and `la` fallbacks
 weather
 ```
 
-It is an alias for `curl --http1.1 -fsSL https://wttr.in` and does not implement a separate location argument.
+It is a lazy function using curl over HTTP/1.1 and does not implement a location argument. `weather --help` prints usage without making a request.
 
 ### Global aliases
 
-Global aliases expand as unquoted tokens anywhere in a command line:
+Global aliases are opt-in because unquoted tokens such as `H`, `T`, `G`, and `L` expand anywhere in a command line. For example, with aliases enabled, an interactively parsed `echo H` behaves as `echo | head`; a filename or search term can become shell syntax. They stay undefined by default. Personal users who want the previous behavior preserve it with one setting before startup:
+
+```zsh
+export ZSH_GLOBAL_ALIASES=1  # in ~/.zshrc, before sourcing init.zsh
+```
+
+Quote a token to keep it literal (`echo 'H'` prints `H`). When disabled, `zhelp` lists these entries as unavailable rather than offering them:
 
 | Alias | Expansion | Example |
 |---|---|---|
@@ -460,13 +498,13 @@ Finder presentation is compiled separately from the trusted integration cache. C
 | Ctrl+R | Select a history entry and insert it for editing |
 | Alt+C | Select a directory and change to it |
 
-Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R uses `?` to toggle its full-command preview. In preview pickers, Ctrl+P toggles the preview and Ctrl+/ toggles word wrapping; the established Ctrl+R `?` binding remains available.
+Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
 The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths. Every picker uses the same list/search/footer hierarchy and contextual ghost hint. At 100 columns and wider, textual previews sit beside the list; below 100 columns they move underneath. `fkill` and the Nix multi-select pickers show a live selected-item count in the footer. Git and Nix table pickers keep the visible identity column frozen, while `--accept-nth` returns undecorated branch, PID, example, or profile-target fields to the calling workflow; `fbr` also previews that undecorated branch rather than its optional `[WT]` display badge.
 
-Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` sends the requested signal after selection, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.
+Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` confirms SIGKILL and multi-selections naming targets and signal before sending, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.
 
 ## Function reference
 
@@ -474,10 +512,10 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 
 | Command | Purpose |
 |---|---|
-| `extract <archive>` | Unpack a supported archive |
+| `extract [--keep] [--destination <dir>] <archive>` | Unpack a supported archive |
 | `mkcd <dir>` | Create a directory and enter it |
-| `ff <pattern> [path]` | Find names case-insensitively |
-| `ft <pattern> [path]` | Search file contents |
+| `ff [options] <pattern> [path]` | Find names case-insensitively |
+| `ft [options] <pattern> [path]` | Search file contents |
 | `peek <file>` | Preview with `bat` or `cat` |
 | `headers <url>` | Follow redirects and print HTTP headers |
 | `fanprofile` | Show the current Linux platform or ASUS fan profile |
@@ -488,25 +526,29 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 | `path` | Print PATH entries |
 | `croot` | Change to the current Git repository root |
 | `gitcount` | Show non-merge commit counts by contributor |
-| `fkill [signal]` | Select processes and send a signal |
+| `fkill [--all] [signal]` | Select processes and send a signal |
 | `fbr` | Select a branch; enter its worktree or check it out |
+| `zdoctor [--network] [--secrets]` | Diagnose setup and integration status |
 
 #### extract
 
-Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files use their decompressors' normal in-place semantics, which usually remove the compressed input after success.
+Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression and refuse existing paths. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Use `--` before a leading-dash filename.
 
 #### ff and ft
 
-`ff` prefers `fd`, then `fdfind`, then `find`. The fd paths include hidden entries, follow links, and apply a case-insensitive substring glob. The fallback still searches hidden names but follows `find`'s normal symlink behavior.
+`ff` prefers `fd`, then `fdfind`, then `find`. It matches a case-insensitive substring glob, includes hidden entries, and follows symlinks by default on every backend. `--no-hidden` and `--no-follow` disable those behaviors; `--hidden` and `--follow` make the defaults explicit. `--no-ignore` includes fd-ignored files. The find fallback has no ignore-file filtering and explains that difference when `--no-ignore` is requested.
 
-`ft` prefers `rg` and falls back to recursive, binary-skipping `grep`:
+`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, and `--fixed-strings` (`-F`) explicitly. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches.
 
 ```zsh
-ff config .
-ft TODO src
+ff --no-ignore config .
+ft --hidden --no-ignore --fixed-strings 'a.b' src
+extract --keep -- file.gz
 ```
 
-Both search backends use automatic color, so redirected and piped results contain no ANSI color escapes.
+Text search uses automatic color for clean redirected output. General helpers accept `-h`/`--help` before work; usage errors return 1. Use `--` to end option parsing in `extract`, `ff`, and `ft`.
+
+`headers`, `myip`, and `weather` use 5-second connection and 15-second overall timeout budgets. Override them with positive integer `ZSH_HTTP_CONNECT_TIMEOUT` and `ZSH_HTTP_MAX_TIME` settings. Zero is rejected. Curl failures preserve the exit status and add a command-specific diagnostic.
 
 #### fanprofile
 
@@ -522,7 +564,7 @@ The command reports state only; it does not change the profile.
 
 #### dusage, bigfiles, and path
 
-`dusage` includes hidden immediate children and defaults to 20 rows. `bigfiles` searches recursively and also defaults to 20. Both keep readable results when another entry or subtree cannot be measured.
+`dusage` includes hidden immediate children and defaults to 20 rows. `bigfiles` searches recursively and also defaults to 20. Both preserve readable results when another entry or subtree cannot be measured, but they report `Incomplete scan (<tool> exit <code>); results are partial` on stderr, mark the rich dashboard with a warning and `(incomplete scan)` footer, and return nonzero. A clean scan still returns 0.
 
 `path` preserves empty PATH components. In command lookup, an empty component means the current directory; rich output labels it `.`, while plain output preserves an empty line.
 
@@ -534,15 +576,16 @@ All three commands apply the safe-text contract described in [Terminal output mo
 
 #### fkill and fbr
 
-`fkill` requires a terminal and defaults to `SIGTERM` (`15`), allowing graceful shutdown. Numeric and named forms are normalized, so `15`, `-15`, `TERM`, and `SIGTERM` all select the same signal. Invalid signals fail before the picker opens. Pass `9` only when force is necessary:
+`fkill` requires a terminal and defaults to `SIGTERM` (`15`), allowing graceful shutdown. Numeric and named forms are normalized, so `15`, `-15`, `TERM`, and `SIGTERM` all select the same signal. Invalid signals fail before the picker opens. The list shows PID, owner, elapsed time, and command with a preview of full details and working directory; it covers the current user's processes unless `--all` is given. A single SIGTERM sends immediately, while SIGKILL or a multi-selection names the targets and signal for confirmation first. Each kill reports its own outcome, and no privilege escalation is attempted. Pass `9` only when force is necessary:
 
 ```zsh
 fkill
 fkill SIGTERM
 fkill 9
+fkill --all 15
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed widths, so subjects begin in one stable column even when branch names differ; long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. This also applies when selecting the corresponding remote branch. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists.
+`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and Unicode nonspacing and format marks as zero. Committed Unicode 16.0 intervals load on first non-ASCII measurement and use pure-Zsh binary search. Emoji grapheme shaping and ambiguous-width characters remain terminal-dependent. Long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
 
 ## Credential manager: cgm
 
@@ -554,6 +597,8 @@ fkill 9
 |---|---|
 | `cgm set <name>` | Prompt invisibly and store or replace one value |
 | `cgm list` | List saved names without retrieving values |
+| `cgm status` | Show saved names and whether each is exported in this shell |
+| `cgm check` | Ping Secret Service explicitly, without retrieving values |
 | `cgm env <name ...>` | Load selected values into this shell |
 | `cgm env --all` | Load every catalogued value into this shell |
 | `cgm unset <name ...>` | Remove variables from this shell only |
@@ -571,6 +616,8 @@ Names must match `[A-Z_][A-Z0-9_]*`. CGM rejects Zsh special, read-only, and non
 - The name-only catalogue lives under `${XDG_DATA_HOME:-$HOME/.local/share}/cgm/entries/`; directories are created under `umask 077`, remain mode `0700`, and empty markers are `0600`. `XDG_DATA_HOME` is used only when absolute; a relative value falls back to an absolute `$HOME/.local/share`, and the operation fails when neither base is safe.
 - Secret loading disables inherited Zsh xtrace locally and restores the caller's state afterward.
 - `cgm env --all` retrieves and validates every value before exporting any, so one failure leaves the environment unchanged.
+
+“Saved” means a name-only marker exists; it does not prove the backend item still exists. `cgm status` inspects parameter metadata only: “loaded” means an exported scalar is present, including a value set outside CGM; it does not compare that value with storage. `cgm check` uses a bounded D-Bus peer ping through `gdbus`. A successful ping confirms the service is reachable, not that a collection is unlocked or each saved credential exists. Neither command retrieves values.
 
 ### Shell scope
 
@@ -643,10 +690,13 @@ Search accepts multiple words and passes them as separate query arguments:
 
 ```zsh
 upkg search ripgrep
+upkg search ripgrep --only=nix
 upkg search ripgrep viewer --only=brew,npm
 ```
 
 Results are normalized into one table with manager, package, available version, and a cheap native description when available. A no-match result is summarized once. Backend failures name the affected managers, and other managers continue.
+
+Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
 
 Homebrew formulae and casks are queried separately. Broad searches cap follow-up metadata calls at 50 formulae and 50 casks; refine the query when the cap warning appears.
 
@@ -697,6 +747,7 @@ Distribution outdated checks use existing local metadata; `upkg` does not refres
 ```zsh
 upkg
 upkg search ripgrep
+upkg search ripgrep --only=nix
 upkg managers
 upkg managers --only=npm,flatpak
 upkg plan --only=brew,npm
@@ -754,15 +805,15 @@ Ctrl+C stops and reaps only the command's recorded evaluation workers, removes i
 
 These are the cross-cutting rules most likely to surprise a new user:
 
-1. **The install path is fixed.** `init.zsh` loads `$HOME/.config/zsh/*.zsh`. A clone elsewhere needs a symlink or a deliberate code change.
+1. **The install path is fixed.** `init.zsh` loads `$HOME/.config/zsh/*.zsh`. A clone elsewhere needs a symlink or a deliberate code change. Run `zdoctor` to confirm the location and catch silently skipped modules.
 2. **Source order matters.** Source this layer after frameworks when its aliases should win. `~/.zshrc` itself is not versioned here.
 3. **File operations keep native semantics.** `mkdir`, `cp`, `mv`, and `rm` are not redefined. Add flags deliberately and keep real backups; shell prompts are not a backup strategy.
 4. **Interactive flags are situational.** If you opt into `-i`, remember that later flags such as `-f` can override it. Review the final command line before destructive operations.
 5. **Ordinary globs exclude dotfiles.** Use `*(D)` only when hidden entries are intentional. In contrast, `ff` and `dusage` explicitly include hidden entries by design.
 6. **Leading-space history is convenience, not secret storage.** `HIST_IGNORE_SPACE` reduces accidental persistence but does not protect process arguments, logs, terminal capture, or already-shared history.
-7. **Global aliases expand anywhere.** Unquoted tokens such as `G` or `NUL` can change a command far from its first word. Quote literal occurrences.
+7. **Global aliases are opt-in and expand anywhere.** They stay undefined unless `ZSH_GLOBAL_ALIASES=1` is exported before startup. Once enabled, unquoted tokens such as `G` or `NUL` can change a command far from its first word. Quote literal occurrences.
 8. **An empty PATH component means the current directory.** `path` preserves and exposes it because silently normalizing PATH would change command lookup.
-9. **Completion needs compinit.** Without `compdef`, command-specific completion quietly does nothing.
+9. **Completion needs compinit.** Without `compdef`, command-specific completion quietly does nothing. Run `zdoctor` to confirm readiness.
 10. **fzf is all-or-nothing at 0.68.0+.** An unsupported build blocks fuzzy workflows instead of enabling a reduced theme or partial bindings. Plain `zhelp` remains available.
 11. **Theme choice is machine-local.** `ztheme use` changes only the current shell, and `ztheme export` prints settings without editing `.zshrc`. This repository does not theme the prompt, terminal, tmux, editor, `bat`, Git, or `LS_COLORS`.
 12. **Ctrl+R does not execute the selection.** It inserts history into the command buffer for review and editing.
@@ -805,6 +856,8 @@ When user-facing behavior changes, update every affected surface without copying
 - Never add a plaintext CGM fallback, value-retrieving completion, or `eval`-based secret export.
 - Treat aliases in `20-aliases.zsh` as high-impact changes.
 
+Nix attribute completion reuses parsed names in the current session while each cache file’s device, inode, size, and modification time match. Replacing, adding, or removing cache files is reflected on the next completion. It never refreshes the index over the network.
+
 ### Required checks
 
 Run the repository-owned ordered sequence:
@@ -813,7 +866,7 @@ Run the repository-owned ordered sequence:
 zsh scripts/run-tests.zsh
 ```
 
-The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
+The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. Maintainers can regenerate width intervals with `python3 scripts/generate-width-data.py`; review the recorded Unicode version when doing so. A separate CI job runs `python3 scripts/test-fzf-pty.py` against real fzf 0.68.0 and 0.74.3, covering 50/100-column terminals, Unicode/ASCII, `NO_COLOR`, preview toggling, multi-selection, and cancellation. Run that command locally with Python 3 and supported fzf installed; set `FZF_BIN` to test another binary. These checks use fixture rows and perform no package mutations. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
 
 The environment check is optional because it reflects the current machine rather than repository correctness:
 

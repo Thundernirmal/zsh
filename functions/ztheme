@@ -100,7 +100,7 @@ _ztheme_list() {
 
 _ztheme_current() {
   emulate -L zsh
-  local external=no fzf_note='' depth glyph
+  local external=no fzf_note='' depth glyph sample=''
   if [[ -n ${_FZF_INHERITED_DEFAULT_OPTS:-}${_FZF_INHERITED_CTRL_T_OPTS:-}${_FZF_INHERITED_CTRL_R_OPTS:-}${_FZF_INHERITED_ALT_C_OPTS:-}${_FZF_INHERITED_COMPLETION_OPTS:-}${_FZF_INHERITED_COMPLETION_PATH_OPTS:-}${_FZF_INHERITED_COMPLETION_DIR_OPTS:-}${_ZSH_ZOXIDE_INHERITED_FZF_OPTS:-}${ZSH_FZF_EXTRA_OPTS:-} ]]; then
     external=yes
   fi
@@ -112,10 +112,17 @@ _ztheme_current() {
   else
     glyph=${_ZSH_UI_GLYPH_TIER:-ascii}
   fi
+  if (( $+functions[_zsh_theme_glyph] )); then
+    local pointer_sample='' marker_sample='' gutter_sample=''
+    _zsh_theme_glyph pointer "$glyph" && pointer_sample=$REPLY
+    _zsh_theme_glyph marker "$glyph" && marker_sample=$REPLY
+    _zsh_theme_glyph gutter "$glyph" && gutter_sample=$REPLY
+    [[ -n $pointer_sample$marker_sample$gutter_sample ]] && sample=" [$pointer_sample $marker_sample $gutter_sample]"
+  fi
   print -r -- "UI theme: ${_ZSH_UI_ACTIVE_THEME:-terminal}"
   print -r -- "fzf theme: ${_ZSH_FZF_ACTIVE_THEME:-${_ZSH_UI_ACTIVE_THEME:-terminal}}${fzf_note}"
   print -r -- "fzf layout: ${ZSH_FZF_LAYOUT:-compact}"
-  print -r -- "glyphs: $glyph (requested: ${ZSH_UI_GLYPHS:-auto})"
+  print -r -- "glyphs: $glyph (requested: ${ZSH_UI_GLYPHS:-auto})$sample"
   print -r -- "color depth: $depth"
   print -r -- "external fzf options: $external"
 }

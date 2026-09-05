@@ -1,4 +1,5 @@
 # Shared terminal UI helpers.
+typeset -g _ZSH_UI_HELPERS_DIR=${${(%):-%N}:A:h}
 
 if (( ! $+functions[_zsh_theme_sgr] )); then
   typeset _ui_theme_module=${${(%):-%x}:A:h}/25-theme.zsh
@@ -202,15 +203,98 @@ _ui_repeat() {
   print -nr -- "$out"
 }
 
+# Terminal cells for one sanitized code point. Binary search over committed
+# Unicode intervals stays pure Zsh and covers combining scripts beyond Latin.
+_ui_char_width() {
+  emulate -L zsh
+  integer code=$1 low high middle
+  if (( code < 128 )); then
+    REPLY=1
+    return 0
+  fi
+  if (( ! ${_ZSH_UI_WIDTH_DATA_LOADED:-0} )); then
+    source "$_ZSH_UI_HELPERS_DIR/lib/ui-width-data.zsh" || return 1
+  fi
+  low=1
+  high=${#_ZSH_UI_ZERO_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_ZERO_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_ZERO_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=0
+      return 0
+    fi
+  done
+  low=1
+  high=${#_ZSH_UI_WIDE_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_WIDE_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_WIDE_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=2
+      return 0
+    fi
+  done
+  REPLY=1
+}
+
+# Terminal-cell width of already-sanitized text. Visible escapes are plain
+# ASCII, so they measure one cell per character; wide characters measure two
+# and combining marks zero. Pure Zsh, no subprocesses.
+_ui_display_width() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local text=$1 char
+  local non_ascii_pattern='*[^ -~]*'
+  integer index code width=0
+
+  if [[ $text != ${~non_ascii_pattern} ]]; then
+    REPLY=${#text}
+    return 0
+  fi
+
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( width += REPLY ))
+  done
+  REPLY=$width
+}
+
+_ui_strip_leading_marks_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+  local text=$1 char
+  integer code
+  while [[ -n $text ]]; do
+    char=$text[1]
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( REPLY == 0 )) || break
+    text=${text[2,-1]}
+  done
+  REPLY=$text
+}
+
 _ui_truncate_reply() {
   emulate -L zsh
+  setopt MULTIBYTE
 
   local width=$1
   shift
 
   local text="$*"
   local marker='…'
-  integer left right
+  local char prefix='' suffix=''
+  integer index code char_width text_width marker_width left right prefix_width suffix_width
 
   (( width > 0 )) || {
     REPLY=''
@@ -221,24 +305,62 @@ _ui_truncate_reply() {
     marker='...'
   fi
 
-  if (( ${#text} <= width )); then
+  _ui_display_width "$text"
+  text_width=$REPLY
+  if (( text_width <= width )); then
     REPLY=$text
     return 0
   fi
 
-  if (( width <= ${#marker} + 1 )); then
-    REPLY=${text[1,width]}
+  _ui_display_width "$marker"
+  marker_width=$REPLY
+  if (( width <= marker_width + 1 )); then
+    prefix=''
+    prefix_width=0
+    for (( index = 1; index <= ${#text}; index++ )); do
+      char=${text[$index]}
+      printf -v code '%d' "'$char"
+      _ui_char_width $code
+      char_width=$REPLY
+      (( prefix_width + char_width > width )) && break
+      prefix+=$char
+      (( prefix_width += char_width ))
+    done
+    REPLY=$prefix
     return 0
   fi
 
-  left=$(( (width - ${#marker}) / 2 ))
-  right=$(( width - ${#marker} - left ))
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
 
-  if (( right > 0 )); then
-    REPLY="${text[1,left]}${marker}${text[-$right,-1]}"
-  else
-    REPLY="${text[1,left]}${marker}"
-  fi
+  prefix=''
+  prefix_width=0
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( prefix_width + char_width > left )) && break
+    prefix+=$char
+    (( prefix_width += char_width ))
+  done
+
+  suffix=''
+  suffix_width=0
+  for (( index = ${#text}; index >= 1; index-- )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( suffix_width + char_width > right )) && break
+    suffix="${char}${suffix}"
+    (( suffix_width += char_width ))
+  done
+
+  # A suffix must not attach a discarded base character's combining marks
+  # to the ellipsis. Keep complete base-plus-mark sequences at the cut.
+  _ui_strip_leading_marks_reply "$suffix"
+  REPLY="${prefix}${marker}${REPLY}"
 }
 
 _ui_truncate() {
@@ -256,14 +378,19 @@ _ui_pad_reply() {
 
   _ui_truncate_reply "$width" "$*"
   local text=$REPLY
-  local padding=$(( width - ${#text} ))
+  local text_width
+  integer padding_width
 
-  (( padding < 0 )) && padding=0
+  _ui_display_width "$text"
+  text_width=$REPLY
+  padding_width=$(( width - text_width ))
+
+  (( padding_width < 0 )) && padding_width=0
 
   if [[ $align == right ]]; then
-    printf -v REPLY '%*s%s' "$padding" '' "$text"
+    printf -v REPLY '%*s%s' "$padding_width" '' "$text"
   else
-    printf -v REPLY '%s%*s' "$text" "$padding" ''
+    printf -v REPLY '%s%*s' "$text" "$padding_width" ''
   fi
 }
 

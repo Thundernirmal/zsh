@@ -179,6 +179,10 @@ print_hints() {
       ;;
   esac
 
+  if ! have_cmd gdbus; then
+    printf '  Optional for cgm check: install gdbus (GLib tools; libglib2.0-bin on Debian/Ubuntu).\n'
+  fi
+
   if [ "$fzf_problem" -ne 0 ]; then
     printf '  Install fzf %s+ from a current supported package or https://github.com/junegunn/fzf#installation\n' "$fzf_min_version"
   fi
@@ -198,6 +202,7 @@ check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
 check_cmd jq optional
 check_cmd secret-tool optional
+check_cmd gdbus optional
 check_cmd nix optional
 if have_cmd nix; then
   check_cmd nix-collect-garbage optional

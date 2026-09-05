@@ -94,12 +94,14 @@ test_registration() {
     fkill _zsh_fkill
     headers _zsh_headers
     zhelp _zsh_zhelp
+    zdoctor _zsh_zdoctor
     ztheme _zsh_ztheme
     cgm _zsh_cgm
     fbr _zsh_no_arguments
     croot _zsh_no_arguments
     path _zsh_no_arguments
     ports _zsh_no_arguments
+    weather _zsh_no_arguments
     myip _zsh_no_arguments
     gitcount _zsh_no_arguments
     fanprofile _zsh_no_arguments
@@ -188,7 +190,7 @@ test_static_values() {
 
   spec_values "${_ZSH_CGM_COMMAND_SPECS[@]}"
   values=( "${reply[@]}" )
-  assert_equals "${(j: :)values}" 'set list env unset delete help' 'cgm commands match the public interface' || return 1
+  assert_equals "${(j: :)values}" 'set list status check env unset delete help' 'cgm commands match the public interface' || return 1
   assert_unique 'cgm command values are unique' "${values[@]}" || return 1
 
   assert_equals "${(j: :)_ZSH_EXTRACT_EXTENSIONS}" 'tar.bz2 tar.gz tar.xz tar.zst bz2 rar gz tar tbz2 tgz tzst zip Z 7z' 'extract completion covers every supported extension' || return 1
@@ -209,7 +211,9 @@ test_extract_completion_drift() {
     fi
   done
 
-  assert_equals "${(j: :)dispatch_extensions}" "${(j: :)_ZSH_EXTRACT_EXTENSIONS}" 'extract completion stays synchronized with dispatch suffixes' || return 1
+  dispatch_extensions=( "${(@o)dispatch_extensions}" )
+  local -a completion_extensions=( "${(@o)_ZSH_EXTRACT_EXTENSIONS}" )
+  assert_equals "${(j: :)dispatch_extensions}" "${(j: :)completion_extensions}" 'extract completion stays synchronized with dispatch suffixes' || return 1
 }
 
 test_cached_cgm_names() {
@@ -248,6 +252,7 @@ test_cached_npkg_attributes() {
   local invocation_log="$tmp_dir/cache-invocations"
   local old_path=$PATH old_home=${HOME-} rc
   integer had_home=${+HOME}
+  integer first_parse_count second_parse_count
   local -a offered
 
   command mkdir -p -- "$cache_root/npkg" "$fakebin"
@@ -276,6 +281,17 @@ printenv _ZSH_COMPLETION_INVOCATION >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/nix"
   _zsh_npkg_cached_attributes
   assert_equals "${(j: :)reply}" 'zoxide ripgrep bat' 'existing npkg caches provide deduplicated attributes' || return 1
   assert_equals "$(file_contents "$invocation_log")" '' 'cached npkg completion does not invoke Nix' || return 1
+  first_parse_count=$_ZSH_NPKG_COMPLETION_PARSE_COUNT
+
+  _zsh_npkg_cached_attributes
+  second_parse_count=$_ZSH_NPKG_COMPLETION_PARSE_COUNT
+  assert_equals "$second_parse_count" "$first_parse_count" 'repeated npkg completion reuses parsed cache files in this shell' || return 1
+
+  print -l -- zoxide ripgrep bat > "$cache_root/npkg/nixpkgs-attrs-aarch64-linux.txt"
+  command touch -d @1 "$cache_root/npkg/nixpkgs-attrs-aarch64-linux.txt"
+  _zsh_npkg_cached_attributes
+  assert_equals "${(j: :)reply}" 'zoxide ripgrep bat' 'npkg completion reparses a cache file after its mtime changes' || return 1
+  assert_equals "$((_ZSH_NPKG_COMPLETION_PARSE_COUNT))" "$((first_parse_count + 1))" 'npkg cache invalidation parses only the changed file' || return 1
 
   _zsh_npkg_cached_packages
   assert_status "$?" 0 'existing npkg cache activates package completion' || return 1

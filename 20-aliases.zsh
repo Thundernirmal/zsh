@@ -38,9 +38,6 @@ if [[ $OSTYPE == linux* ]]; then
   alias diff='diff --color=auto'
 fi
 
-# Network & system
-alias weather='curl --http1.1 -fsSL https://wttr.in'
-
 # Git extras (OMZ git plugin covers basics, these fill gaps)
 alias glog='git log --oneline --graph --decorate -20'
 alias gpr='git pull --rebase'

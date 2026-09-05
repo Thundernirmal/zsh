@@ -3,6 +3,7 @@
 # can source this module without side effects or errors.
 
 if (( $+functions[compdef] )); then
+  typeset -g _ZSH_COMPLETION_MODULE_DIR=${${(%):-%N}:A:h}
   if (( ! $+parameters[_ZSH_UI_THEME_NAMES] )); then
     source "${${(%):-%N}:A:h}/25-theme.zsh"
   fi
@@ -64,10 +65,15 @@ if (( $+functions[compdef] )); then
     'update:Alias for upgrade'
     'help:Show usage help'
   )
+  typeset -gA _ZSH_NPKG_COMPLETION_CACHE_DATA
+  typeset -gA _ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS
+  typeset -gi _ZSH_NPKG_COMPLETION_PARSE_COUNT=${_ZSH_NPKG_COMPLETION_PARSE_COUNT:-0}
   if (( $+functions[cgm] )); then
     typeset -ga _ZSH_CGM_COMMAND_SPECS=(
       'set:Securely store or replace one credential'
       'list:List saved names without retrieving values'
+      'status:Show saved names and current-shell loaded state'
+      'check:Check Secret Service availability without retrieving values'
       'env:Load credentials into the current shell'
       'unset:Remove variables from the current shell'
       'delete:Delete stored credentials and unset them here'
@@ -116,22 +122,67 @@ if (( $+functions[compdef] )); then
     esac
   }
 
-  _zsh_npkg_cached_attributes() {
+  _zsh_npkg_cache_identity() {
     emulate -L zsh
 
-    local cache_dir cache_file attribute
+    local cache_file=$1
+    local -A cache_stat
+
+    zmodload -F zsh/stat b:zstat 2>/dev/null || return 1
+    zstat -H cache_stat -- "$cache_file" 2>/dev/null || return 1
+    REPLY="${cache_stat[device]}:${cache_stat[inode]}:${cache_stat[size]}:${cache_stat[mtime]}"
+  }
+
+  _zsh_npkg_cached_attributes() {
+    emulate -L zsh
+    setopt localoptions nullglob
+
+    local cache_dir cache_file attribute identity previous_identity
+    local -a file_attributes
     local -A seen
     typeset -ga reply
     reply=()
 
     cache_dir=$(_npkg_cache_dir) || return 1
     for cache_file in "$cache_dir"/nixpkgs-attrs-*.txt(N.); do
-      [[ -r $cache_file ]] || continue
-      while IFS= read -r attribute; do
-        [[ -n $attribute && -z ${seen[$attribute]-} ]] || continue
+      [[ -r $cache_file && ! -L $cache_file ]] || continue
+
+      identity=''
+      if _zsh_npkg_cache_identity "$cache_file"; then
+        identity=$REPLY
+      fi
+
+      if [[ -n $identity ]]; then
+        previous_identity=${_ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS[$cache_file]-}
+        if [[ -n $previous_identity && $previous_identity != $identity ]]; then
+          unset "_ZSH_NPKG_COMPLETION_CACHE_DATA[$previous_identity]"
+        fi
+        _ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS[$cache_file]=$identity
+      fi
+
+      if [[ -n $identity && ${+_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]} -eq 1 ]]; then
+        if [[ -n ${_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]} ]]; then
+          file_attributes=( "${(f)_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]}" )
+        else
+          file_attributes=()
+        fi
+      else
+        file_attributes=()
+        while IFS= read -r attribute; do
+          [[ -n $attribute ]] || continue
+          file_attributes+=("$attribute")
+        done < "$cache_file"
+        if [[ -n $identity ]]; then
+          _ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]="${(F)file_attributes}"
+        fi
+        (( _ZSH_NPKG_COMPLETION_PARSE_COUNT++ ))
+      fi
+
+      for attribute in "${file_attributes[@]}"; do
+        [[ -n ${seen[$attribute]-} ]] && continue
         reply+=("$attribute")
         seen[$attribute]=1
-      done < "$cache_file"
+      done
     done
   }
 
@@ -210,6 +261,9 @@ if (( $+functions[compdef] )); then
             set|unset|delete)
               _zsh_cgm_saved_credentials
               ;;
+            status|check)
+              _message 'no additional arguments'
+              ;;
             env)
               _alternative \
                 'modes:load mode:(--all)' \
@@ -228,7 +282,7 @@ if (( $+functions[compdef] )); then
     local context state state_descr line
     typeset -A opt_args
 
-    _arguments -C '1:archive file:->archive' '*: :_message "no additional arguments"' && return 0
+    _arguments -C '(-h --help)'{-h,--help}'[show usage]' '--keep[preserve compressed input]' '--destination=[extract into an existing directory]:directory:_directories' '1:archive file:->archive' '*: :_message "no additional arguments"' && return 0
     [[ $state == archive ]] && _files -g "*.(${(j:|:)_ZSH_EXTRACT_EXTENSIONS})"
   }
 
@@ -241,7 +295,14 @@ if (( $+functions[compdef] )); then
   }
 
   _zsh_find_helper() {
-    _arguments '1:search pattern:' '2:search root:_directories' '*: :_message "no additional arguments"'
+    local -a search_flags
+    search_flags=( '--hidden[include hidden entries]' '--no-ignore[include ignored entries]' '--follow[follow symlinks]' )
+    if [[ ${words[1]} == ff ]]; then
+      search_flags+=( '--no-hidden[exclude hidden entries]' '--no-follow[do not follow symlinks]' )
+    else
+      search_flags+=( '--fixed-strings[match literal text]' '-F[match literal text]' )
+    fi
+    _arguments '(-h --help)'{-h,--help}'[show usage]' "${search_flags[@]}" '1:search pattern:'  '2:search root:_directories' '*: :_message "no additional arguments"'
   }
 
   _zsh_dusage() {
@@ -253,7 +314,7 @@ if (( $+functions[compdef] )); then
   }
 
   _zsh_fkill() {
-    _arguments '1:signal:_signals' '*: :_message "no additional arguments"'
+    _arguments '(-h --help)'{-h,--help}'[show usage]' '--all[select processes from all users]' '-a[select processes from all users]' '1:signal:_signals' '*: :_message "no additional arguments"'
   }
 
   _zsh_headers() {
@@ -264,8 +325,8 @@ if (( $+functions[compdef] )); then
     local id
     local -a command_specs
 
-    if (( $+functions[_zsh_help_load] )); then
-      _zsh_help_load || {
+    if (( ! $+parameters[_ZSH_HELP_ORDER] )); then
+      source "$_ZSH_COMPLETION_MODULE_DIR/lib/command-registry.zsh" || {
         _message 'command or search query'
         return 0
       }
@@ -290,6 +351,13 @@ if (( $+functions[compdef] )); then
       '--plain[force deterministic plain-text output]' \
       '1:command or search query:_zsh_zhelp_commands' \
       '*:additional search term:'
+  }
+
+  _zsh_zdoctor() {
+    _arguments \
+      '(-h --help)'{-h,--help}'[show zdoctor usage]' \
+      '--network[probe the myip and weather endpoints]' \
+      '--secrets[check secret-tool without retrieving values]'
   }
 
   _zsh_ztheme() {
@@ -333,8 +401,9 @@ if (( $+functions[compdef] )); then
   compdef _zsh_fkill fkill
   compdef _zsh_headers headers
   compdef _zsh_zhelp zhelp
+  compdef _zsh_zdoctor zdoctor
   compdef _zsh_ztheme ztheme
-  compdef _zsh_no_arguments fbr croot path ports myip gitcount fanprofile tips
+  compdef _zsh_no_arguments fbr croot path ports myip weather gitcount fanprofile tips
 
   if (( $+functions[npkg] )); then
     compdef _zsh_npkg npkg

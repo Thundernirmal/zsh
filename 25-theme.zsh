@@ -1,3 +1,5 @@
+typeset -g _ZSH_FZF_NO_COLOR_OPTS='--no-color --color=bw,footer:-1'
+
 # Shared theme registry and pure-Zsh resolver.
 
 typeset -ga _ZSH_UI_THEME_NAMES=(
@@ -107,14 +109,17 @@ _zsh_theme_resolve_glyph_tier() {
     auto)
       if ! _zsh_theme_locale_is_utf8; then
         REPLY=ascii
-      elif [[ -n ${NO_NERD_FONT:-} ]]; then
-        REPLY=unicode
       else
-        REPLY=nerd
+        REPLY=unicode
       fi
       ;;
     *) return 1 ;;
   esac
+  # NO_NERD_FONT records that the terminal lacks private-use glyphs, so it
+  # always wins over a Nerd Font tier however that tier was requested.
+  if [[ -n ${NO_NERD_FONT:-} && $REPLY == nerd ]]; then
+    REPLY=unicode
+  fi
 }
 
 _zsh_theme_terminal_code() {
@@ -207,7 +212,9 @@ _zsh_theme_fzf_color_args() {
   local -a mappings args
 
   if [[ -n ${NO_COLOR:-} || $depth == none ]]; then
-    reply=( --no-color )
+    # fzf 0.68.0 omits Footer from NoColorTheme, leaving ANSI black (zero).
+    # Explicit terminal-default footer color repairs the supported minimum.
+    reply=( ${(z)_ZSH_FZF_NO_COLOR_OPTS} )
     return 0
   fi
 

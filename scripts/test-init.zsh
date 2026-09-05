@@ -142,6 +142,24 @@ exit 0' >"$fakebin/zsh"
   assert_equals "${call_count//[[:space:]]/}" 1 'ordered test runner stops after SIGINT' || return 1
 }
 
+test_runner_syntax_loop() {
+  local runner_content good_file bad_file rc
+  runner_content=$(<"$repo_dir/scripts/run-tests.zsh")
+  assert_contains "$runner_content" 'for _zsh_syntax_file in' 'syntax gate checks files in a loop' || return 1
+  assert_contains "$runner_content" 'zsh -n "$_zsh_syntax_file"' 'syntax gate checks one file per invocation' || return 1
+  assert_contains "$runner_content" './scripts/*.zsh' 'syntax gate covers test scripts' || return 1
+  assert_not_contains "$runner_content" 'zsh -n ./*.zsh ./lib/*.zsh' 'syntax gate no longer batches files in one invocation' || return 1
+
+  good_file="$tmp_home/syntax-good.zsh"
+  bad_file="$tmp_home/syntax-bad.zsh"
+  print -r -- 'print -r -- ok' >"$good_file"
+  print -r -- 'if then' >"$bad_file"
+  "$zsh_bin" -n "$good_file" "$bad_file" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 0 'multi-file zsh -n only checks the first file' || return 1
+  "$zsh_bin" -n "$bad_file" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 1 'single-file zsh -n rejects the malformed file' || return 1
+}
+
 run_init_case() {
   local label=$1
   local setup=${2-}
@@ -607,7 +625,7 @@ fkill >/dev/null
 fkill_rc=$?
 fbr >/dev/null
 fbr_rc=$?
-_npkg_require_picker install >/dev/null
+npkg find >/dev/null
 npkg_rc=$?
 _zsh_help_palette "" 1 >/dev/null
 help_rc=$?
@@ -791,14 +809,16 @@ custom_refreshed=0
 NO_COLOR=1
 _fzf_require_ready
 nocolor=0
-[[ $FZF_DEFAULT_OPTS == *--no-color && $FZF_CTRL_T_OPTS == *--no-color && $FZF_CTRL_R_OPTS == *--no-color && $FZF_ALT_C_OPTS == *--no-color && $FZF_COMPLETION_OPTS == *--no-color && $FZF_COMPLETION_PATH_OPTS == *--no-color && $FZF_COMPLETION_DIR_OPTS == *--no-color && $_ZO_FZF_OPTS == *--no-color ]] && nocolor=1
+[[ $FZF_DEFAULT_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_CTRL_T_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_CTRL_R_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_ALT_C_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_COMPLETION_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_COMPLETION_PATH_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_COMPLETION_DIR_OPTS == *--no-color\ --color=bw,footer:-1 && $_ZO_FZF_OPTS == *--no-color\ --color=bw,footer:-1 ]] && nocolor=1
 preview_plain=0
 [[ $FZF_CTRL_T_OPTS == *--color=never* && $FZF_CTRL_T_OPTS != *--color=always* ]] && preview_plain=1
+preview_keys=0
+[[ $FZF_CTRL_R_OPTS == *ctrl-p:toggle-preview* && $FZF_CTRL_R_OPTS != *"?:toggle-preview"* ]] && preview_keys=1
 
 source "$HOME/.config/zsh/40-fzf.zsh"
 duplicates=0
 [[ $FZF_DEFAULT_OPTS == *--user-default*--user-default* || $FZF_COMPLETION_PATH_OPTS == *--user-paths*--user-paths* || $_ZO_FZF_OPTS == *--user-zoxide*--user-zoxide* ]] && duplicates=1
-print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain duplicates=$duplicates"' > "$script_file"
+print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain preview_keys=$preview_keys duplicates=$duplicates"' > "$script_file"
 
   HOME="$tmp_home" \
     XDG_CACHE_HOME="$case_dir/cache" \
@@ -814,7 +834,7 @@ print -r -- "structured=$structured contexts=$contexts completion=$completion pr
   diagnostics=$(file_contents "$stderr_file")
 
   assert_status "$cmd_status" 0 'theme-aware fzf option fixture completes' || return 1
-  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
+  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 preview_keys=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
   assert_equals "$diagnostics" '' 'theme-aware fzf option refresh stays quiet' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 1 'theme/layout/no-color refresh does not repeat version validation' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 1 'theme/layout/no-color refresh does not regenerate integration' || return 1
@@ -913,11 +933,27 @@ test_owned_module_settings() {
     [[ $process_command == *"ps -u"* && $process_command == *"-o pid,user,comm,cmd"* ]] || exit 18
 
     source "$1/70-globals.zsh"
-    [[ ${(v)galiases[G]} == "| grep" ]] || exit 19
-    [[ ${(v)galiases[L]} == "| less" ]] || exit 20
-    [[ ${(v)galiases[NUL]} == ">/dev/null 2>&1" ]] || exit 21
+    (( ! ${+galiases[G]} && ! ${+galiases[L]} && ! ${+galiases[NUL]} )) || exit 19
+
+    ZSH_GLOBAL_ALIASES=1 source "$1/70-globals.zsh"
+    [[ ${(v)galiases[G]} == "| grep" ]] || exit 20
+    [[ ${(v)galiases[L]} == "| less" ]] || exit 21
+    [[ ${(v)galiases[NUL]} == ">/dev/null 2>&1" ]] || exit 22
   ' zsh "$repo_dir"
   assert_status "$?" 0 'history, completion, and global-alias modules retain their owned settings' || return 1
+}
+
+test_global_alias_opt_in() {
+  HOME="$tmp_home" "$zsh_bin" -fc '
+    source "$1/70-globals.zsh"
+    (( ! ${+galiases[H]} )) || exit 31
+    [[ $(echo H) == H ]] || exit 32
+
+    ZSH_GLOBAL_ALIASES=1 source "$1/70-globals.zsh"
+    [[ ${(v)galiases[H]} == "| head" ]] || exit 33
+    [[ $(echo '"'"'H'"'"') == H ]] || exit 34
+  ' zsh "$repo_dir"
+  assert_status "$?" 0 'global aliases stay off by default and quoting keeps tokens literal' || return 1
 }
 
 test_zoxide_init_outcomes() {
@@ -1003,6 +1039,8 @@ main() {
   run_init_case 'clean init smoke test' || return 1
   run_init_case 'high-risk alias init smoke test' "$high_risk_alias_setup" || return 1
   test_runner_signal_exit || return 1
+  test_runner_syntax_loop || return 1
+  test_global_alias_opt_in || return 1
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
   test_zoxide_persistent_startup_cache || return 1

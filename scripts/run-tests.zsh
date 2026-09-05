@@ -28,16 +28,22 @@ trap 'handle_signal HUP 129' HUP
 
 builtin cd -- "$repo_dir"
 
-zsh -n ./*.zsh ./lib/*.zsh ./functions/ztheme ./functions/_fbr_format_entry
-zsh -n ./scripts/benchmark-startup.zsh ./scripts/test-theme.zsh
+typeset _zsh_syntax_file=''
+for _zsh_syntax_file in ./*.zsh ./lib/*.zsh ./functions/ztheme ./functions/_fbr_format_entry ./scripts/*.zsh; do
+  zsh -n "$_zsh_syntax_file" || exit $?
+done
+unset _zsh_syntax_file
 sh -n ./scripts/check-deps.sh
 zsh ./scripts/test-init.zsh
 zsh ./scripts/test-theme.zsh
 zsh ./scripts/test-functions.zsh
+zsh ./scripts/test-command-ux.zsh
+zsh ./scripts/test-domains.zsh
 zsh ./scripts/test-cgm.zsh
 zsh ./scripts/test-upkg.zsh
 zsh ./scripts/test-completions.zsh
 zsh ./scripts/test-help.zsh
+zsh ./scripts/test-doctor.zsh
 
 if [[ $repo_dir == ${HOME:-}/.config/zsh ]]; then
   zsh -fc 'source "$HOME/.config/zsh/init.zsh"'

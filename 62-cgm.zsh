@@ -17,6 +17,36 @@ _cgm_require_backend() {
   return 1
 }
 
+_cgm_backend_check() {
+  emulate -L zsh
+
+  local backend_status
+
+  _cgm_require_backend || return 1
+
+  if ! command -v gdbus >/dev/null 2>&1; then
+    _cgm_error 'gdbus is unavailable; install glib2 and retry the backend check.'
+    return 1
+  fi
+
+  # Peer.Ping checks that the Secret Service D-Bus name is reachable without
+  # invoking any Secret Service item method.  In particular, it cannot unlock,
+  # search, or retrieve a credential value.  Keep the probe bounded and hide
+  # implementation-specific diagnostics from the status output.
+  command gdbus call --session \
+    --dest org.freedesktop.secrets \
+    --object-path /org/freedesktop/secrets \
+    --method org.freedesktop.DBus.Peer.Ping \
+    --timeout 5 >/dev/null 2>&1
+  backend_status=$?
+  if (( backend_status != 0 )); then
+    _cgm_error 'Secret Service backend check failed; no credential values were requested.'
+    return "$backend_status"
+  fi
+
+  return 0
+}
+
 _cgm_input_is_terminal() {
   [[ -t 0 ]]
 }
@@ -85,6 +115,16 @@ _cgm_require_export_name() {
 
   _cgm_error "refusing to replace a non-scalar, special, or read-only Zsh parameter: $candidate"
   return 1
+}
+
+_cgm_current_shell_loaded() {
+  emulate -L zsh
+
+  local parameter_kind=${parameters[$1]-}
+
+  # CGM exports scalar parameters.  Inspecting the parameter type and export
+  # flag gives a names-only status without expanding or printing its value.
+  [[ $parameter_kind == scalar-export* ]]
 }
 
 _cgm_catalog_root() {
@@ -283,6 +323,8 @@ _cgm_usage() {
     _ui_section_break
     _ui_panel_kv 'set <name>' 'Securely store or replace one credential' accent text
     _ui_panel_kv 'list' 'List saved names without retrieving values' accent text
+    _ui_panel_kv 'status' 'Show saved names and current-shell loaded state' accent text
+    _ui_panel_kv 'check' 'Check Secret Service availability without retrieving values' accent text
     _ui_panel_kv 'env <name ...>' 'Load selected credentials into this shell' accent text
     _ui_panel_kv 'env --all' 'Load every saved credential into this shell' accent text
     _ui_panel_kv 'unset <name ...>' 'Remove selected variables from this shell' accent text
@@ -301,6 +343,8 @@ _cgm_usage() {
   print 'Commands:'
   print '  set <name>          Securely store or replace one credential'
   print '  list                List saved names without retrieving values'
+  print '  status              Show saved names and current-shell loaded state'
+  print '  check               Check Secret Service availability without retrieving values'
   print '  env <name ...>      Load selected credentials into this shell'
   print '  env --all           Load every saved credential into this shell'
   print '  unset <name ...>    Remove selected variables from this shell'
@@ -489,6 +533,79 @@ _cgm_list() {
 
   _cgm_catalog_names || return 1
   _cgm_render_list "${reply[@]}"
+}
+
+_cgm_render_status() {
+  emulate -L zsh
+
+  local name state
+  local -a names=( "$@" )
+
+  if (( ${#names[@]} == 0 )); then
+    if _ui_plain_mode; then
+      print 'No saved credential names.'
+    else
+      _ui_title_line 'Credential Status' '0 saved names' muted '󰌆' '*'
+      _ui_section_break
+      _ui_panel_kv 'Status' 'No saved credential names' muted text
+    fi
+    return 0
+  fi
+
+  if _ui_plain_mode; then
+    for name in "${names[@]}"; do
+      if _cgm_current_shell_loaded "$name"; then
+        state='loaded in current shell'
+      else
+        state='saved, not loaded'
+      fi
+      print -r -- "$name: $state"
+    done
+    return 0
+  fi
+
+  _ui_title_line 'Credential Status' "${#names[@]} saved names" accent '󰌆' '*'
+  _ui_section_break
+  for name in "${names[@]}"; do
+    if _cgm_current_shell_loaded "$name"; then
+      _ui_panel_kv "$name" 'loaded in current shell' accent success
+    else
+      _ui_panel_kv "$name" 'saved, not loaded' accent muted
+    fi
+  done
+  _ui_section_break
+  _ui_panel_kv 'Values' 'hidden; status reads names and parameter metadata only' muted text
+}
+
+_cgm_status() {
+  emulate -L zsh
+
+  (( $# == 0 )) || {
+    _cgm_error 'usage: cgm status'
+    return 1
+  }
+
+  _cgm_catalog_names || return 1
+  _cgm_render_status "${reply[@]}"
+}
+
+_cgm_check() {
+  emulate -L zsh
+
+  (( $# == 0 )) || {
+    _cgm_error 'usage: cgm check'
+    return 1
+  }
+
+  _cgm_backend_check || return $?
+  if _ui_plain_mode; then
+    print -r -- 'Secret Service backend is reachable; no credential values were retrieved.'
+  else
+    _ui_title_line 'Credential Backend' 'Secret Service' success '󰌆' '*'
+    _ui_section_break
+    _ui_panel_kv 'Status' 'Reachable' accent success
+    _ui_panel_kv 'Values' 'Not retrieved' muted text
+  fi
 }
 
 _cgm_env() {
@@ -690,6 +807,12 @@ cgm() {
       ;;
     list)
       _cgm_list "$@"
+      ;;
+    status)
+      _cgm_status "$@"
+      ;;
+    check)
+      _cgm_check "$@"
       ;;
     env)
       _cgm_env "$@"

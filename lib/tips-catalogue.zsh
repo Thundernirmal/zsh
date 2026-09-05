@@ -2,18 +2,24 @@
 # First-use availability checks use Zsh's prehashed command table.
 
 _zsh_tip_pool=(
+  "Run ztheme current to preview glyphs; Nerd Font icons require ZSH_UI_GLYPHS=nerd"
   "Use .., ..., or .... to move up one, two, or three directories"
   "Use - to return to the previous directory"
   "Run dirs -v to inspect the directory stack"
   "Use *(D) when a glob should include hidden entries"
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
+  "Run zdoctor to diagnose setup and integration status"
   "Run ztheme use nord to switch dashboard and finder colors for this session"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"
   "Run ft <pattern> [path] to search file contents"
-  "Run extract <archive> to unpack a supported archive"
+  "Run extract --keep file.gz to preserve the compressed input"
+  "Run extract --destination existing-dir archive.tar.gz to choose where to unpack"
+  "Use ff --no-ignore or ft --hidden --no-ignore to broaden a search"
+  "Use ft --fixed-strings to search literal text"
+  "Use --help with a general helper to see usage before doing any work"
   "Run mkcd <dir> to create and enter a directory"
   "Run croot to jump to the current Git repository root"
   "Run glog to see the latest 20 commits as a graph"
@@ -28,11 +34,17 @@ _zsh_tip_pool=(
   "Run weather for a concise HTTPS forecast"
   "Run peek <file> for a quick file preview"
   "Run headers <url> to follow redirects and print HTTP headers"
-  "Use G, L, or W to pipe to grep, less, or wc -l"
-  "Use NE to hide stderr or NUL to hide all output"
   "Use command substitutions safely; helper errors stay on stderr"
   "Press Tab after a custom command to see valid arguments"
 )
+
+if (( ${+galiases[G]} )); then
+  _zsh_tip_pool+=(
+    "Use G, L, or W to pipe to grep, less, or wc -l"
+    "Use NE to hide stderr or NUL to hide all output"
+    "Use quotes around 'H' to keep a global alias literal"
+  )
+fi
 
 if [[ -r /sys/firmware/acpi/platform_profile || -r /sys/devices/platform/asus-nb-wmi/fan_boost_mode ]]; then
   _zsh_tip_pool+=("Run fanprofile to show the current laptop performance profile")
@@ -44,12 +56,13 @@ fi
 
 if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
   _zsh_tip_pool+=(
-    "Press Ctrl+R to insert a history entry for editing"
+    "Press Ctrl+R to insert history; Ctrl+P toggles its preview and ? stays searchable"
     "Press Ctrl+T to insert a selected file path"
     "Press Alt+C to select and enter a directory"
     "Type in the unfilled fzf input row to filter; use the footer for keys"
     "Press Ctrl+P in preview pickers to toggle the preview; use Ctrl+/ to wrap"
     "Run fkill TERM to stop selected processes; use fkill 9 only to force"
+    "Run fkill --all to include processes from all users"
     "Run fbr to scan aligned branch details and enter or check out the result"
     "Use [WT] in fbr to spot branches checked out in another worktree"
   )
@@ -68,6 +81,8 @@ if (( $+functions[cgm] )); then
     "Run cgm set OPENAI_KEY to store a credential securely"
     "Run cgm env OPENAI_KEY to load a credential into this shell"
     "Run cgm list to show saved names without retrieving values"
+    "Run cgm status to check which saved names are exported in this shell"
+    "Run cgm check to ping Secret Service without retrieving values"
   )
 fi
 

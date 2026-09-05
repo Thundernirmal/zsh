@@ -90,7 +90,7 @@ file_contents() {
 
 test_catalogue() {
   local id before_count rc
-  local expected='.. ... .... - z zi mkcd croot ls ll la lt cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm upkg npkg G L W H T NE NUL tips ztheme zhelp'
+  local expected='.. ... .... - z zi mkcd croot ls ll la lt cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm cgm-env cgm-status cgm-check upkg upkg-plan npkg npkg-remove G L W H T NE NUL zdoctor tips ztheme zhelp'
 
   assert_equals "${(j: :)_ZSH_HELP_ORDER}" "$expected" 'catalogue covers the public command suite in stable order' || return 1
   assert_unique 'catalogue IDs are unique' "${_ZSH_HELP_ORDER[@]}" || return 1
@@ -109,6 +109,11 @@ test_catalogue() {
   assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat or cat' 'peek help names its real fallback' || return 1
   assert_equals "${_ZSH_HELP_USAGE[ztheme]}" 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme help exposes every public subcommand' || return 1
 
+  assert_equals "${_ZSH_COMMAND_CANONICAL[gcount]}" gitcount 'alias metadata points to its canonical command' || return 1
+  assert_equals "${_ZSH_COMMAND_CANONICAL[upkg-plan]}" upkg 'action metadata names its parent command' || return 1
+  assert_equals "${_ZSH_COMMAND_MUTATION[fkill]}" write 'process signals carry a write category' || return 1
+  assert_equals "${_ZSH_COMMAND_MUTATION[upkg]}" mixed 'package metadata does not mislabel all actions as read-only' || return 1
+
   before_count=${#_ZSH_HELP_ORDER[@]}
   _zsh_help_register extract Files duplicate duplicate duplicate none function none
   rc=$?
@@ -118,7 +123,7 @@ test_catalogue() {
 
 test_matching() {
   _zsh_help_matches PACKAGES 1
-  assert_equals "${(j: :)reply}" 'upkg npkg' 'query matching is case-insensitive across categories' || return 1
+  assert_equals "${(j: :)reply}" 'upkg upkg-plan npkg npkg-remove' 'query matching is case-insensitive across categories' || return 1
 
   _zsh_help_matches 'recursively by size' 1
   assert_equals "${(j: :)reply}" 'bigfiles' 'query matching searches summaries' || return 1
@@ -186,6 +191,54 @@ exit 0' > "$fakebin/secret-tool"
   assert_status "$rc" 1 'unknown command or query returns failure' || return 1
   assert_contains "$output" 'No commands matched: upkgg' 'unknown query prints a concise error' || return 1
   assert_contains "$output" 'Close matches: upkg' 'unknown exact-like query suggests close commands' || return 1
+}
+
+test_action_entries_and_browsing() {
+  local output count eligible row_log fakebin="$tmp_dir/browse-fakebin" old_path=$PATH
+
+  _zsh_help_matches 'preview upgrades' 1
+  assert_equals "${(j: :)reply}" 'upkg-plan' 'action entries expose package previews by task' || return 1
+  _zsh_help_matches 'load credentials' 1
+  assert_equals "${(j: :)reply}" 'cgm-env' 'action entries expose credential loading by task' || return 1
+
+  upkg() { :; }
+  _zsh_help_entry_exists upkg-plan
+  assert_status "$?" 0 'action entries resolve through their parent command' || return 1
+  unfunction upkg
+  _zsh_help_entry_exists upkg-plan
+  assert_status "$?" 1 'action entries hide when their parent command is absent' || return 1
+
+  _zsh_help_register test-hidden-xyz Meta 'Always-hidden browsing fixture' 'test-hidden-xyz' 'test-hidden-xyz' none function none || return 1
+  output=$(zhelp --plain '')
+  assert_contains "$output" 'unavailable command(s) hidden' 'plain listings name hidden unavailable commands' || return 1
+  assert_contains "$output" "'zhelp --all'" 'plain listings point at the unavailable category' || return 1
+  output=$(zhelp --plain --all test-hidden-xyz)
+  assert_contains "$output" 'Always-hidden browsing fixture' '--all keeps hidden entries discoverable' || return 1
+
+  command mkdir -p -- "$fakebin"
+  print -r -- '#!/bin/sh
+command wc -l > "$ZSH_HELP_ROWS_LOG"
+exit 1' >"$fakebin/fzf"
+  command chmod +x -- "$fakebin/fzf"
+  test-browse-alpha() { :; }
+  test-browse-beta() { :; }
+  _zsh_help_register test-browse-alpha Meta 'Browsing fixture alpha' 'test-browse-alpha' 'test-browse-alpha' none function none || return 1
+  _zsh_help_register test-browse-beta Meta 'Browsing fixture beta' 'test-browse-beta' 'test-browse-beta' none function none || return 1
+  functions[_fzf_require_ready]='return 0'
+  _zsh_help_matches '' 0
+  eligible=${#reply[@]}
+  row_log="$tmp_dir/browse-rows"
+  ZSH_HELP_ROWS_LOG=$row_log PATH="$fakebin:$PATH" _zsh_help_palette test-browse-alpha 0 >/dev/null 2>&1
+  count=$(<"$row_log")
+  count=${count//[[:space:]]/}
+  PATH=$old_path
+  unfunction _fzf_require_ready test-browse-alpha test-browse-beta
+  assert_equals "$count" "$eligible" 'the palette keeps the whole catalogue browsable behind a seeded query' || return 1
+  (( eligible > 1 )) || {
+    print -u2 -- 'not ok: browsing fixture has filtered and unfiltered sets to compare'
+    return 1
+  }
+  print -- 'ok: clearing the picker query can broaden beyond the seeded rows'
 }
 
 test_palette_queue_and_cancel() {
@@ -325,6 +378,7 @@ main() {
   test_catalogue || return 1
   test_matching || return 1
   test_plain_rendering_and_availability || return 1
+  test_action_entries_and_browsing || return 1
   test_palette_queue_and_cancel || return 1
   test_source_has_no_subprocesses || return 1
   test_lazy_catalogue_paths || return 1

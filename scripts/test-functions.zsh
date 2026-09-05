@@ -102,10 +102,10 @@ assert_missing_arg_usage() {
 }
 
 test_missing_arguments() {
-  assert_missing_arg_usage extract 'Usage: extract <file>' || return 1
+  assert_missing_arg_usage extract 'Usage: extract [--keep] [--destination <dir>] <file>' || return 1
   assert_missing_arg_usage mkcd 'Usage: mkcd <directory>' || return 1
-  assert_missing_arg_usage ff 'Usage: ff <pattern> [path]' || return 1
-  assert_missing_arg_usage ft 'Usage: ft <pattern> [path]' || return 1
+  assert_missing_arg_usage ff 'Usage: ff [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]' || return 1
+  assert_missing_arg_usage ft 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] <pattern> [path]' || return 1
   assert_missing_arg_usage headers 'Usage: headers <url>' || return 1
   assert_missing_arg_usage peek 'Usage: peek <file>' || return 1
 }
@@ -163,7 +163,7 @@ printf "%s\n" "$last" > "$EXTRACT_TEST_LOG"' >"$fakebin/$tool"
   rehash
   for archive_name in "${archive_names[@]}"; do
     : >"./$archive_name"
-    extract "$archive_name" || {
+    extract -- "$archive_name" || {
       PATH=$old_path
       rehash
       builtin cd -- "$original_dir"
@@ -204,7 +204,6 @@ exit 7' >"$fakebin/find"
   assert_status "$rc" 7 'bigfiles preserves a failed find status' || return 1
   leftovers=( "$tmp_dir"/bigfiles.*(N) )
   assert_equals "${#leftovers[@]}" 0 'bigfiles removes every temporary file after scan failure' || return 1
-  assert_contains "${functions[dusage]}" '--files0-from' 'dusage avoids unbounded argv expansion' || return 1
 
   PATH=$old_path
   rehash
@@ -213,6 +212,79 @@ exit 7' >"$fakebin/find"
   else
     unset TMPDIR
   fi
+}
+
+test_usage_partial_scan() {
+  local fixture_dir="$tmp_dir/usage-partial"
+  local fakebin="$tmp_dir/usage-partial-bin"
+  local old_path=$PATH output stdout_part stderr_part rc
+  local stdout_file="$tmp_dir/usage-partial.stdout" stderr_file="$tmp_dir/usage-partial.stderr"
+  local -a leftovers
+
+  command mkdir -p -- "$fixture_dir/entry" "$fixture_dir/tree" "$fakebin"
+  print -r -- 'data' >"$fixture_dir/tree/file.txt"
+
+  # dusage: fake du emits one valid record then fails.
+  print -r -- "#!/bin/sh
+printf '4\t$fixture_dir/entry\0'
+exit 1" >"$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  PATH="$fakebin:$old_path"
+  rehash
+
+  dusage "$fixture_dir" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  assert_status "$rc" 1 'dusage returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'entry' 'dusage preserves partial results' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'Incomplete scan' 'dusage reports an incomplete scan on stderr' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'du exit 1' 'dusage names the failed scan tool' || { PATH=$old_path; rehash; return 1; }
+  leftovers=( "$tmp_dir"/dusage.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'dusage cleans up after a partial scan' || { PATH=$old_path; rehash; return 1; }
+
+  # bigfiles: real find with failing du still preserves partial results.
+  bigfiles "$fixture_dir/tree" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  assert_status "$rc" 1 'bigfiles returns failure when du is incomplete' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'Incomplete scan' 'bigfiles reports du failure on stderr' || { PATH=$old_path; rehash; return 1; }
+
+  command rm -f -- "$fakebin/du"
+  print -r -- "#!/bin/sh
+printf '%s\0' \"$fixture_dir/tree/file.txt\"
+exit 1" >"$fakebin/find"
+  command chmod +x -- "$fakebin/find"
+  rehash
+
+  bigfiles "$fixture_dir/tree" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  assert_status "$rc" 1 'bigfiles returns failure when find is incomplete' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'file.txt' 'bigfiles preserves results when find is incomplete' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'find exit 1' 'bigfiles names the failed find scan' || { PATH=$old_path; rehash; return 1; }
+  leftovers=( "$tmp_dir"/bigfiles.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'bigfiles cleans up after a partial find scan' || { PATH=$old_path; rehash; return 1; }
+
+  command rm -f -- "$fakebin/find" "$fakebin/du"
+  print -r -- "#!/bin/sh
+printf '4\t$fixture_dir/entry\0'
+exit 1" >"$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  rehash
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_height]='print -r -- 30'
+  dusage "$fixture_dir" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  functions[_ui_plain_mode]='return 0'
+  unset 'functions[_ui_term_width]' 'functions[_ui_term_height]'
+  source "$repo_dir/55-ui-helpers.zsh"
+  functions[_ui_plain_mode]='return 0'
+  assert_status "$rc" 1 'dusage rich mode returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'Incomplete scan' 'dusage rich output carries the partial state' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" '(incomplete scan)' 'dusage rich footer marks the partial state' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'Incomplete scan' 'dusage rich mode keeps the stderr diagnostic' || { PATH=$old_path; rehash; return 1; }
+
+  PATH=$old_path
+  rehash
 }
 
 test_usage_signal_cleanup() {
@@ -484,6 +556,50 @@ test_control_character_paths() {
   done
 }
 
+test_display_width() {
+  local width padded truncated
+
+  _ui_display_width 'hello'
+  assert_equals "$REPLY" 5 'narrow text measures one cell per character' || return 1
+  _ui_display_width 'a雪b'
+  assert_equals "$REPLY" 4 'wide CJK characters measure two cells' || return 1
+  _ui_display_width $'e\u0301'
+  assert_equals "$REPLY" 1 'combining marks add no cells' || return 1
+  _ui_display_width $'क\u094D'
+  assert_equals "$REPLY" 1 'Devanagari nonspacing marks add no cells' || return 1
+  _ui_display_width $'x\U0001E944'
+  assert_equals "$REPLY" 1 'supplementary-plane combining marks add no cells' || return 1
+  _ui_display_width '\n'
+  assert_equals "$REPLY" 2 'sanitized visible escapes measure their shown cells' || return 1
+
+  _ui_truncate_reply 5 $'abcd雪\u0301'
+  assert_not_contains "$REPLY" $'.\u0301' 'truncation does not attach orphan marks to the marker' || return 1
+
+  _ui_char_width 0x41
+  assert_equals "$REPLY" 1 'ASCII measures one cell' || return 1
+  _ui_char_width 0x4E00
+  assert_equals "$REPLY" 2 'CJK Unified Ideographs measure two cells' || return 1
+  _ui_char_width 0x0301
+  assert_equals "$REPLY" 0 'combining code points measure zero cells' || return 1
+  assert_not_contains "${functions[_ui_display_width]}" 'command ' 'cell measurement spawns no subprocesses' || return 1
+  assert_not_contains "${functions[_ui_char_width]}" 'command ' 'cell lookup invokes no external command' || return 1
+
+  _ui_pad_reply left 6 'a雪'
+  padded=$REPLY
+  assert_equals "$padded" 'a雪   ' 'padding aligns by cells rather than characters' || return 1
+  _ui_display_width "$padded"
+  assert_equals "$REPLY" 6 'padded CJK rows fill the requested cells' || return 1
+
+  truncated=$(_ui_safe_truncate 6 'ab雪cd')
+  assert_equals "$truncated" 'ab雪cd' 'fitting CJK text is left whole' || return 1
+  truncated=$(_ui_safe_truncate 5 'ab雪cd')
+  assert_equals "$truncated" 'a...d' 'CJK truncation keeps whole cells around the marker' || return 1
+  _ui_display_width "$truncated"
+  assert_equals "$REPLY" 5 'truncated CJK rows fit the requested cells' || return 1
+  truncated=$(_ui_safe_truncate 3 $'e\u0301x')
+  assert_equals "$truncated" $'e\u0301x' 'combining sequences survive truncation' || return 1
+}
+
 test_alias_probes_are_quiet() {
   local fakebin="$tmp_dir/fakebin"
   local stdout_file="$tmp_dir/aliases.stdout"
@@ -530,12 +646,10 @@ test_small_helper_success_paths() {
   output=$(peek "$fixture_dir/preview.txt") || return 1
   assert_equals "$output" 'needle' 'peek prints a readable file through its fallback' || return 1
 
-  curl() {
-    [[ $1 == -sSIL && $2 == -- && $3 == 'https://example.invalid/path' ]] || return 9
-    print -r -- 'HTTP/1.1 204 No Content'
-  }
-  output=$(headers 'https://example.invalid/path') || return 1
-  unfunction curl
+  print -r -- '#!/bin/sh
+printf "%s\n" "HTTP/1.1 204 No Content"' >"$fakebin/curl"
+  command chmod +x -- "$fakebin/curl"
+  output=$(PATH="$fakebin:$old_path" headers 'https://example.invalid/path') || return 1
   assert_contains "$output" '204 No Content' 'headers follows its successful curl path' || return 1
 
   command git init -q "$fixture_dir/repo" || return 1
@@ -570,11 +684,11 @@ fi' >"$fakebin/rg"
   assert_equals "$output" 'clean match' 'ft keeps redirected ripgrep output free of ANSI escapes' || return 1
 
   print -r -- '#!/bin/sh
-[ "$*" = "--http1.1 -fsSL https://wttr.in" ] || exit 8
+[ "$*" = "--http1.1 -fsSL --connect-timeout 5 --max-time 15 -- https://wttr.in" ] || exit 8
 printf "%s\n" "Clear 20 C"' >"$fakebin/curl"
   command chmod +x -- "$fakebin/curl"
-  output=$(PATH="$fakebin:$old_path" "$commands[zsh]" -fc "source ${(q)repo_dir}/20-aliases.zsh; eval weather") || return 1
-  assert_equals "$output" 'Clear 20 C' 'weather alias reaches its HTTPS forecast endpoint' || return 1
+  output=$(PATH="$fakebin:$old_path" "$commands[zsh]" -fc "source ${(q)repo_dir}/60-functions.zsh; weather") || return 1
+  assert_equals "$output" 'Clear 20 C' 'weather helper reaches its HTTPS forecast endpoint' || return 1
 
   local fanprofile_body=${functions[fanprofile]}
   local platform_fixture="$fixture_dir/platform-profile"
@@ -605,11 +719,59 @@ test_fkill_signals() {
   assert_status "$?" 1 'fkill rejects an empty normalized signal' || return 1
   assert_equals "$FZF_REQUIRE_CALLED" 0 'fkill rejects invalid signals before opening fzf' || return 1
 
-  assert_contains "${functions[fkill]}" 'local signal=${1:-15}' 'fkill defaults to SIGTERM' || return 1
+  assert_contains "${functions[fkill]}" "signal='15'" 'fkill defaults to SIGTERM' || return 1
   assert_contains "${functions[fkill]}" '--accept-nth=1' 'fkill asks fzf to return PIDs directly' || return 1
   assert_contains "${functions[fkill]}" '_fzf_picker_multi_args kill' 'fkill uses the shared live multi-selection footer' || return 1
   assert_not_contains "${functions[fkill]}" '_fzf_pointer' 'fkill no longer duplicates pointer presentation' || return 1
   assert_not_contains "${functions[fkill]}" 'SIG${signal}' 'fkill never renders a duplicated SIG prefix' || return 1
+  assert_contains "${functions[fkill]}" '--with-nth=1,2,3,4' 'fkill shows PID, owner, elapsed time, and command' || return 1
+  assert_not_contains "${functions[fkill]}" '--with-nth=2..' 'fkill no longer hides process identity' || return 1
+  assert_contains "${functions[fkill]}" '_fzf_picker_preview_args Process' 'fkill previews full process details' || return 1
+  assert_contains "${functions[fkill]}" '--all' 'fkill offers an explicit all-users mode' || return 1
+  assert_contains "${functions[fkill]}" 'ps -u "$current_user"' 'fkill defaults to the current user' || return 1
+  assert_contains "${functions[fkill]}" 'signal_number == 9' 'fkill reviews SIGKILL before sending' || return 1
+  assert_contains "${functions[fkill]}" 'failed to send SIG' 'fkill reports per-target outcomes' || return 1
+  assert_not_contains "${functions[fkill]}" 'sudo' 'fkill never escalates privileges implicitly' || return 1
+  assert_not_contains "${functions[fkill]}" 'su ' 'fkill never shells out to su' || return 1
+}
+
+test_fkill_scope_and_review() {
+  local output rc formatted
+  local -a fzf_calls
+
+  functions[_zsh_require_fzf]='return 0'
+
+  output=$(fkill --all BADSIGNAL 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill --all still rejects an invalid signal' || return 1
+  assert_contains "$output" 'invalid signal' 'fkill --all reports the bad signal, not the flag' || return 1
+
+  output=$(fkill --all 15 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill --all parses the flag and reaches the terminal gate' || return 1
+  assert_contains "$output" 'requires an interactive terminal' 'fkill --all does not treat the flag as a signal' || return 1
+
+  output=$(fkill -a 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill -a defaults to SIGTERM and reaches the terminal gate' || return 1
+
+  output=$(fkill 15 --all 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill accepts the flag after the signal' || return 1
+  assert_contains "$output" 'requires an interactive terminal' 'trailing --all is not a signal' || return 1
+
+  output=$(fkill 15 9 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill rejects multiple signals' || return 1
+  assert_contains "$output" 'too many arguments' 'fkill explains the extra signal' || return 1
+
+  formatted=$(printf '%s\n' '  111 alice 00:01 sleep 100' | command awk '
+    {
+      pid = $1
+      user = $2
+      etime = $3
+      $1 = $2 = $3 = ""
+      sub(/^ +/, "")
+      print pid "\t" user "\t" etime "\t" $0
+    }')
+  assert_equals "$formatted" $'111\talice\t00:01\tsleep 100' 'fkill formats PID, owner, elapsed, and command' || return 1
+
+  functions[_zsh_require_fzf]='(( FZF_REQUIRE_CALLED++ )); return 1'
 }
 
 test_fbr_worktree_navigation() {
@@ -642,7 +804,7 @@ test_fbr_worktree_navigation() {
   assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\tworktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1
 
   _fbr_format_entry 'unicode-λ-雪' 'now' $'control-\e[31m' '' '' '' 18 8
-  assert_equals "$REPLY" $'unicode-λ-雪       \tnow     \tcontrol-\\e[31m\t\tunicode-λ-雪' 'fbr preserves Unicode and sanitizes controls byte-for-byte' || return 1
+  assert_equals "$REPLY" $'unicode-λ-雪      \tnow     \tcontrol-\\e[31m\t\tunicode-λ-雪' 'fbr pads CJK rows by terminal cells while sanitizing controls byte-for-byte' || return 1
   _fbr_format_entry '1234567890' '1234567890' subject '' '' '' 5 4
   assert_equals "$REPLY" $'1...0\t1234\tsubject\t\t1234567890' 'fbr preserves width-boundary truncation byte-for-byte' || return 1
 
@@ -714,23 +876,101 @@ test_fbr_worktree_navigation() {
   builtin cd -- "$original_dir"
 }
 
+test_fbr_remote_collision() {
+  local collision_repo="$tmp_dir/fbr-collision" collision_remote="$tmp_dir/fbr-collision.git"
+  local collision_second="$tmp_dir/fbr-collision-second.git" original_dir=$PWD
+  local base_branch before_ref after_ref output rc upstream
+
+  command git init -q "$collision_repo" || return 1
+  print -r -- 'base' >"$collision_repo/base.txt"
+  command git -C "$collision_repo" add base.txt || return 1
+  command git -C "$collision_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
+    commit -qm 'Base commit' || return 1
+  base_branch=$(command git -C "$collision_repo" symbolic-ref --short HEAD) || return 1
+
+  command git -C "$collision_repo" checkout -qb topic || return 1
+  print -r -- 'local' >>"$collision_repo/base.txt"
+  command git -C "$collision_repo" add base.txt || return 1
+  command git -C "$collision_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
+    commit -qm 'Local topic' || return 1
+  command git -C "$collision_repo" checkout -q "$base_branch" || return 1
+
+  command git init -q --bare "$collision_remote" || return 1
+  command git -C "$collision_repo" remote add origin "$collision_remote" || return 1
+  command git -C "$collision_repo" checkout -qb divergent || return 1
+  print -r -- 'remote' >"$collision_repo/remote.txt"
+  command git -C "$collision_repo" add remote.txt || return 1
+  command git -C "$collision_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
+    commit -qm 'Remote topic' || return 1
+  command git -C "$collision_repo" push -q origin divergent:refs/heads/topic || return 1
+  command git -C "$collision_repo" fetch -q origin || return 1
+  command git -C "$collision_repo" checkout -q "$base_branch" || return 1
+  command git -C "$collision_repo" branch -D divergent -q || return 1
+
+  builtin cd -- "$collision_repo" || return 1
+  before_ref=$(command git rev-parse HEAD) || { builtin cd -- "$original_dir"; return 1; }
+
+  output=$(_fbr_activate origin/topic '' 2>&1); rc=$?
+  assert_status "$rc" 1 'fbr refuses an unrelated same-name remote selection' || { builtin cd -- "$original_dir"; return 1; }
+  after_ref=$(command git rev-parse HEAD) || { builtin cd -- "$original_dir"; return 1; }
+  assert_equals "$after_ref" "$before_ref" 'fbr keeps the current checkout after refusing a collision' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" 'does not track local' 'fbr explains the upstream mismatch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch -- topic" 'fbr offers entering the local branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --track -b NEW_BRANCH -- origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --detach -- origin/topic" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
+
+  upstream=$(command git for-each-ref --format='%(upstream:short)' 'refs/heads/topic' 2>/dev/null) || upstream=''
+  assert_equals "$upstream" '' 'unrelated local branch carries no matching upstream' || { builtin cd -- "$original_dir"; return 1; }
+
+  command git init -q --bare "$collision_second" || { builtin cd -- "$original_dir"; return 1; }
+  command git remote add upstream "$collision_second" || { builtin cd -- "$original_dir"; return 1; }
+  command git checkout -qb second-divergent -q || { builtin cd -- "$original_dir"; return 1; }
+  print -r -- 'second' >second.txt
+  command git add second.txt || { builtin cd -- "$original_dir"; return 1; }
+  command git -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' commit -qm 'Second remote topic' || { builtin cd -- "$original_dir"; return 1; }
+  command git push -q upstream second-divergent:refs/heads/topic || { builtin cd -- "$original_dir"; return 1; }
+  command git fetch -q upstream || { builtin cd -- "$original_dir"; return 1; }
+  command git checkout -q "$base_branch" || { builtin cd -- "$original_dir"; return 1; }
+  command git branch -D second-divergent -q || { builtin cd -- "$original_dir"; return 1; }
+  command git branch --set-upstream-to=origin/topic topic -q || { builtin cd -- "$original_dir"; return 1; }
+
+  output=$(_fbr_activate upstream/topic '' 2>&1); rc=$?
+  assert_status "$rc" 1 'fbr refuses when the local branch tracks a different remote' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "upstream: 'origin/topic'" 'fbr names the actual upstream on mismatch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_equals "$(command git symbolic-ref --short HEAD)" "$base_branch" 'fbr stays put on a different-upstream collision' || { builtin cd -- "$original_dir"; return 1; }
+
+  _fbr_activate origin/topic '' >/dev/null 2>&1 || { builtin cd -- "$original_dir"; return 1; }
+  assert_equals "$(command git symbolic-ref --short HEAD)" 'topic' 'fbr enters the local branch when it tracks the selected remote' || { builtin cd -- "$original_dir"; return 1; }
+  command git switch -- "$base_branch" >/dev/null || { builtin cd -- "$original_dir"; return 1; }
+
+  assert_contains "${functions[fbr]}" "upstream" 'fbr guards remote-to-worktree mapping by upstream' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "${functions[fbr]}" 'Enter worktree/checkout' 'fbr labels worktree and checkout actions distinctly' || { builtin cd -- "$original_dir"; return 1; }
+
+  builtin cd -- "$original_dir"
+}
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
+  _zsh_functions_load || return 1
 
   functions[_ui_plain_mode]='return 0'
 
   test_missing_arguments || return 1
   test_local_emulation_and_leading_dash_operands || return 1
   test_usage_temp_cleanup || return 1
+  test_usage_partial_scan || return 1
   test_usage_signal_cleanup || return 1
   test_dusage_oversized_operand_set || return 1
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
+  test_display_width || return 1
   test_alias_probes_are_quiet || return 1
   test_small_helper_success_paths || return 1
   test_fkill_signals || return 1
+  test_fkill_scope_and_review || return 1
   test_fbr_worktree_navigation || return 1
+  test_fbr_remote_collision || return 1
 }
 
 main "$@"
