@@ -102,10 +102,10 @@ assert_missing_arg_usage() {
 }
 
 test_missing_arguments() {
-  assert_missing_arg_usage extract 'Usage: extract <file>' || return 1
+  assert_missing_arg_usage extract 'Usage: extract [--keep] [--destination <dir>] <file>' || return 1
   assert_missing_arg_usage mkcd 'Usage: mkcd <directory>' || return 1
-  assert_missing_arg_usage ff 'Usage: ff <pattern> [path]' || return 1
-  assert_missing_arg_usage ft 'Usage: ft <pattern> [path]' || return 1
+  assert_missing_arg_usage ff 'Usage: ff [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]' || return 1
+  assert_missing_arg_usage ft 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] <pattern> [path]' || return 1
   assert_missing_arg_usage headers 'Usage: headers <url>' || return 1
   assert_missing_arg_usage peek 'Usage: peek <file>' || return 1
 }
@@ -163,7 +163,7 @@ printf "%s\n" "$last" > "$EXTRACT_TEST_LOG"' >"$fakebin/$tool"
   rehash
   for archive_name in "${archive_names[@]}"; do
     : >"./$archive_name"
-    extract "$archive_name" || {
+    extract -- "$archive_name" || {
       PATH=$old_path
       rehash
       builtin cd -- "$original_dir"
@@ -569,6 +569,9 @@ test_display_width() {
   _ui_display_width '\n'
   assert_equals "$REPLY" 2 'sanitized visible escapes measure their shown cells' || return 1
 
+  _ui_truncate_reply 5 $'abcd雪\u0301'
+  assert_not_contains "$REPLY" $'.\u0301' 'truncation does not attach orphan marks to the marker' || return 1
+
   _ui_char_width 0x41
   assert_equals "$REPLY" 1 'ASCII measures one cell' || return 1
   _ui_char_width 0x4E00
@@ -640,12 +643,10 @@ test_small_helper_success_paths() {
   output=$(peek "$fixture_dir/preview.txt") || return 1
   assert_equals "$output" 'needle' 'peek prints a readable file through its fallback' || return 1
 
-  curl() {
-    [[ $1 == -sSIL && $2 == -- && $3 == 'https://example.invalid/path' ]] || return 9
-    print -r -- 'HTTP/1.1 204 No Content'
-  }
-  output=$(headers 'https://example.invalid/path') || return 1
-  unfunction curl
+  print -r -- '#!/bin/sh
+printf "%s\n" "HTTP/1.1 204 No Content"' >"$fakebin/curl"
+  command chmod +x -- "$fakebin/curl"
+  output=$(PATH="$fakebin:$old_path" headers 'https://example.invalid/path') || return 1
   assert_contains "$output" '204 No Content' 'headers follows its successful curl path' || return 1
 
   command git init -q "$fixture_dir/repo" || return 1
@@ -680,11 +681,11 @@ fi' >"$fakebin/rg"
   assert_equals "$output" 'clean match' 'ft keeps redirected ripgrep output free of ANSI escapes' || return 1
 
   print -r -- '#!/bin/sh
-[ "$*" = "--http1.1 -fsSL https://wttr.in" ] || exit 8
+[ "$*" = "--http1.1 -fsSL --connect-timeout 5 --max-time 15 -- https://wttr.in" ] || exit 8
 printf "%s\n" "Clear 20 C"' >"$fakebin/curl"
   command chmod +x -- "$fakebin/curl"
-  output=$(PATH="$fakebin:$old_path" "$commands[zsh]" -fc "source ${(q)repo_dir}/20-aliases.zsh; eval weather") || return 1
-  assert_equals "$output" 'Clear 20 C' 'weather alias reaches its HTTPS forecast endpoint' || return 1
+  output=$(PATH="$fakebin:$old_path" "$commands[zsh]" -fc "source ${(q)repo_dir}/60-functions.zsh; weather") || return 1
+  assert_equals "$output" 'Clear 20 C' 'weather helper reaches its HTTPS forecast endpoint' || return 1
 
   local fanprofile_body=${functions[fanprofile]}
   local platform_fixture="$fixture_dir/platform-profile"
@@ -911,9 +912,9 @@ test_fbr_remote_collision() {
   after_ref=$(command git rev-parse HEAD) || { builtin cd -- "$original_dir"; return 1; }
   assert_equals "$after_ref" "$before_ref" 'fbr keeps the current checkout after refusing a collision' || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" 'does not track local' 'fbr explains the upstream mismatch' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "git switch -- 'topic'" 'fbr offers entering the local branch' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "git switch --track -b <new-name> -- 'origin/topic'" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "git switch --detach -- 'origin/topic'" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch -- topic" 'fbr offers entering the local branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --track -b NEW_BRANCH -- origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --detach -- origin/topic" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
 
   upstream=$(command git for-each-ref --format='%(upstream:short)' 'refs/heads/topic' 2>/dev/null) || upstream=''
   assert_equals "$upstream" '' 'unrelated local branch carries no matching upstream' || { builtin cd -- "$original_dir"; return 1; }

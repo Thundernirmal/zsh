@@ -68,7 +68,7 @@ It does not manage:
 - `compinit` startup
 - non-Zsh shells
 
-Unreadable module files are skipped. The optional credential module is skipped entirely when `secret-tool` is absent at startup. Either silence means a degraded shell without an error, so run `zdoctor` when a feature is missing: it reports install location, unreadable modules, completion readiness, tool versions, glyph settings, and integration status, and returns nonzero while a real failure is present.
+Unreadable module files are skipped. The optional credential module is skipped entirely when `secret-tool` is absent at startup. Either silence means a degraded shell without an error, so run `zdoctor` when a feature is missing: it reports install location, unreadable modules, completion readiness, tool availability, glyph settings, and integration status, and returns nonzero while a real failure is present.
 
 ## Module layout
 
@@ -77,7 +77,7 @@ Unreadable module files are skipped. The optional credential module is skipped e
 | Module | Responsibility |
 |---|---|
 | `10-history.zsh` | Shared 100,000-entry history |
-| `20-aliases.zsh` | Navigation, file, Git, and weather aliases |
+| `20-aliases.zsh` | Navigation, file, and Git aliases |
 | `25-theme.zsh` | Semantic palette registry, validation, color depth, glyphs, and reusable fzf presentation fragments |
 | `30-zoxide.zsh` | Guarded zoxide initialization and `zi` fzf gate |
 | `40-fzf.zsh` | fzf validation, secure integration cache, structured presentation, previews, and bindings |
@@ -130,6 +130,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 | `rg` | Faster `ft` content search | Recursive `grep` |
 | `jq` | `npkg refresh`, `npkg outdated`, and Nix pickers | Those workflows are unavailable; basic Nix commands still work |
 | `secret-tool` | Defines `cgm` | The entire module is skipped |
+| `gdbus` | Explicit `cgm check` backend health probe | Health check explains the missing GLib tool; storage and loading still work |
 | `nix` | Defines `npkg` and the `upkg` Nix backend | Nix commands are absent |
 | `nix-collect-garbage` | `upkg clean --only nix` | Nix cleanup reports a failure |
 | `unzip`, `unrar`, `7z`, and related tools | Format-specific extraction | `extract` reports the missing tool when used |
@@ -386,7 +387,7 @@ zdoctor --secrets    # also check secret-tool (values are never retrieved)
 zdoctor --help
 ```
 
-It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool versions (including the fzf 0.68.0 minimum), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. The exit status is nonzero while any failure is present; warnings alone keep it zero.
+It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. The exit status is nonzero while any failure is present; warnings alone keep it zero.
 
 ## Aliases
 
@@ -432,7 +433,7 @@ Under the zero-probe startup policy, the built-in `ls`, `ll`, and `la` fallbacks
 weather
 ```
 
-It is an alias for `curl --http1.1 -fsSL https://wttr.in` and does not implement a separate location argument.
+It is a lazy function using curl over HTTP/1.1 and does not implement a location argument. `weather --help` prints usage without making a request.
 
 ### Global aliases
 
@@ -511,10 +512,10 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 
 | Command | Purpose |
 |---|---|
-| `extract <archive>` | Unpack a supported archive |
+| `extract [--keep] [--destination <dir>] <archive>` | Unpack a supported archive |
 | `mkcd <dir>` | Create a directory and enter it |
-| `ff <pattern> [path]` | Find names case-insensitively |
-| `ft <pattern> [path]` | Search file contents |
+| `ff [options] <pattern> [path]` | Find names case-insensitively |
+| `ft [options] <pattern> [path]` | Search file contents |
 | `peek <file>` | Preview with `bat` or `cat` |
 | `headers <url>` | Follow redirects and print HTTP headers |
 | `fanprofile` | Show the current Linux platform or ASUS fan profile |
@@ -531,20 +532,23 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 
 #### extract
 
-Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files use their decompressors' normal in-place semantics, which usually remove the compressed input after success.
+Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression and refuse existing paths. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Use `--` before a leading-dash filename.
 
 #### ff and ft
 
-`ff` prefers `fd`, then `fdfind`, then `find`. The fd paths include hidden entries, follow links, and apply a case-insensitive substring glob. The fallback still searches hidden names but follows `find`'s normal symlink behavior.
+`ff` prefers `fd`, then `fdfind`, then `find`. It matches a case-insensitive substring glob, includes hidden entries, and follows symlinks by default on every backend. `--no-hidden` and `--no-follow` disable those behaviors; `--hidden` and `--follow` make the defaults explicit. `--no-ignore` includes fd-ignored files. The find fallback has no ignore-file filtering and explains that difference when `--no-ignore` is requested.
 
-`ft` prefers `rg` and falls back to recursive, binary-skipping `grep`:
+`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, and `--fixed-strings` (`-F`) explicitly. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches.
 
 ```zsh
-ff config .
-ft TODO src
+ff --no-ignore config .
+ft --hidden --no-ignore --fixed-strings 'a.b' src
+extract --keep -- file.gz
 ```
 
-Both search backends use automatic color, so redirected and piped results contain no ANSI color escapes.
+Text search uses automatic color for clean redirected output. General helpers accept `-h`/`--help` before work; usage errors return 1. Use `--` to end option parsing in `extract`, `ff`, and `ft`.
+
+`headers`, `myip`, and `weather` use 5-second connection and 15-second overall timeout budgets. Override them with positive integer `ZSH_HTTP_CONNECT_TIMEOUT` and `ZSH_HTTP_MAX_TIME` settings. Zero is rejected. Curl failures preserve the exit status and add a command-specific diagnostic.
 
 #### fanprofile
 
@@ -581,7 +585,7 @@ fkill 9
 fkill --all 15
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and combining marks as zero. Long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
+`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and common combining marks as zero. Emoji grapheme shaping and ambiguous-width characters remain terminal-dependent. Long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
 
 ## Credential manager: cgm
 
@@ -593,6 +597,8 @@ fkill --all 15
 |---|---|
 | `cgm set <name>` | Prompt invisibly and store or replace one value |
 | `cgm list` | List saved names without retrieving values |
+| `cgm status` | Show saved names and whether each is exported in this shell |
+| `cgm check` | Ping Secret Service explicitly, without retrieving values |
 | `cgm env <name ...>` | Load selected values into this shell |
 | `cgm env --all` | Load every catalogued value into this shell |
 | `cgm unset <name ...>` | Remove variables from this shell only |
@@ -610,6 +616,8 @@ Names must match `[A-Z_][A-Z0-9_]*`. CGM rejects Zsh special, read-only, and non
 - The name-only catalogue lives under `${XDG_DATA_HOME:-$HOME/.local/share}/cgm/entries/`; directories are created under `umask 077`, remain mode `0700`, and empty markers are `0600`. `XDG_DATA_HOME` is used only when absolute; a relative value falls back to an absolute `$HOME/.local/share`, and the operation fails when neither base is safe.
 - Secret loading disables inherited Zsh xtrace locally and restores the caller's state afterward.
 - `cgm env --all` retrieves and validates every value before exporting any, so one failure leaves the environment unchanged.
+
+“Saved” means a name-only marker exists; it does not prove the backend item still exists. `cgm status` inspects parameter metadata only: “loaded” means an exported scalar is present, including a value set outside CGM; it does not compare that value with storage. `cgm check` uses a bounded D-Bus peer ping through `gdbus`. A successful ping confirms the service is reachable, not that a collection is unlocked or each saved credential exists. Neither command retrieves values.
 
 ### Shell scope
 
@@ -843,6 +851,8 @@ When user-facing behavior changes, update every affected surface without copying
 - Keep `50-completion.zsh` lightweight and `80-tips.zsh` hook-free.
 - Never add a plaintext CGM fallback, value-retrieving completion, or `eval`-based secret export.
 - Treat aliases in `20-aliases.zsh` as high-impact changes.
+
+Nix attribute completion reuses parsed names in the current session while each cache file’s device, inode, size, and modification time match. Replacing, adding, or removing cache files is reflected on the next completion. It never refreshes the index over the network.
 
 ### Required checks
 

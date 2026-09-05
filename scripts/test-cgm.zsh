@@ -128,6 +128,10 @@ case $action in
     [ -f "$CGM_TEST_BACKEND_DIR/$credential_name" ] || exit 1
     cat "$CGM_TEST_BACKEND_DIR/$credential_name"
     ;;
+  search)
+    [ "${CGM_TEST_FAIL_SEARCH_NAME:-}" != "$credential_name" ] || exit 6
+    printf "%s" "${CGM_TEST_SEARCH_OUTPUT-backend-search-output}"
+    ;;
   clear)
     [ "${CGM_TEST_FAIL_CLEAR_NAME:-}" != "$credential_name" ] || exit 8
     rm -f -- "$CGM_TEST_BACKEND_DIR/$credential_name"
@@ -137,6 +141,20 @@ case $action in
     ;;
 esac' > "$fakebin/secret-tool"
   command chmod +x "$fakebin/secret-tool"
+
+  print -r -- '#!/bin/sh
+set -u
+
+{
+  printf "%s" gdbus
+  for argument in "$@"; do
+    printf "\t%s" "$argument"
+  done
+  printf "\n"
+} >> "$CGM_TEST_LOG"
+
+exit "${CGM_TEST_GDBUS_STATUS:-0}"' > "$fakebin/gdbus"
+  command chmod +x "$fakebin/gdbus"
 }
 
 start_case() {
@@ -148,7 +166,7 @@ start_case() {
   command mkdir -p -- "$CGM_TEST_BACKEND_DIR"
   : > "$CGM_TEST_LOG"
   export XDG_DATA_HOME CGM_TEST_BACKEND_DIR CGM_TEST_LOG
-  unset CGM_TEST_FAIL_STORE_NAME CGM_TEST_FAIL_LOOKUP_NAME CGM_TEST_FAIL_CLEAR_NAME CGM_TEST_STORE_VALUE
+  unset CGM_TEST_FAIL_STORE_NAME CGM_TEST_FAIL_LOOKUP_NAME CGM_TEST_FAIL_SEARCH_NAME CGM_TEST_FAIL_CLEAR_NAME CGM_TEST_STORE_VALUE CGM_TEST_SEARCH_OUTPUT CGM_TEST_GDBUS_STATUS
 }
 
 test_startup_gate() {
@@ -513,6 +531,53 @@ test_delete() {
   assert_contains "$(file_contents "$CGM_TEST_LOG")" $'clear\tapplication\tcgm\tvariable\tREADONLY_DELETE_TOKEN' 'partial deletion still clears the exact keyring item' || return 1
 }
 
+test_status_and_backend_check() {
+  local output_file="$tmp_dir/status.stdout"
+  local error_file="$tmp_dir/status.stderr"
+  local output log rc
+
+  start_case status
+  print -nr -- status-hidden-value > "$CGM_TEST_BACKEND_DIR/LOADED_TOKEN"
+  print -nr -- status-saved-value > "$CGM_TEST_BACKEND_DIR/SAVED_TOKEN"
+  _cgm_catalog_add LOADED_TOKEN || return 1
+  _cgm_catalog_add SAVED_TOKEN || return 1
+  typeset -gx LOADED_TOKEN=status-hidden-value
+
+  cgm status >"$output_file" 2>"$error_file"
+  rc=$?
+  output=$(file_contents "$output_file")
+  assert_status "$rc" 0 'status reports saved credential names' || return 1
+  assert_contains "$output" 'LOADED_TOKEN: loaded in current shell' 'status identifies an exported current-shell credential' || return 1
+  assert_contains "$output" 'SAVED_TOKEN: saved, not loaded' 'status identifies a name not loaded in this shell' || return 1
+  assert_not_contains "$output" 'status-hidden-value' 'status never expands or prints a loaded credential value' || return 1
+  assert_not_contains "$output" 'status-saved-value' 'status never reads backend values for an unloaded name' || return 1
+  assert_equals "$(file_contents "$CGM_TEST_LOG")" '' 'status does not contact Secret Service' || return 1
+
+  : > "$CGM_TEST_LOG"
+  CGM_TEST_SEARCH_OUTPUT='backend-secret-must-stay-hidden'
+  export CGM_TEST_SEARCH_OUTPUT
+  cgm check >"$output_file" 2>"$error_file"
+  rc=$?
+  output=$(file_contents "$output_file")
+  log=$(file_contents "$CGM_TEST_LOG")
+  assert_status "$rc" 0 'check reports a reachable Secret Service backend' || return 1
+  assert_contains "$output" 'Secret Service backend is reachable' 'backend check gives an actionable healthy result' || return 1
+  assert_contains "$output" 'no credential values were retrieved' 'backend check states its non-disclosure contract' || return 1
+  assert_not_contains "$output" 'backend-secret-must-stay-hidden' 'backend check never prints search output' || return 1
+  assert_contains "$log" $'gdbus\tcall\t--session\t--dest\torg.freedesktop.secrets\t--object-path\t/org/freedesktop/secrets\t--method\torg.freedesktop.DBus.Peer.Ping\t--timeout\t5' 'backend check pings Secret Service over D-Bus' || return 1
+  assert_not_contains "$log" $'secret-tool\t' 'backend check never invokes secret-tool item operations' || return 1
+
+  CGM_TEST_GDBUS_STATUS=6
+  export CGM_TEST_GDBUS_STATUS
+  cgm check >"$output_file" 2>"$error_file"
+  rc=$?
+  assert_status "$rc" 6 'check preserves a backend probe failure status' || return 1
+  assert_contains "$(file_contents "$error_file")" 'backend check failed' 'backend failure explains that no values were requested' || return 1
+  assert_not_contains "$(file_contents "$error_file")" 'backend-secret-must-stay-hidden' 'backend failure does not expose backend output' || return 1
+
+  unset LOADED_TOKEN SAVED_TOKEN CGM_TEST_SEARCH_OUTPUT CGM_TEST_GDBUS_STATUS
+}
+
 test_runtime_backend_guard() {
   local old_path=$PATH
   local no_backend="$tmp_dir/no-backend"
@@ -541,6 +606,8 @@ test_help_and_rich_ui() {
   assert_status "$?" 0 'plain help succeeds' || return 1
   output=$(file_contents "$output_file")
   assert_contains "$output" 'env --all' 'help documents all-credential loading' || return 1
+  assert_contains "$output" 'status' 'help documents current-shell credential status' || return 1
+  assert_contains "$output" 'check' 'help documents the explicit backend check' || return 1
   assert_contains "$output" 'values stay hidden' 'help states the non-disclosure contract' || return 1
   assert_contains "$output" 'delete returns nonzero if a current-shell variable cannot be unset' 'help documents partial deletion status' || return 1
 
@@ -587,6 +654,7 @@ main() {
   test_env_rejects_unsafe_context_and_values || return 1
   test_env_all_validates_every_name_first || return 1
   test_delete || return 1
+  test_status_and_backend_check || return 1
   test_runtime_backend_guard || return 1
   test_help_and_rich_ui || return 1
 }

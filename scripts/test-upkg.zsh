@@ -1689,7 +1689,7 @@ esac
 
   write_fake curl '
 case "$*" in
-  "-fsSL https://ifconfig.me/ip") printf "%s" "203.0.113.42" ;;
+  "-fsSL --connect-timeout 5 --max-time 15 -- https://ifconfig.me/ip") printf "%s" "203.0.113.42" ;;
   *) exit 2 ;;
 esac
 '

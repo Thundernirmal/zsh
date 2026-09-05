@@ -204,7 +204,7 @@ _ui_repeat() {
 
 # Terminal-cell width of one code point: 0 for combining and format marks,
 # 2 for East Asian wide and fullwidth ranges, 1 otherwise. The ranges follow
-# the usual wcwidth tables. Pure Zsh so per-row measurement never spawns a
+# common wcwidth ranges; emoji grapheme shaping remains terminal-dependent. Pure Zsh so per-row measurement never spawns a
 # subprocess.
 _ui_char_width() {
   emulate -L zsh
@@ -221,6 +221,8 @@ _ui_char_width() {
         (code >= 0x06DF && code <= 0x06E4) ||
         (code >= 0x06E7 && code <= 0x06E8) ||
         (code >= 0x06EA && code <= 0x06ED) ||
+        (code >= 0x1AB0 && code <= 0x1AFF) ||
+        (code >= 0x1DC0 && code <= 0x1DFF) ||
         (code >= 0x200B && code <= 0x200F) ||
         (code >= 0x202A && code <= 0x202E) ||
         (code >= 0x20D0 && code <= 0x20FF) ||
@@ -240,6 +242,8 @@ _ui_char_width() {
           (code >= 0xFE30 && code <= 0xFE4F) ||
           (code >= 0xFF00 && code <= 0xFF60) ||
           (code >= 0xFFE0 && code <= 0xFFE6) ||
+          (code >= 0x1F300 && code <= 0x1F64F) ||
+          (code >= 0x1F900 && code <= 0x1FAFF) ||
           (code >= 0x20000 && code <= 0x2FFFD) ||
           (code >= 0x30000 && code <= 0x3FFFD) )); then
     REPLY=2
@@ -271,6 +275,21 @@ _ui_display_width() {
     (( width += REPLY ))
   done
   REPLY=$width
+}
+
+_ui_strip_leading_marks_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+  local text=$1 char
+  integer code
+  while [[ -n $text ]]; do
+    char=$text[1]
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( REPLY == 0 )) || break
+    text=${text[2,-1]}
+  done
+  REPLY=$text
 }
 
 _ui_truncate_reply() {
@@ -346,7 +365,10 @@ _ui_truncate_reply() {
     (( suffix_width += char_width ))
   done
 
-  REPLY="${prefix}${marker}${suffix}"
+  # A suffix must not attach a discarded base character's combining marks
+  # to the ellipsis. Keep complete base-plus-mark sequences at the cut.
+  _ui_strip_leading_marks_reply "$suffix"
+  REPLY="${prefix}${marker}${REPLY}"
 }
 
 _ui_truncate() {

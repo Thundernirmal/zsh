@@ -44,6 +44,7 @@ if (( ! _ZSH_FUNCTIONS_CATALOGUE_LOADED )); then
   dusage() { _zsh_functions_dispatch dusage "$@"; }
   bigfiles() { _zsh_functions_dispatch bigfiles "$@"; }
   ports() { _zsh_functions_dispatch ports "$@"; }
+  weather() { _zsh_functions_dispatch weather "$@"; }
   myip() { _zsh_functions_dispatch myip "$@"; }
   croot() { _zsh_functions_dispatch croot "$@"; }
   function gitcount() { _zsh_functions_dispatch gitcount "$@"; }

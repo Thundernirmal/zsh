@@ -1,5 +1,5 @@
 # Lazy registration for on-demand tips. Glyph previews and shared Ctrl+P
-# history-preview reminders live in lib/tips-catalogue.zsh. Destructive file operations deliberately
+# history-preview, command-help, and credential-status reminders live in lib/tips-catalogue.zsh. Destructive file operations deliberately
 # keep their native command semantics instead of relying on bypassable aliases.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}

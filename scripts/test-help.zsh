@@ -90,7 +90,7 @@ file_contents() {
 
 test_catalogue() {
   local id before_count rc
-  local expected='.. ... .... - z zi mkcd croot ls ll la lt cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm cgm-env upkg upkg-plan npkg npkg-remove G L W H T NE NUL zdoctor tips ztheme zhelp'
+  local expected='.. ... .... - z zi mkcd croot ls ll la lt cat extract peek dusage bigfiles grep diff ff ft glog gpr gun gitcount gcount fbr weather fkill headers fanprofile ports myip path cgm cgm-env cgm-status cgm-check upkg upkg-plan npkg npkg-remove G L W H T NE NUL zdoctor tips ztheme zhelp'
 
   assert_equals "${(j: :)_ZSH_HELP_ORDER}" "$expected" 'catalogue covers the public command suite in stable order' || return 1
   assert_unique 'catalogue IDs are unique' "${_ZSH_HELP_ORDER[@]}" || return 1
@@ -108,6 +108,11 @@ test_catalogue() {
   assert_equals "${_ZSH_HELP_USAGE[weather]}" 'weather' 'weather help does not promise an unsupported location argument' || return 1
   assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat or cat' 'peek help names its real fallback' || return 1
   assert_equals "${_ZSH_HELP_USAGE[ztheme]}" 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme help exposes every public subcommand' || return 1
+
+  assert_equals "${_ZSH_COMMAND_CANONICAL[gcount]}" gitcount 'alias metadata points to its canonical command' || return 1
+  assert_equals "${_ZSH_COMMAND_CANONICAL[upkg-plan]}" upkg 'action metadata names its parent command' || return 1
+  assert_equals "${_ZSH_COMMAND_MUTATION[fkill]}" write 'process signals carry a write category' || return 1
+  assert_equals "${_ZSH_COMMAND_MUTATION[upkg]}" mixed 'package metadata does not mislabel all actions as read-only' || return 1
 
   before_count=${#_ZSH_HELP_ORDER[@]}
   _zsh_help_register extract Files duplicate duplicate duplicate none function none

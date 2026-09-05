@@ -15,7 +15,11 @@ _zsh_tip_pool=(
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"
   "Run ft <pattern> [path] to search file contents"
-  "Run extract <archive> to unpack a supported archive"
+  "Run extract --keep file.gz to preserve the compressed input"
+  "Run extract --destination existing-dir archive.tar.gz to choose where to unpack"
+  "Use ff --no-ignore or ft --hidden --no-ignore to broaden a search"
+  "Use ft --fixed-strings to search literal text"
+  "Use --help with a general helper to see usage before doing any work"
   "Run mkcd <dir> to create and enter a directory"
   "Run croot to jump to the current Git repository root"
   "Run glog to see the latest 20 commits as a graph"
@@ -77,6 +81,8 @@ if (( $+functions[cgm] )); then
     "Run cgm set OPENAI_KEY to store a credential securely"
     "Run cgm env OPENAI_KEY to load a credential into this shell"
     "Run cgm list to show saved names without retrieving values"
+    "Run cgm status to check which saved names are exported in this shell"
+    "Run cgm check to ping Secret Service without retrieving values"
   )
 fi
 

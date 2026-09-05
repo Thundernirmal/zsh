@@ -1,54 +1,238 @@
 # Lazily loaded implementations for user-facing shell functions.
 
-# Extract any archive
-extract() {
+# Keep network calls finite by default while allowing a deliberate per-shell
+# override. Values are integer seconds; zero and malformed values are rejected
+# so an accidental environment typo cannot restore an unbounded request.
+_zsh_http_timeout_args() {
   emulate -L zsh
 
-  if [ -z "${1:-}" ]; then
-    print -u2 -r -- 'Usage: extract <file>'
+  local connect=${ZSH_HTTP_CONNECT_TIMEOUT:-5}
+  local maximum=${ZSH_HTTP_MAX_TIME:-15}
+  local value name variable normalized
+  local -a names=(connect maximum) values=("$connect" "$maximum")
+  integer index
+
+  for (( index = 1; index <= ${#names[@]}; index++ )); do
+    name=${names[$index]}
+    value=${values[$index]}
+    case $name in
+      connect) variable=ZSH_HTTP_CONNECT_TIMEOUT ;;
+      maximum) variable=ZSH_HTTP_MAX_TIME ;;
+    esac
+    case $value in
+      ''|*[!0-9]*)
+        print -u2 -r -- "zsh network: $variable: invalid timeout '$value' (use positive integer seconds)"
+        return 1
+        ;;
+    esac
+    normalized=$value
+    while [[ ${#normalized} -gt 1 && $normalized == 0* ]]; do
+      normalized=${normalized#0}
+    done
+    if [[ $normalized == 0 ]]; then
+      print -u2 -r -- "zsh network: $variable: timeout must be positive"
+      return 1
+    fi
+  done
+
+  reply=( --connect-timeout "$connect" --max-time "$maximum" )
+}
+
+_extract_usage() {
+  print 'Usage: extract [--keep] [--destination <dir>] <file>'
+  print ''
+  print 'Supported archives: tar, zip, rar, 7z, gzip, bzip2, and compress.'
+  print 'Archive inputs are kept; bare compressed inputs use native in-place removal.'
+  print -r -- '--keep preserves a bare compressed input, and --destination implies keep.'
+}
+
+_extract_stream_to() {
+  emulate -L zsh
+
+  local output=$1 source=$2 tool=$3 temp rc
+
+  temp=$(command mktemp "${output}.partial.XXXXXX") || {
+    print -u2 -r -- "extract: cannot create a temporary output beside '$output'"
+    return 1
+  }
+  {
+    command "$tool" -c "$source" >| "$temp" || return $?
+    # Same-directory hard-link publication refuses every existing destination,
+    # including a dangling symlink, without a check-then-overwrite race.
+    command ln -T -- "$temp" "$output" || {
+      print -u2 -r -- "extract: cannot publish '$output'; destination must not exist"
+      return 1
+    }
+  } always {
+    command rm -f -- "$temp"
+  }
+
+}
+
+# Extract any archive. Archive formats retain their input. Bare compressed
+# files retain the native decompressor behavior unless --keep or --destination
+# is used explicitly.
+extract() {
+  emulate -L zsh
+  setopt localoptions noclobber
+
+  local archive_arg='' destination='' archive output rc arg value
+  local -i keep_input=0 options_done=0
+  local -a operands tar_args unzip_args
+
+  while (( $# > 0 )); do
+    arg=$1
+    shift
+    if (( ! options_done )); then
+      case $arg in
+        -h|--help)
+          _extract_usage
+          return 0
+          ;;
+        -k|--keep|--keep-input)
+          keep_input=1
+          continue
+          ;;
+        -C|--destination|--dest)
+          if (( $# == 0 )); then
+            print -u2 -r -- 'extract: missing value for --destination'
+            _extract_usage >&2
+            return 1
+          fi
+          destination=$1
+          shift
+          continue
+          ;;
+        --destination=*|--dest=*)
+          destination=${arg#*=}
+          [[ -n $destination ]] || {
+            print -u2 -r -- 'extract: --destination requires a directory'
+            _extract_usage >&2
+            return 1
+          }
+          continue
+          ;;
+        --)
+          options_done=1
+          continue
+          ;;
+        -*)
+          print -u2 -r -- "extract: unknown option: $arg"
+          _extract_usage >&2
+          return 1
+          ;;
+      esac
+    fi
+    operands+=("$arg")
+  done
+
+  if (( ${#operands[@]} != 1 )); then
+    print -u2 -r -- 'extract: expected exactly one archive file'
+    _extract_usage >&2
     return 1
   fi
-  if [ ! -f "$1" ]; then
-    print -u2 -r -- "'$1' is not a valid file"
+  archive_arg=${operands[1]}
+  if [ ! -f "$archive_arg" ]; then
+    print -u2 -r -- "'$archive_arg' is not a valid file"
+    return 1
+  fi
+  if [[ -n $destination && ! -d $destination ]]; then
+    print -u2 -r -- "extract: destination '$destination' is not a directory"
     return 1
   fi
 
-  local archive=${1:A}
+  archive=${archive_arg:A}
+  [[ -n $destination ]] && destination=${destination:A}
 
   case $archive in
-    *.tar.bz2)   command tar xjf "$archive" ;;
-    *.tar.gz)    command tar xzf "$archive" ;;
-    *.tar.xz)    command tar xJf "$archive" ;;
-    *.tar.zst)   command tar --zstd -xf "$archive" ;;
-    *.bz2)
-      command -v bunzip2 >/dev/null 2>&1 || { print -u2 -r -- "bunzip2 is required to extract '$1'"; return 1; }
-      command bunzip2 "$archive"
+    *.tar.bz2)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xjf "$archive"
+      ;;
+    *.tar.gz)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xzf "$archive"
+      ;;
+    *.tar.xz)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xJf "$archive"
+      ;;
+    *.tar.zst)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" --zstd -xf "$archive"
+      ;;
+    *.tar)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xf "$archive"
+      ;;
+    *.tbz2)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xjf "$archive"
+      ;;
+    *.tgz)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xzf "$archive"
+      ;;
+    *.tzst)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" --zstd -xf "$archive"
+      ;;
+    *.zip)
+      command -v unzip >/dev/null 2>&1 || { print -u2 -r -- "unzip is required to extract '$archive_arg'"; return 1; }
+      [[ -n $destination ]] && unzip_args=(-d "$destination")
+      command unzip "${unzip_args[@]}" -- "$archive"
       ;;
     *.rar)
-      command -v unrar >/dev/null 2>&1 || { print -u2 -r -- "unrar is required to extract '$1'"; return 1; }
-      command unrar x "$archive"
-      ;;
-    *.gz)
-      command -v gunzip >/dev/null 2>&1 || { print -u2 -r -- "gunzip is required to extract '$1'"; return 1; }
-      command gunzip "$archive"
-      ;;
-    *.tar)       command tar xf "$archive" ;;
-    *.tbz2)      command tar xjf "$archive" ;;
-    *.tgz)       command tar xzf "$archive" ;;
-    *.tzst)      command tar --zstd -xf "$archive" ;;
-    *.zip)
-      command -v unzip >/dev/null 2>&1 || { print -u2 -r -- "unzip is required to extract '$1'"; return 1; }
-      command unzip "$archive"
-      ;;
-    *.Z)
-      command -v uncompress >/dev/null 2>&1 || { print -u2 -r -- "uncompress is required to extract '$1'"; return 1; }
-      command uncompress "$archive"
+      command -v unrar >/dev/null 2>&1 || { print -u2 -r -- "unrar is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination ]]; then
+        command unrar x "$archive" "$destination/"
+      else
+        command unrar x "$archive"
+      fi
       ;;
     *.7z)
-      command -v 7z >/dev/null 2>&1 || { print -u2 -r -- "7z is required to extract '$1'"; return 1; }
-      command 7z x "$archive"
+      command -v 7z >/dev/null 2>&1 || { print -u2 -r -- "7z is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination ]]; then
+        command 7z x "$archive" "-o$destination"
+      else
+        command 7z x "$archive"
+      fi
       ;;
-    *)           print -u2 -r -- "'$1' cannot be extracted via extract()"; return 1 ;;
+    *.bz2)
+      command -v bunzip2 >/dev/null 2>&1 || { print -u2 -r -- "bunzip2 is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination ]]; then
+        output="$destination/${archive:t:r}"
+        _extract_stream_to "$output" "$archive" bunzip2 || return
+      elif (( keep_input )); then
+        command bunzip2 -k -- "$archive"
+      else
+        command bunzip2 -- "$archive"
+      fi
+      ;;
+    *.gz)
+      command -v gunzip >/dev/null 2>&1 || { print -u2 -r -- "gunzip is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination ]]; then
+        output="$destination/${archive:t:r}"
+        _extract_stream_to "$output" "$archive" gunzip || return
+      elif (( keep_input )); then
+        command gunzip -k -- "$archive"
+      else
+        command gunzip -- "$archive"
+      fi
+      ;;
+    *.Z)
+      command -v uncompress >/dev/null 2>&1 || { print -u2 -r -- "uncompress is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination || $keep_input -eq 1 ]]; then
+        output="${destination:-${archive:h}}/${archive:t:r}"
+        _extract_stream_to "$output" "$archive" uncompress || return
+      else
+        command uncompress "$archive"
+      fi
+      ;;
+    *)
+      print -u2 -r -- "'$archive_arg' cannot be extracted via extract()"
+      return 1
+      ;;
   esac
 }
 
@@ -56,7 +240,15 @@ extract() {
 mkcd() {
   emulate -L zsh
 
-  if [ -z "${1:-}" ]; then
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: mkcd <directory>'
+      print 'Create the directory if needed, then enter it.'
+      return 0
+      ;;
+  esac
+
+  if (( $# != 1 )); then
     print -u2 -r -- 'Usage: mkcd <directory>'
     return 1
   fi
@@ -64,17 +256,71 @@ mkcd() {
   command mkdir -p -- "$1" && builtin cd -- "$1"
 }
 
+# Print the name-search options without depending on a backend.
+_ff_usage() {
+  print 'Usage: ff [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]'
+  print 'Find names case-insensitively; hidden entries and symlink following are enabled by default.'
+  print -r -- '--no-ignore includes entries ignored by fd; find fallback has no ignore-file filtering.'
+}
+
 # Find files by name
 ff() {
   emulate -L zsh
 
-  if [ -z "${1:-}" ]; then
-    print -u2 -r -- 'Usage: ff <pattern> [path]'
+  local arg pattern='' search_root='.'
+  local -i hidden=1 no_ignore=0 follow=1 options_done=0
+  local -a operands fd_args
+
+  while (( $# > 0 )); do
+    arg=$1
+    shift
+    if (( ! options_done )); then
+      case $arg in
+        -h|--help)
+          _ff_usage
+          return 0
+          ;;
+        --hidden)
+          hidden=1
+          continue
+          ;;
+        --no-hidden)
+          hidden=0
+          continue
+          ;;
+        --no-ignore)
+          no_ignore=1
+          continue
+          ;;
+        --follow)
+          follow=1
+          continue
+          ;;
+        --no-follow)
+          follow=0
+          continue
+          ;;
+        --)
+          options_done=1
+          continue
+          ;;
+        -*)
+          print -u2 -r -- "ff: unknown option: $arg"
+          _ff_usage >&2
+          return 1
+          ;;
+      esac
+    fi
+    operands+=("$arg")
+  done
+
+  if (( ${#operands[@]} < 1 || ${#operands[@]} > 2 )); then
+    print -u2 -r -- 'ff: expected a pattern and optional path'
+    _ff_usage >&2
     return 1
   fi
-
-  local pattern=$1
-  local search_root=${2:-.}
+  pattern=${operands[1]}
+  (( ${#operands[@]} == 2 )) && search_root=${operands[2]}
 
   if [ ! -d "$search_root" ]; then
     print -u2 -r -- "'$search_root' is not a directory"
@@ -83,27 +329,114 @@ ff() {
   search_root=${search_root:A}
 
   if command -v fd >/dev/null 2>&1; then
-    fd --hidden --follow --glob --ignore-case -- "*$pattern*" "$search_root"
+    (( hidden )) && fd_args+=(--hidden)
+    (( no_ignore )) && fd_args+=(--no-ignore)
+    (( follow )) && fd_args+=(--follow)
+    fd_args+=(--glob --ignore-case -- "*$pattern*" "$search_root")
+    command fd "${fd_args[@]}"
   elif command -v fdfind >/dev/null 2>&1; then
-    fdfind --hidden --follow --glob --ignore-case -- "*$pattern*" "$search_root"
+    (( hidden )) && fd_args+=(--hidden)
+    (( no_ignore )) && fd_args+=(--no-ignore)
+    (( follow )) && fd_args+=(--follow)
+    fd_args+=(--glob --ignore-case -- "*$pattern*" "$search_root")
+    command fdfind "${fd_args[@]}"
   else
-    command find "$search_root" -iname "*$pattern*" 2>/dev/null
+    local -a find_args
+    find_args=()
+    (( follow )) && find_args+=(-L)
+    find_args+=("$search_root")
+    (( no_ignore )) && print -u2 -r -- 'ff: find fallback has no ignore-file filtering; --no-ignore is already in effect'
+    if (( hidden )); then
+      find_args+=(-iname "*$pattern*")
+    else
+      # The fallback has no hidden-file switch, so explicitly prune hidden
+      # directories and exclude hidden files while retaining the requested root.
+      find_args+=( \( -name '.*' ! -path "$search_root" -prune \) -o \( ! -name '.*' -iname "*$pattern*" -print \) )
+    fi
+    command find "${find_args[@]}" 2>/dev/null
   fi
+}
+
+# Print the content-search options without depending on a backend.
+_ft_usage() {
+  print 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] <pattern> [path]'
+  print 'Search text with rg or grep; fixed-string matching is available on both backends.'
+  print 'The grep fallback already traverses hidden files and does not read ignore files.'
 }
 
 # Find text in files (uses ripgrep if available, falls back to grep)
 ft() {
   emulate -L zsh
 
-  if [ -z "${1:-}" ]; then
-    print -u2 -r -- 'Usage: ft <pattern> [path]'
+  local arg pattern='' search_root='.'
+  local -i hidden=0 no_ignore=0 follow=0 fixed_strings=0 options_done=0
+  local -a operands search_args
+
+  while (( $# > 0 )); do
+    arg=$1
+    shift
+    if (( ! options_done )); then
+      case $arg in
+        -h|--help)
+          _ft_usage
+          return 0
+          ;;
+        --hidden)
+          hidden=1
+          continue
+          ;;
+        --no-ignore)
+          no_ignore=1
+          continue
+          ;;
+        --follow)
+          follow=1
+          continue
+          ;;
+        --fixed-strings|-F)
+          fixed_strings=1
+          continue
+          ;;
+        --)
+          options_done=1
+          continue
+          ;;
+        -*)
+          print -u2 -r -- "ft: unknown option: $arg"
+          _ft_usage >&2
+          return 1
+          ;;
+      esac
+    fi
+    operands+=("$arg")
+  done
+
+  if (( ${#operands[@]} < 1 || ${#operands[@]} > 2 )); then
+    print -u2 -r -- 'ft: expected a pattern and optional path'
+    _ft_usage >&2
     return 1
   fi
+  pattern=${operands[1]}
+  (( ${#operands[@]} == 2 )) && search_root=${operands[2]}
 
   if command -v rg >/dev/null 2>&1; then
-    rg --color=auto -- "$1" "${2:-.}"
+    (( hidden )) && search_args+=(--hidden)
+    (( no_ignore )) && search_args+=(--no-ignore)
+    (( follow )) && search_args+=(--follow)
+    (( fixed_strings )) && search_args+=(--fixed-strings)
+    search_args+=(--color=auto -- "$pattern" "$search_root")
+    command rg "${search_args[@]}"
   else
-    command grep -rnI --color=auto -- "$1" "${2:-.}" 2>/dev/null
+    (( hidden )) && print -u2 -r -- 'ft: grep fallback includes hidden files by default; --hidden is already in effect'
+    (( no_ignore )) && print -u2 -r -- 'ft: grep fallback has no ignore-file filtering; --no-ignore is already in effect'
+    if (( follow )); then
+      search_args=(-RnI)
+    else
+      search_args=(-rnI)
+    fi
+    (( fixed_strings )) && search_args+=(-F)
+    search_args+=(--color=auto -- "$pattern" "$search_root")
+    command grep "${search_args[@]}" 2>/dev/null
   fi
 }
 
@@ -138,6 +471,12 @@ _fkill_normalize_signal() {
   reply=( "$signal_number" )
 }
 
+_fkill_usage() {
+  print 'Usage: fkill [--all] [signal]'
+  print 'Pick a process and send SIGTERM by default; use --all to include other users.'
+  print 'SIGKILL and multi-process selections require an explicit confirmation.'
+}
+
 fkill() {
   emulate -L zsh
 
@@ -149,6 +488,10 @@ fkill() {
 
   for arg in "${args[@]}"; do
     case $arg in
+      -h|--help)
+        _fkill_usage
+        return 0
+        ;;
       --all|-a) all_users=1 ;;
       *)
         if (( signal_given )); then
@@ -277,19 +620,43 @@ fkill() {
 headers() {
   emulate -L zsh
 
-  if [ -z "${1:-}" ]; then
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: headers <url>'
+      print 'Fetch response headers through redirects with bounded timeouts.'
+      print 'Override ZSH_HTTP_CONNECT_TIMEOUT and ZSH_HTTP_MAX_TIME with positive seconds.'
+      return 0
+      ;;
+  esac
+
+  if (( $# != 1 )); then
     print -u2 -r -- 'Usage: headers <url>'
     return 1
   fi
 
-  curl -sSIL -- "$1"
+  local -a timeout_args
+  _zsh_http_timeout_args || return 1
+  timeout_args=( "${reply[@]}" )
+  command curl -sSIL "${timeout_args[@]}" -- "$1" || {
+    local rc=$?
+    print -u2 -r -- "headers: request failed (curl exit $rc)"
+    return $rc
+  }
 }
 
 # Preview file (uses bat if available)
 peek() {
   emulate -L zsh
 
-  if [ -z "${1:-}" ]; then
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: peek <file>'
+      print 'Preview a file with bat when available, otherwise cat.'
+      return 0
+      ;;
+  esac
+
+  if (( $# != 1 )); then
     print -u2 -r -- 'Usage: peek <file>'
     return 1
   fi
@@ -448,6 +815,10 @@ _ui_safe_truncate() {
     (( suffix_width += token_width ))
   done
 
+  if (( $+functions[_ui_strip_leading_marks_reply] )); then
+    _ui_strip_leading_marks_reply "$suffix"
+    suffix=$REPLY
+  fi
   print -r -- "${prefix}${marker}${suffix}"
 }
 
@@ -463,6 +834,18 @@ _ui_profile_role() {
 # Show current laptop thermal/performance profile
 fanprofile() {
   emulate -L zsh
+
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: fanprofile'
+      print 'Show the current Linux platform or ASUS fan profile without changing it.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: fanprofile'
+    return 1
+  fi
 
   local platform_profile_file=/sys/firmware/acpi/platform_profile
   local platform_choices_file=/sys/firmware/acpi/platform_profile_choices
@@ -675,6 +1058,18 @@ dusage() {
   emulate -L zsh
   setopt localtraps
 
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: dusage [path] [count]'
+      print 'Rank immediate entries, retaining partial rows when du reports an error.'
+      return 0
+      ;;
+  esac
+  if (( $# > 2 )); then
+    print -u2 -r -- 'Usage: dusage [path] [count]'
+    return 1
+  fi
+
   local target=${1:-.}
   local limit=${2:-20}
   local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
@@ -846,6 +1241,18 @@ dusage() {
 bigfiles() {
   emulate -L zsh
   setopt localtraps
+
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: bigfiles [path] [count]'
+      print 'Rank files recursively, retaining partial rows when find or du reports an error.'
+      return 0
+      ;;
+  esac
+  if (( $# > 2 )); then
+    print -u2 -r -- 'Usage: bigfiles [path] [count]'
+    return 1
+  fi
 
   local target=${1:-.}
   local limit=${2:-20}
@@ -1031,6 +1438,18 @@ bigfiles() {
 ports() {
   emulate -L zsh
 
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: ports'
+      print 'Show listening TCP and UDP sockets with owning processes when permitted.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: ports'
+    return 1
+  fi
+
   local output header parsed line netid state state_role port address process pid shown more pid_text
   local -a lines rows
   local row_delim=$'\t'
@@ -1175,19 +1594,65 @@ ports() {
   _ui_reset
 }
 
+# Show the default forecast over HTTPS
+weather() {
+  emulate -L zsh
+
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: weather'
+      print 'Fetch the default concise forecast from wttr.in with bounded timeouts.'
+      print 'Override ZSH_HTTP_CONNECT_TIMEOUT and ZSH_HTTP_MAX_TIME with positive seconds.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: weather'
+    return 1
+  fi
+
+  local -a timeout_args
+  _zsh_http_timeout_args || return 1
+  timeout_args=( "${reply[@]}" )
+  command curl --http1.1 -fsSL "${timeout_args[@]}" -- https://wttr.in || {
+    local rc=$?
+    print -u2 -r -- "weather: request failed (curl exit $rc)"
+    return $rc
+  }
+}
+
 # Show public IP address over HTTPS
 myip() {
   emulate -L zsh
 
-  local endpoint='https://ifconfig.me/ip'
-  local ip
-
-  if _ui_plain_mode; then
-    curl -fsSL "$endpoint" && printf '\n'
-    return $?
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: myip'
+      print 'Look up the public IP over HTTPS with bounded timeouts.'
+      print 'Override ZSH_HTTP_CONNECT_TIMEOUT and ZSH_HTTP_MAX_TIME with positive seconds.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: myip'
+    return 1
   fi
 
-  ip=$(curl -fsSL "$endpoint") || return $?
+  local endpoint='https://ifconfig.me/ip'
+  local ip
+  local -a timeout_args
+  _zsh_http_timeout_args || return 1
+  timeout_args=( "${reply[@]}" )
+
+  ip=$(command curl -fsSL "${timeout_args[@]}" -- "$endpoint") || {
+    local rc=$?
+    print -u2 -r -- "myip: request failed (curl exit $rc)"
+    return $rc
+  }
+  if _ui_plain_mode; then
+    print -r -- "$ip"
+    return 0
+  fi
 
   _ui_title_line 'Public IP' 'HTTPS lookup' accent '󰩟' '*'
   print -nr -- '  '
@@ -1207,6 +1672,18 @@ myip() {
 croot() {
   emulate -L zsh
 
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: croot'
+      print 'Change to the root directory of the current Git repository.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: croot'
+    return 1
+  fi
+
   local root
 
   root=$(git rev-parse --show-toplevel 2>/dev/null) || {
@@ -1220,6 +1697,18 @@ croot() {
 # Show contributor counts for the current repo history
 function gitcount() {
   emulate -L zsh
+
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: gitcount'
+      print 'Count non-merge commits by contributor in the current Git repository.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: gitcount'
+    return 1
+  fi
 
   git rev-parse --git-dir >/dev/null 2>&1 || {
     print -u2 -r -- 'Not in a git repo'
@@ -1237,6 +1726,18 @@ function gitcount() {
 # Print PATH entries with rich interactive output and plain pipe-friendly output
 path() {
   emulate -L zsh
+
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: path'
+      print 'List PATH entries while preserving empty components.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: path'
+    return 1
+  fi
 
   local -a entries
   local entry display_entry shown width index_width path_width
@@ -1333,9 +1834,9 @@ _fbr_activate() {
     else
       print -u2 -r -- "Remote '$branch' does not track local '$local_branch' (no upstream). Refusing to switch."
     fi
-    print -u2 -r -- "To enter the local branch: git switch -- '$local_branch'"
-    print -u2 -r -- "To track the remote under a new name: git switch --track -b <new-name> -- '$branch'"
-    print -u2 -r -- "To inspect the remote without changing branches: git switch --detach -- '$branch'"
+    print -u2 -r -- "To enter the local branch: git switch -- ${(q)local_branch}"
+    print -u2 -r -- "To track the remote under a new name: git switch --track -b NEW_BRANCH -- ${(q)branch}"
+    print -u2 -r -- "To inspect the remote without changing branches: git switch --detach -- ${(q)branch}"
     return 1
   fi
 
@@ -1345,6 +1846,19 @@ _fbr_activate() {
 
 # Fuzzy-pick a Git branch, entering its worktree or checking it out.
 fbr() {
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: fbr'
+      print 'Pick a local or remote branch and enter its worktree or check it out.'
+      return 0
+      ;;
+  esac
+
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: fbr'
+    return 1
+  fi
+
   _zsh_require_fzf || return 1
 
   if [ ! -t 0 ] || [ ! -t 1 ]; then
@@ -4992,7 +5506,7 @@ zdoctor() {
     55-ui-helpers 60-functions 62-cgm 65-help 66-compdefs 70-globals 80-tips )
   missing_modules=()
   for module in "${modules[@]}"; do
-    if [[ $module == 62-cgm ]] && (( ! $+commands[secret-tool] )); then
+    if [[ $module == 62-cgm ]] && ! command -v secret-tool >/dev/null 2>&1; then
       continue
     fi
     [[ -r $install_base/$module.zsh ]] || missing_modules+=("$module.zsh")
@@ -5064,7 +5578,7 @@ zdoctor() {
   fi
 
   _zdoctor_report ok "fzf integration state: ${_FZF_STATE:-unchecked} (found: ${_FZF_FOUND:-not checked})"
-  if (( $+commands[zoxide] )); then
+  if command -v zoxide >/dev/null 2>&1; then
     if (( $+functions[zi] )); then
       _zdoctor_report ok 'zoxide integration is ready'
     else

@@ -39,9 +39,9 @@ tips
 ztheme list
 ```
 
-`zdoctor` diagnoses install location, missing modules, completion readiness, tool versions, glyph settings, and integration status without touching the network or Secret Service unless asked (`zdoctor --network`, `zdoctor --secrets`). `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example.
+`zdoctor` diagnoses install location, missing modules, completion readiness, tool availability, glyph settings, and integration status without touching the network or Secret Service unless asked (`zdoctor --network`, `zdoctor --secrets`). `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example. General helpers support `--help`; see the [guide](GUIDE.md#function-reference) for search controls, extraction destinations, bounded network requests, and credential status.
 
-Fuzzy pickers share one rounded frame with unfilled input and footer rows, restrained section dividers, concise key hints, responsive previews, and theme-aware focus and selection cues. Tabular pickers align their display columns by terminal cells while returning undecorated values. Glyphs default to ordinary Unicode in UTF-8 locales; use `ztheme current` to preview them or explicitly select Nerd Font icons (see [theme settings](GUIDE.md#shared-terminal-ui)). Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
+Fuzzy pickers share one rounded frame with unfilled input and footer rows, restrained section dividers, concise key hints, responsive previews, and theme-aware focus and selection cues. Tabular pickers align their display columns by terminal cells while returning undecorated values. Glyphs default to ordinary Unicode in UTF-8 locales; use `ztheme current` to preview them or explicitly select Nerd Font icons (see [theme settings](GUIDE.md#terminal-output-modes)). Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
 
 ## What it provides
 
