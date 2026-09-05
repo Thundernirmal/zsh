@@ -466,7 +466,7 @@ Generated `**<Tab>` completion uses separate general, path, and directory labels
 
 The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths. Every picker uses the same list/search/footer hierarchy and contextual ghost hint. At 100 columns and wider, textual previews sit beside the list; below 100 columns they move underneath. `fkill` and the Nix multi-select pickers show a live selected-item count in the footer. Git and Nix table pickers keep the visible identity column frozen, while `--accept-nth` returns undecorated branch, PID, example, or profile-target fields to the calling workflow; `fbr` also previews that undecorated branch rather than its optional `[WT]` display badge.
 
-Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` sends the requested signal after selection, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.
+Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` confirms SIGKILL and multi-selections naming targets and signal before sending, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.
 
 ## Function reference
 
@@ -488,7 +488,7 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 | `path` | Print PATH entries |
 | `croot` | Change to the current Git repository root |
 | `gitcount` | Show non-merge commit counts by contributor |
-| `fkill [signal]` | Select processes and send a signal |
+| `fkill [--all] [signal]` | Select processes and send a signal |
 | `fbr` | Select a branch; enter its worktree or check it out |
 
 #### extract
@@ -534,12 +534,13 @@ All three commands apply the safe-text contract described in [Terminal output mo
 
 #### fkill and fbr
 
-`fkill` requires a terminal and defaults to `SIGTERM` (`15`), allowing graceful shutdown. Numeric and named forms are normalized, so `15`, `-15`, `TERM`, and `SIGTERM` all select the same signal. Invalid signals fail before the picker opens. Pass `9` only when force is necessary:
+`fkill` requires a terminal and defaults to `SIGTERM` (`15`), allowing graceful shutdown. Numeric and named forms are normalized, so `15`, `-15`, `TERM`, and `SIGTERM` all select the same signal. Invalid signals fail before the picker opens. The list shows PID, owner, elapsed time, and command with a preview of full details and working directory; it covers the current user's processes unless `--all` is given. A single SIGTERM sends immediately, while SIGKILL or a multi-selection names the targets and signal for confirmation first. Each kill reports its own outcome, and no privilege escalation is attempted. Pass `9` only when force is necessary:
 
 ```zsh
 fkill
 fkill SIGTERM
 fkill 9
+fkill --all 15
 ```
 
 `fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed widths, so subjects begin in one stable column even when branch names differ; long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.

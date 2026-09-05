@@ -253,7 +253,7 @@ if (( $+functions[compdef] )); then
   }
 
   _zsh_fkill() {
-    _arguments '1:signal:_signals' '*: :_message "no additional arguments"'
+    _arguments '--all[select processes from all users]' '-a[select processes from all users]' '1:signal:_signals' '*: :_message "no additional arguments"'
   }
 
   _zsh_headers() {

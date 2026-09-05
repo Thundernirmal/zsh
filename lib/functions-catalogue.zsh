@@ -141,13 +141,30 @@ _fkill_normalize_signal() {
 fkill() {
   emulate -L zsh
 
-  local signal=${1:-15}
-  local signal_name signal_number
-  local selected pid multi_footer
-  local -a pids fzf_args multi_args context_args
+  local signal='15' signal_name signal_number current_user scope_label
+  local selected pid multi_footer preview_command confirm_reply arg
+  local -a args pids fzf_args multi_args context_args preview_args
+  local -i all_users=0 needs_review=0 pid_idx kill_rc=0 failed_count=0 signal_given=0
+  args=( "$@" )
+
+  for arg in "${args[@]}"; do
+    case $arg in
+      --all|-a) all_users=1 ;;
+      *)
+        if (( signal_given )); then
+          print -u2 -r -- "fkill: too many arguments: $arg"
+          print -u2 -r -- 'Usage: fkill [--all] [signal]'
+          return 1
+        fi
+        signal=$arg
+        signal_given=1
+        ;;
+    esac
+  done
 
   _fkill_normalize_signal "$signal" || {
-    print -u2 -r -- "fkill: invalid signal: ${1:-}"
+    print -u2 -r -- "fkill: invalid signal: $signal"
+    print -u2 -r -- 'Usage: fkill [--all] [signal]'
     return 1
   }
   signal_name=$REPLY
@@ -160,37 +177,100 @@ fkill() {
     return 1
   fi
 
+  if (( all_users )); then
+    scope_label='all users'
+  else
+    current_user=$(command id -un 2>/dev/null) || current_user=${USER:-}
+    [[ -n $current_user ]] || {
+      print -u2 -r -- 'fkill: cannot determine the current user; pass --all to list every process'
+      return 1
+    }
+    scope_label="user: $current_user"
+  fi
+
   _fzf_picker_multi_args kill
   multi_footer=$REPLY
   multi_args=( "${reply[@]}" )
   _fzf_picker_context_args Processes 'Type to filter processes' "$multi_footer"
   context_args=( "${reply[@]}" )
+  _fzf_picker_preview_args Process
+  preview_args=( "${reply[@]}" )
+  preview_command='pid={1}; command ps -p "$pid" -o pid=,ppid=,user=,etime=,args= 2>/dev/null; command readlink -f "/proc/$pid/cwd" 2>/dev/null'
   fzf_args=(
     "${context_args[@]}"
     "${multi_args[@]}"
+    "${preview_args[@]}"
     --delimiter=$'\t'
-    --with-nth=2..
+    --with-nth=1,2,3,4
     --accept-nth=1
-    "--header=Signal: SIG${signal_name}"
+    "--header=Signal: SIG${signal_name} (${scope_label})"
     --header-label=Signal
+    "--preview=$preview_command"
   )
-  selected=$(
-    ps -ef | sed 1d | awk '
-      {
-        pid = $2
-        $1 = $2 = $3 = $4 = $5 = $6 = $7 = ""
-        sub(/^ +/, "")
-        print pid "\t" $0
-      }
-    ' | command fzf "${fzf_args[@]}"
-  ) || return 0
+  if (( all_users )); then
+    selected=$(
+      command ps -eo pid,user,etime,args | command sed 1d | command awk '
+        {
+          pid = $1
+          user = $2
+          etime = $3
+          $1 = $2 = $3 = ""
+          sub(/^ +/, "")
+          print pid "\t" user "\t" etime "\t" $0
+        }
+      ' | command fzf "${fzf_args[@]}"
+    ) || return 0
+  else
+    selected=$(
+      command ps -u "$current_user" -o pid=,user=,etime=,args= | command awk '
+        {
+          pid = $1
+          user = $2
+          etime = $3
+          $1 = $2 = $3 = ""
+          sub(/^ +/, "")
+          print pid "\t" user "\t" etime "\t" $0
+        }
+      ' | command fzf "${fzf_args[@]}"
+    ) || return 0
+  fi
 
   while IFS= read -r pid; do
     [ -n "$pid" ] && pids+=("$pid")
   done <<< "$selected"
 
   (( ${#pids[@]} > 0 )) || return 0
-  builtin kill "-$signal_number" "${pids[@]}"
+
+  if (( signal_number == 9 || ${#pids[@]} > 1 )); then
+    needs_review=1
+  fi
+  if (( needs_review )); then
+    print -u2 -r -- "Send SIG${signal_name} to ${#pids[@]} process(es): ${(j:, :)pids}?"
+    confirm_reply=''
+    if ! read -q "confirm_reply?Press y to confirm, any other key to cancel: "; then
+      print -u2 -r -- ''
+      print -u2 -r -- 'fkill: cancelled; no signal sent'
+      return 0
+    fi
+    print -u2 -r -- ''
+    if [[ $confirm_reply != [Yy] ]]; then
+      print -u2 -r -- 'fkill: cancelled; no signal sent'
+      return 0
+    fi
+  fi
+
+  for (( pid_idx = 1; pid_idx <= ${#pids[@]}; pid_idx++ )); do
+    pid=${pids[$pid_idx]}
+    if builtin kill "-$signal_number" -- "$pid" 2>/dev/null; then
+      print -r -- "fkill: sent SIG${signal_name} to $pid"
+    else
+      kill_rc=$?
+      (( failed_count++ ))
+      print -u2 -r -- "fkill: failed to send SIG${signal_name} to $pid"
+    fi
+  done
+
+  (( failed_count == 0 )) || return $kill_rc
 }
 
 # Quick HTTP header check

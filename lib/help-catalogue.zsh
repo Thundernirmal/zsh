@@ -86,7 +86,7 @@ _zsh_help_register fbr Git 'Pick a branch; enter its worktree or check it out' '
 
 # System
 _zsh_help_register weather System 'Show the default HTTPS forecast' 'weather' 'weather' curl alias curl
-_zsh_help_register fkill System 'Pick processes and send a signal' 'fkill [signal]' 'fkill 15' 'ps and fzf 0.68.0+' function process-fzf
+_zsh_help_register fkill System 'Pick processes and send a signal' 'fkill [--all] [signal]' 'fkill 15' 'ps and fzf 0.68.0+' function process-fzf
 _zsh_help_register headers System 'Print response headers after redirects' 'headers <url>' 'headers https://example.com' curl function curl
 _zsh_help_register fanprofile System 'Show the laptop performance profile' 'fanprofile' 'fanprofile' 'Linux ACPI or ASUS WMI profile interface' function fan-profile
 _zsh_help_register ports System 'Show listening sockets and processes' 'ports' 'ports' ss function ss

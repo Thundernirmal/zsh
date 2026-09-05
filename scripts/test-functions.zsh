@@ -678,11 +678,59 @@ test_fkill_signals() {
   assert_status "$?" 1 'fkill rejects an empty normalized signal' || return 1
   assert_equals "$FZF_REQUIRE_CALLED" 0 'fkill rejects invalid signals before opening fzf' || return 1
 
-  assert_contains "${functions[fkill]}" 'local signal=${1:-15}' 'fkill defaults to SIGTERM' || return 1
+  assert_contains "${functions[fkill]}" "signal='15'" 'fkill defaults to SIGTERM' || return 1
   assert_contains "${functions[fkill]}" '--accept-nth=1' 'fkill asks fzf to return PIDs directly' || return 1
   assert_contains "${functions[fkill]}" '_fzf_picker_multi_args kill' 'fkill uses the shared live multi-selection footer' || return 1
   assert_not_contains "${functions[fkill]}" '_fzf_pointer' 'fkill no longer duplicates pointer presentation' || return 1
   assert_not_contains "${functions[fkill]}" 'SIG${signal}' 'fkill never renders a duplicated SIG prefix' || return 1
+  assert_contains "${functions[fkill]}" '--with-nth=1,2,3,4' 'fkill shows PID, owner, elapsed time, and command' || return 1
+  assert_not_contains "${functions[fkill]}" '--with-nth=2..' 'fkill no longer hides process identity' || return 1
+  assert_contains "${functions[fkill]}" '_fzf_picker_preview_args Process' 'fkill previews full process details' || return 1
+  assert_contains "${functions[fkill]}" '--all' 'fkill offers an explicit all-users mode' || return 1
+  assert_contains "${functions[fkill]}" 'ps -u "$current_user"' 'fkill defaults to the current user' || return 1
+  assert_contains "${functions[fkill]}" 'signal_number == 9' 'fkill reviews SIGKILL before sending' || return 1
+  assert_contains "${functions[fkill]}" 'failed to send SIG' 'fkill reports per-target outcomes' || return 1
+  assert_not_contains "${functions[fkill]}" 'sudo' 'fkill never escalates privileges implicitly' || return 1
+  assert_not_contains "${functions[fkill]}" 'su ' 'fkill never shells out to su' || return 1
+}
+
+test_fkill_scope_and_review() {
+  local output rc formatted
+  local -a fzf_calls
+
+  functions[_zsh_require_fzf]='return 0'
+
+  output=$(fkill --all BADSIGNAL 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill --all still rejects an invalid signal' || return 1
+  assert_contains "$output" 'invalid signal' 'fkill --all reports the bad signal, not the flag' || return 1
+
+  output=$(fkill --all 15 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill --all parses the flag and reaches the terminal gate' || return 1
+  assert_contains "$output" 'requires an interactive terminal' 'fkill --all does not treat the flag as a signal' || return 1
+
+  output=$(fkill -a 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill -a defaults to SIGTERM and reaches the terminal gate' || return 1
+
+  output=$(fkill 15 --all 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill accepts the flag after the signal' || return 1
+  assert_contains "$output" 'requires an interactive terminal' 'trailing --all is not a signal' || return 1
+
+  output=$(fkill 15 9 2>&1); rc=$?
+  assert_status "$rc" 1 'fkill rejects multiple signals' || return 1
+  assert_contains "$output" 'too many arguments' 'fkill explains the extra signal' || return 1
+
+  formatted=$(printf '%s\n' '  111 alice 00:01 sleep 100' | command awk '
+    {
+      pid = $1
+      user = $2
+      etime = $3
+      $1 = $2 = $3 = ""
+      sub(/^ +/, "")
+      print pid "\t" user "\t" etime "\t" $0
+    }')
+  assert_equals "$formatted" $'111\talice\t00:01\tsleep 100' 'fkill formats PID, owner, elapsed, and command' || return 1
+
+  functions[_zsh_require_fzf]='(( FZF_REQUIRE_CALLED++ )); return 1'
 }
 
 test_fbr_worktree_navigation() {
@@ -877,6 +925,7 @@ main() {
   test_alias_probes_are_quiet || return 1
   test_small_helper_success_paths || return 1
   test_fkill_signals || return 1
+  test_fkill_scope_and_review || return 1
   test_fbr_worktree_navigation || return 1
   test_fbr_remote_collision || return 1
 }

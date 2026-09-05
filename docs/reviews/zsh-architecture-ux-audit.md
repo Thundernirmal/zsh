@@ -72,6 +72,8 @@ The process list removes owner, PID, parent PID and timing fields from the displ
 
 **Fix:** show PID, owner, elapsed time and command; add full command/cwd details in a preview. Make the current user's processes the default, with an explicit all-users mode. Keep ordinary SIGTERM efficient, but add a review step for SIGKILL and bulk selections. Report per-target outcomes. Never invoke privilege escalation implicitly.
 
+**Status (2026-09-05): fixed.** `fkill [--all] [signal]` lists PID, owner, elapsed time, and command with a `ps` + `/proc/cwd` preview; the default scope is the current user via `id -un`, with `--all`/`-a` for every process. Single SIGTERM sends immediately, while SIGKILL or multi-selections confirm naming targets and signal. Kills run per-PID with individual success/failure reports and no sudo/su. Covered by extended `test_fkill_signals` source assertions plus `test_fkill_scope_and_review` (flag parsing, terminal gate, row formatting).
+
 [Evidence: fkill](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/lib/functions-catalogue.zsh#L141-L194).
 
 ### M1 — Incomplete disk scans look successful
