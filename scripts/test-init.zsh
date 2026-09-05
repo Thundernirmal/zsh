@@ -142,6 +142,24 @@ exit 0' >"$fakebin/zsh"
   assert_equals "${call_count//[[:space:]]/}" 1 'ordered test runner stops after SIGINT' || return 1
 }
 
+test_runner_syntax_loop() {
+  local runner_content good_file bad_file rc
+  runner_content=$(<"$repo_dir/scripts/run-tests.zsh")
+  assert_contains "$runner_content" 'for _zsh_syntax_file in' 'syntax gate checks files in a loop' || return 1
+  assert_contains "$runner_content" 'zsh -n "$_zsh_syntax_file"' 'syntax gate checks one file per invocation' || return 1
+  assert_contains "$runner_content" './scripts/*.zsh' 'syntax gate covers test scripts' || return 1
+  assert_not_contains "$runner_content" 'zsh -n ./*.zsh ./lib/*.zsh' 'syntax gate no longer batches files in one invocation' || return 1
+
+  good_file="$tmp_home/syntax-good.zsh"
+  bad_file="$tmp_home/syntax-bad.zsh"
+  print -r -- 'print -r -- ok' >"$good_file"
+  print -r -- 'if then' >"$bad_file"
+  "$zsh_bin" -n "$good_file" "$bad_file" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 0 'multi-file zsh -n only checks the first file' || return 1
+  "$zsh_bin" -n "$bad_file" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 1 'single-file zsh -n rejects the malformed file' || return 1
+}
+
 run_init_case() {
   local label=$1
   local setup=${2-}
@@ -1003,6 +1021,7 @@ main() {
   run_init_case 'clean init smoke test' || return 1
   run_init_case 'high-risk alias init smoke test' "$high_risk_alias_setup" || return 1
   test_runner_signal_exit || return 1
+  test_runner_syntax_loop || return 1
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
   test_zoxide_persistent_startup_cache || return 1

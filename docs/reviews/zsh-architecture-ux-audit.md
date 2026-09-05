@@ -96,6 +96,8 @@ The process list removes owner, PID, parent PID and timing fields from the displ
 
 **Fix:** loop over source files and invoke `zsh -n "$file"` separately, including lazy helpers and test scripts. All current files passed the corrected individual check during this audit.
 
+**Status (2026-09-05): fixed.** `scripts/run-tests.zsh` now loops `for _zsh_syntax_file in ./*.zsh ./lib/*.zsh ./functions/ztheme ./functions/_fbr_format_entry ./scripts/*.zsh` with one `zsh -n` per file (plus `sh -n` for `check-deps.sh`). Covered by `test_runner_syntax_loop`, which also documents that multi-file `zsh -n` only checks the first file.
+
 [Evidence: runner](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/scripts/run-tests.zsh#L31-L40).
 
 ### M3 — Global aliases rewrite ordinary arguments

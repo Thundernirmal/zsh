@@ -28,8 +28,11 @@ trap 'handle_signal HUP 129' HUP
 
 builtin cd -- "$repo_dir"
 
-zsh -n ./*.zsh ./lib/*.zsh ./functions/ztheme ./functions/_fbr_format_entry
-zsh -n ./scripts/benchmark-startup.zsh ./scripts/test-theme.zsh
+typeset _zsh_syntax_file=''
+for _zsh_syntax_file in ./*.zsh ./lib/*.zsh ./functions/ztheme ./functions/_fbr_format_entry ./scripts/*.zsh; do
+  zsh -n "$_zsh_syntax_file" || exit $?
+done
+unset _zsh_syntax_file
 sh -n ./scripts/check-deps.sh
 zsh ./scripts/test-init.zsh
 zsh ./scripts/test-theme.zsh
