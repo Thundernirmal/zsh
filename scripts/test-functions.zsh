@@ -714,6 +714,79 @@ test_fbr_worktree_navigation() {
   builtin cd -- "$original_dir"
 }
 
+test_fbr_remote_collision() {
+  local collision_repo="$tmp_dir/fbr-collision" collision_remote="$tmp_dir/fbr-collision.git"
+  local collision_second="$tmp_dir/fbr-collision-second.git" original_dir=$PWD
+  local base_branch before_ref after_ref output rc upstream
+
+  command git init -q "$collision_repo" || return 1
+  print -r -- 'base' >"$collision_repo/base.txt"
+  command git -C "$collision_repo" add base.txt || return 1
+  command git -C "$collision_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
+    commit -qm 'Base commit' || return 1
+  base_branch=$(command git -C "$collision_repo" symbolic-ref --short HEAD) || return 1
+
+  command git -C "$collision_repo" checkout -qb topic || return 1
+  print -r -- 'local' >>"$collision_repo/base.txt"
+  command git -C "$collision_repo" add base.txt || return 1
+  command git -C "$collision_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
+    commit -qm 'Local topic' || return 1
+  command git -C "$collision_repo" checkout -q "$base_branch" || return 1
+
+  command git init -q --bare "$collision_remote" || return 1
+  command git -C "$collision_repo" remote add origin "$collision_remote" || return 1
+  command git -C "$collision_repo" checkout -qb divergent || return 1
+  print -r -- 'remote' >"$collision_repo/remote.txt"
+  command git -C "$collision_repo" add remote.txt || return 1
+  command git -C "$collision_repo" -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' \
+    commit -qm 'Remote topic' || return 1
+  command git -C "$collision_repo" push -q origin divergent:refs/heads/topic || return 1
+  command git -C "$collision_repo" fetch -q origin || return 1
+  command git -C "$collision_repo" checkout -q "$base_branch" || return 1
+  command git -C "$collision_repo" branch -D divergent -q || return 1
+
+  builtin cd -- "$collision_repo" || return 1
+  before_ref=$(command git rev-parse HEAD) || { builtin cd -- "$original_dir"; return 1; }
+
+  output=$(_fbr_activate origin/topic '' 2>&1); rc=$?
+  assert_status "$rc" 1 'fbr refuses an unrelated same-name remote selection' || { builtin cd -- "$original_dir"; return 1; }
+  after_ref=$(command git rev-parse HEAD) || { builtin cd -- "$original_dir"; return 1; }
+  assert_equals "$after_ref" "$before_ref" 'fbr keeps the current checkout after refusing a collision' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" 'does not track local' 'fbr explains the upstream mismatch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch -- 'topic'" 'fbr offers entering the local branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --track -b <new-name> -- 'origin/topic'" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --detach -- 'origin/topic'" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
+
+  upstream=$(command git for-each-ref --format='%(upstream:short)' 'refs/heads/topic' 2>/dev/null) || upstream=''
+  assert_equals "$upstream" '' 'unrelated local branch carries no matching upstream' || { builtin cd -- "$original_dir"; return 1; }
+
+  command git init -q --bare "$collision_second" || { builtin cd -- "$original_dir"; return 1; }
+  command git remote add upstream "$collision_second" || { builtin cd -- "$original_dir"; return 1; }
+  command git checkout -qb second-divergent -q || { builtin cd -- "$original_dir"; return 1; }
+  print -r -- 'second' >second.txt
+  command git add second.txt || { builtin cd -- "$original_dir"; return 1; }
+  command git -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' commit -qm 'Second remote topic' || { builtin cd -- "$original_dir"; return 1; }
+  command git push -q upstream second-divergent:refs/heads/topic || { builtin cd -- "$original_dir"; return 1; }
+  command git fetch -q upstream || { builtin cd -- "$original_dir"; return 1; }
+  command git checkout -q "$base_branch" || { builtin cd -- "$original_dir"; return 1; }
+  command git branch -D second-divergent -q || { builtin cd -- "$original_dir"; return 1; }
+  command git branch --set-upstream-to=origin/topic topic -q || { builtin cd -- "$original_dir"; return 1; }
+
+  output=$(_fbr_activate upstream/topic '' 2>&1); rc=$?
+  assert_status "$rc" 1 'fbr refuses when the local branch tracks a different remote' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "upstream: 'origin/topic'" 'fbr names the actual upstream on mismatch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_equals "$(command git symbolic-ref --short HEAD)" "$base_branch" 'fbr stays put on a different-upstream collision' || { builtin cd -- "$original_dir"; return 1; }
+
+  _fbr_activate origin/topic '' >/dev/null 2>&1 || { builtin cd -- "$original_dir"; return 1; }
+  assert_equals "$(command git symbolic-ref --short HEAD)" 'topic' 'fbr enters the local branch when it tracks the selected remote' || { builtin cd -- "$original_dir"; return 1; }
+  command git switch -- "$base_branch" >/dev/null || { builtin cd -- "$original_dir"; return 1; }
+
+  assert_contains "${functions[fbr]}" "upstream" 'fbr guards remote-to-worktree mapping by upstream' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "${functions[fbr]}" 'Enter worktree/checkout' 'fbr labels worktree and checkout actions distinctly' || { builtin cd -- "$original_dir"; return 1; }
+
+  builtin cd -- "$original_dir"
+}
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -731,6 +804,7 @@ main() {
   test_small_helper_success_paths || return 1
   test_fkill_signals || return 1
   test_fbr_worktree_navigation || return 1
+  test_fbr_remote_collision || return 1
 }
 
 main "$@"

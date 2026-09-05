@@ -1153,7 +1153,7 @@ _fbr_worktree_entries() {
 _fbr_activate() {
   emulate -L zsh
 
-  local branch=$1 worktree_path=${2-} local_branch
+  local branch=$1 worktree_path=${2-} local_branch upstream
 
   if [[ -n $worktree_path ]]; then
     builtin cd -- "$worktree_path"
@@ -1167,12 +1167,24 @@ _fbr_activate() {
 
   if command git show-ref --verify --quiet "refs/remotes/$branch"; then
     local_branch=${branch#*/}
-    if command git show-ref --verify --quiet "refs/heads/$local_branch"; then
-      command git switch -- "$local_branch"
-    else
+    if ! command git show-ref --verify --quiet "refs/heads/$local_branch"; then
       command git switch --track -- "$branch"
+      return
     fi
-    return
+    upstream=$(command git for-each-ref --format='%(upstream:short)' "refs/heads/$local_branch" 2>/dev/null) || upstream=''
+    if [[ $upstream == "$branch" ]]; then
+      command git switch -- "$local_branch"
+      return
+    fi
+    if [[ -n $upstream ]]; then
+      print -u2 -r -- "Remote '$branch' does not track local '$local_branch' (upstream: '$upstream'). Refusing to switch."
+    else
+      print -u2 -r -- "Remote '$branch' does not track local '$local_branch' (no upstream). Refusing to switch."
+    fi
+    print -u2 -r -- "To enter the local branch: git switch -- '$local_branch'"
+    print -u2 -r -- "To track the remote under a new name: git switch --track -b <new-name> -- '$branch'"
+    print -u2 -r -- "To inspect the remote without changing branches: git switch --detach -- '$branch'"
+    return 1
   fi
 
   print -u2 -r -- "Branch '$branch' was not found"
@@ -1194,7 +1206,7 @@ fbr() {
   }
 
   local selection branch current_worktree ref_details ref_line relative subject worktree_branch worktree_path
-  local worktree_badge_color='' worktree_badge_reset='' preview_command
+  local worktree_badge_color='' worktree_badge_reset='' preview_command short_name upstream
   local -A worktree_paths
   local -a fzf_args context_args preview_args
   if ! _ui_plain_mode; then
@@ -1210,7 +1222,7 @@ fbr() {
   else
     preview_command='git log --oneline --decorate --color=always -20 {5}'
   fi
-  _fzf_picker_context_args Branches 'Type to filter branches' 'Enter checkout  Ctrl-P preview  Ctrl-/ wrap  Esc close'
+  _fzf_picker_context_args Branches 'Type to filter branches' 'Enter worktree/checkout  Ctrl-P preview  Ctrl-/ wrap  Esc close'
   context_args=( "${reply[@]}" )
   _fzf_picker_preview_args Log
   preview_args=( "${reply[@]}" )
@@ -1256,7 +1268,13 @@ fbr() {
 
   worktree_path=${worktree_paths[$branch]-}
   if [[ -z $worktree_path ]] && command git show-ref --verify --quiet "refs/remotes/$branch"; then
-    worktree_path=${worktree_paths[${branch#*/}]-}
+    short_name=${branch#*/}
+    if [[ -n ${worktree_paths[$short_name]-} ]]; then
+      upstream=$(command git for-each-ref --format='%(upstream:short)' "refs/heads/$short_name" 2>/dev/null) || upstream=''
+      if [[ $upstream == "$branch" ]]; then
+        worktree_path=${worktree_paths[$short_name]}
+      fi
+    fi
   fi
 
   _fbr_activate "$branch" "$worktree_path"
