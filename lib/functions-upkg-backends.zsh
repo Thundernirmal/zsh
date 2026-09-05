@@ -341,6 +341,11 @@ _upkg_run_search_nix() {
   local output output_lower rc line trimmed name version description=''
   local -a rows
 
+  # Search calls the private Nix adapter directly rather than the npkg loader.
+  _zsh_functions_load_domain nix || {
+    _upkg_set_last_result 'failed' 'could not load the Nix domain'
+    return 1
+  }
   _upkg_search_progress nix ''
   output=$(_npkg_nix search nixpkgs "$@" 2>&1)
   rc=$?

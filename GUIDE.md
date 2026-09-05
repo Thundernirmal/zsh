@@ -690,10 +690,13 @@ Search accepts multiple words and passes them as separate query arguments:
 
 ```zsh
 upkg search ripgrep
+upkg search ripgrep --only=nix
 upkg search ripgrep viewer --only=brew,npm
 ```
 
 Results are normalized into one table with manager, package, available version, and a cheap native description when available. A no-match result is summarized once. Backend failures name the affected managers, and other managers continue.
+
+Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
 
 Homebrew formulae and casks are queried separately. Broad searches cap follow-up metadata calls at 50 formulae and 50 casks; refine the query when the cap warning appears.
 
@@ -744,6 +747,7 @@ Distribution outdated checks use existing local metadata; `upkg` does not refres
 ```zsh
 upkg
 upkg search ripgrep
+upkg search ripgrep --only=nix
 upkg managers
 upkg managers --only=npm,flatpak
 upkg plan --only=brew,npm
