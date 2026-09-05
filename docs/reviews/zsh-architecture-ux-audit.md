@@ -84,6 +84,8 @@ The process list removes owner, PID, parent PID and timing fields from the displ
 
 **Fix:** preserve available results, add “Incomplete scan” with a concise diagnostic on stderr, and return nonzero. Rich output should carry the same partial state. Match the already stronger package-result policy.
 
+**Status (2026-09-05): fixed.** `dusage` keeps partial rows, prints `Incomplete scan in '<target>' (du exit <code>); results are partial` on stderr, adds a rich `Warning` row plus `(incomplete scan)` footer, and returns the `du` status. `bigfiles` tracks both `find` and `du`, reports the failed tool(s), and returns the failing status while preserving partial rows. Empty-result failures also carry the diagnostic. Covered by `test_usage_partial_scan` and updated unreadable-fixture expectations in `test-upkg.zsh`.
+
 [Evidence: dusage](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/lib/functions-catalogue.zsh#L569-L720), [bigfiles](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/lib/functions-catalogue.zsh#L723-L876).
 
 ### M2 — CI syntax checks only the first filename in each Zsh invocation

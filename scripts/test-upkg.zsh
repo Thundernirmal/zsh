@@ -407,7 +407,7 @@ esac'
 }
 
 main() {
-  local output cmd_status route state_role npm_stdout npm_stderr
+  local output cmd_status route state_role npm_stdout npm_stderr stderr_output
   local parser_stdout="$tmp_prefix/upkg-parser.stdout"
   local parser_stderr="$tmp_prefix/upkg-parser.stderr"
   local npkg_profile_file="$tmp_prefix/npkg-profile.json"
@@ -1434,9 +1434,10 @@ esac
   print -r -- 'ok' >"$inspect_tmp/blocked-tree/inner/hidden.txt"
   command chmod 000 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
 
-  output=$(dusage "$inspect_tmp" 5 2>/dev/null)
+  output=$(dusage "$inspect_tmp" 5 2>"$inspect_tmp/dusage.stderr")
   cmd_status=$?
-  assert_status "$cmd_status" 0 'dusage tolerates unreadable entries when readable data exists' || {
+  stderr_output=$(<"$inspect_tmp/dusage.stderr")
+  assert_status "$cmd_status" 1 'dusage reports incomplete scans instead of silent success' || {
     command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
     command rm -rf "$inspect_tmp"
     return 1
@@ -1446,15 +1447,26 @@ esac
     command rm -rf "$inspect_tmp"
     return 1
   }
+  assert_contains "$stderr_output" 'Incomplete scan' 'dusage explains partial results on stderr' || {
+    command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    command rm -rf "$inspect_tmp"
+    return 1
+  }
 
-  output=$(bigfiles "$inspect_tmp" 5 2>/dev/null)
+  output=$(bigfiles "$inspect_tmp" 5 2>"$inspect_tmp/bigfiles.stderr")
   cmd_status=$?
-  assert_status "$cmd_status" 0 'bigfiles tolerates unreadable subtrees when readable data exists' || {
+  stderr_output=$(<"$inspect_tmp/bigfiles.stderr")
+  assert_status "$cmd_status" 1 'bigfiles reports incomplete scans instead of silent success' || {
     command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
     command rm -rf "$inspect_tmp"
     return 1
   }
   assert_contains "$output" 'visible.txt' 'bigfiles still reports readable files' || {
+    command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
+    command rm -rf "$inspect_tmp"
+    return 1
+  }
+  assert_contains "$stderr_output" 'Incomplete scan' 'bigfiles explains partial results on stderr' || {
     command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
     command rm -rf "$inspect_tmp"
     return 1

@@ -574,7 +574,7 @@ dusage() {
   local limit=${2:-20}
   local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
   local size_text percent_text header_meta footer_text display_target
-  local scan_status=0 signal_status=0 path_list_file='' raw_output_file=''
+  local scan_status=0 signal_status=0 path_list_file='' raw_output_file='' incomplete_detail=''
   local -a entries records lines
 
   # Signal traps escape every nested renderer loop, then return the recorded status.
@@ -623,7 +623,10 @@ dusage() {
   }
 
   if (( ${#records[@]} == 0 )); then
-    (( scan_status != 0 )) && return $scan_status
+    if (( scan_status != 0 )); then
+      print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      return $scan_status
+    fi
     echo "No entries found in '$display_target'"
     return 0
   fi
@@ -641,6 +644,10 @@ dusage() {
       entry_path=${line#*$'\t'}
       printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_safe_text "$entry_path")"
     done
+    if (( scan_status != 0 )); then
+      print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      return $scan_status
+    fi
     return 0
   fi
 
@@ -666,9 +673,16 @@ dusage() {
 
   header_meta=$display_target
   footer_text="showing ${visible_count}/${#lines[@]} entries"
+  if (( scan_status != 0 )); then
+    incomplete_detail="du exit $scan_status"
+    footer_text+=" (incomplete scan)"
+  fi
   _ui_title_line 'Disk Usage' "$header_meta" accent '󰋊' '*'
   _ui_panel_kv 'Entries' "${#lines[@]}" muted text
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
+  if (( scan_status != 0 )); then
+    _ui_panel_kv 'Warning' "Incomplete scan ($incomplete_detail); results are partial" warning text
+  fi
   _ui_section_break
 
   integer idx
@@ -713,10 +727,14 @@ dusage() {
   _ui_color muted
   print -r -- "$footer_text"
   _ui_reset
+  if (( scan_status != 0 )); then
+    print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+  fi
   break
   done
 
   (( signal_status == 0 )) || return $signal_status
+  (( scan_status == 0 )) || return $scan_status
 }
 
 # Largest files in current directory tree
@@ -727,8 +745,8 @@ bigfiles() {
   local target=${1:-.}
   local limit=${2:-20}
   local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width
-  local find_status=0 scan_status=0 signal_status=0 display_target
-  local path_list_file='' raw_output_file='' line_count=0
+  local find_status=0 scan_status=0 signal_status=0 display_target incomplete_status=0
+  local path_list_file='' raw_output_file='' line_count=0 incomplete_detail=''
   local -a records lines
 
   # Signal traps escape every nested renderer loop, then return the recorded status.
@@ -763,6 +781,7 @@ bigfiles() {
       command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
       scan_status=$?
     elif (( find_status != 0 )); then
+      print -u2 -r -- "Incomplete scan in '$display_target' (find exit $find_status); results are partial"
       return $find_status
     fi
 
@@ -774,8 +793,22 @@ bigfiles() {
     command rm -f -- "$path_list_file" "$raw_output_file"
   }
 
+  if (( find_status != 0 && scan_status != 0 )); then
+    incomplete_detail="find exit $find_status, du exit $scan_status"
+    incomplete_status=$scan_status
+  elif (( find_status != 0 )); then
+    incomplete_detail="find exit $find_status"
+    incomplete_status=$find_status
+  elif (( scan_status != 0 )); then
+    incomplete_detail="du exit $scan_status"
+    incomplete_status=$scan_status
+  fi
+
   if (( ${#records[@]} == 0 )); then
-    (( scan_status != 0 )) && return $scan_status
+    if (( incomplete_status != 0 )); then
+      print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      return $incomplete_status
+    fi
 
     if _ui_plain_mode; then
       return 0
@@ -805,6 +838,10 @@ bigfiles() {
       file_path=${line#*$'\t'}
       printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_safe_text "$file_path")"
     done
+    if (( incomplete_status != 0 )); then
+      print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      return $incomplete_status
+    fi
     return 0
   fi
 
@@ -827,6 +864,9 @@ bigfiles() {
   _ui_title_line 'Big Files' "$display_target" accent '󰉋' '*'
   _ui_panel_kv 'Files found' "$line_count" muted text
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
+  if (( incomplete_status != 0 )); then
+    _ui_panel_kv 'Warning' "Incomplete scan ($incomplete_detail); results are partial" warning text
+  fi
   _ui_section_break
 
   integer idx
@@ -864,15 +904,22 @@ bigfiles() {
   fi
 
   footer_text="showing ${shown}/${line_count} files"
+  if (( incomplete_status != 0 )); then
+    footer_text+=" (incomplete scan)"
+  fi
   _ui_section_break
   print -nr -- '  '
   _ui_color muted
   print -r -- "$footer_text"
   _ui_reset
+  if (( incomplete_status != 0 )); then
+    print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+  fi
   break
   done
 
   (( signal_status == 0 )) || return $signal_status
+  (( incomplete_status == 0 )) || return $incomplete_status
 }
 
 # Show listening ports and owning processes

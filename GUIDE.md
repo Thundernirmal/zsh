@@ -522,7 +522,7 @@ The command reports state only; it does not change the profile.
 
 #### dusage, bigfiles, and path
 
-`dusage` includes hidden immediate children and defaults to 20 rows. `bigfiles` searches recursively and also defaults to 20. Both keep readable results when another entry or subtree cannot be measured.
+`dusage` includes hidden immediate children and defaults to 20 rows. `bigfiles` searches recursively and also defaults to 20. Both preserve readable results when another entry or subtree cannot be measured, but they report `Incomplete scan (<tool> exit <code>); results are partial` on stderr, mark the rich dashboard with a warning and `(incomplete scan)` footer, and return nonzero. A clean scan still returns 0.
 
 `path` preserves empty PATH components. In command lookup, an empty component means the current directory; rich output labels it `.`, while plain output preserves an empty line.
 

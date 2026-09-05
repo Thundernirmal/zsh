@@ -215,6 +215,79 @@ exit 7' >"$fakebin/find"
   fi
 }
 
+test_usage_partial_scan() {
+  local fixture_dir="$tmp_dir/usage-partial"
+  local fakebin="$tmp_dir/usage-partial-bin"
+  local old_path=$PATH output stdout_part stderr_part rc
+  local stdout_file="$tmp_dir/usage-partial.stdout" stderr_file="$tmp_dir/usage-partial.stderr"
+  local -a leftovers
+
+  command mkdir -p -- "$fixture_dir/entry" "$fixture_dir/tree" "$fakebin"
+  print -r -- 'data' >"$fixture_dir/tree/file.txt"
+
+  # dusage: fake du emits one valid record then fails.
+  print -r -- "#!/bin/sh
+printf '4\t$fixture_dir/entry\0'
+exit 1" >"$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  PATH="$fakebin:$old_path"
+  rehash
+
+  dusage "$fixture_dir" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  assert_status "$rc" 1 'dusage returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'entry' 'dusage preserves partial results' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'Incomplete scan' 'dusage reports an incomplete scan on stderr' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'du exit 1' 'dusage names the failed scan tool' || { PATH=$old_path; rehash; return 1; }
+  leftovers=( "$tmp_dir"/dusage.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'dusage cleans up after a partial scan' || { PATH=$old_path; rehash; return 1; }
+
+  # bigfiles: real find with failing du still preserves partial results.
+  bigfiles "$fixture_dir/tree" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  assert_status "$rc" 1 'bigfiles returns failure when du is incomplete' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'Incomplete scan' 'bigfiles reports du failure on stderr' || { PATH=$old_path; rehash; return 1; }
+
+  command rm -f -- "$fakebin/du"
+  print -r -- "#!/bin/sh
+printf '%s\0' \"$fixture_dir/tree/file.txt\"
+exit 1" >"$fakebin/find"
+  command chmod +x -- "$fakebin/find"
+  rehash
+
+  bigfiles "$fixture_dir/tree" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  assert_status "$rc" 1 'bigfiles returns failure when find is incomplete' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'file.txt' 'bigfiles preserves results when find is incomplete' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'find exit 1' 'bigfiles names the failed find scan' || { PATH=$old_path; rehash; return 1; }
+  leftovers=( "$tmp_dir"/bigfiles.*(N) )
+  assert_equals "${#leftovers[@]}" 0 'bigfiles cleans up after a partial find scan' || { PATH=$old_path; rehash; return 1; }
+
+  command rm -f -- "$fakebin/find" "$fakebin/du"
+  print -r -- "#!/bin/sh
+printf '4\t$fixture_dir/entry\0'
+exit 1" >"$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  rehash
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_height]='print -r -- 30'
+  dusage "$fixture_dir" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
+  output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
+  functions[_ui_plain_mode]='return 0'
+  unset 'functions[_ui_term_width]' 'functions[_ui_term_height]'
+  source "$repo_dir/55-ui-helpers.zsh"
+  functions[_ui_plain_mode]='return 0'
+  assert_status "$rc" 1 'dusage rich mode returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'Incomplete scan' 'dusage rich output carries the partial state' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" '(incomplete scan)' 'dusage rich footer marks the partial state' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'Incomplete scan' 'dusage rich mode keeps the stderr diagnostic' || { PATH=$old_path; rehash; return 1; }
+
+  PATH=$old_path
+  rehash
+}
+
 test_usage_signal_cleanup() {
   emulate -L zsh
   setopt localtraps
@@ -796,6 +869,7 @@ main() {
   test_missing_arguments || return 1
   test_local_emulation_and_leading_dash_operands || return 1
   test_usage_temp_cleanup || return 1
+  test_usage_partial_scan || return 1
   test_usage_signal_cleanup || return 1
   test_dusage_oversized_operand_set || return 1
   test_path_empty_entries || return 1
