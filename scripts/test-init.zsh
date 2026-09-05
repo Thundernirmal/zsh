@@ -931,11 +931,27 @@ test_owned_module_settings() {
     [[ $process_command == *"ps -u"* && $process_command == *"-o pid,user,comm,cmd"* ]] || exit 18
 
     source "$1/70-globals.zsh"
-    [[ ${(v)galiases[G]} == "| grep" ]] || exit 19
-    [[ ${(v)galiases[L]} == "| less" ]] || exit 20
-    [[ ${(v)galiases[NUL]} == ">/dev/null 2>&1" ]] || exit 21
+    (( ! ${+galiases[G]} && ! ${+galiases[L]} && ! ${+galiases[NUL]} )) || exit 19
+
+    ZSH_GLOBAL_ALIASES=1 source "$1/70-globals.zsh"
+    [[ ${(v)galiases[G]} == "| grep" ]] || exit 20
+    [[ ${(v)galiases[L]} == "| less" ]] || exit 21
+    [[ ${(v)galiases[NUL]} == ">/dev/null 2>&1" ]] || exit 22
   ' zsh "$repo_dir"
   assert_status "$?" 0 'history, completion, and global-alias modules retain their owned settings' || return 1
+}
+
+test_global_alias_opt_in() {
+  HOME="$tmp_home" "$zsh_bin" -fc '
+    source "$1/70-globals.zsh"
+    (( ! ${+galiases[H]} )) || exit 31
+    [[ $(echo H) == H ]] || exit 32
+
+    ZSH_GLOBAL_ALIASES=1 source "$1/70-globals.zsh"
+    [[ ${(v)galiases[H]} == "| head" ]] || exit 33
+    [[ $(echo '"'"'H'"'"') == H ]] || exit 34
+  ' zsh "$repo_dir"
+  assert_status "$?" 0 'global aliases stay off by default and quoting keeps tokens literal' || return 1
 }
 
 test_zoxide_init_outcomes() {
@@ -1022,6 +1038,7 @@ main() {
   run_init_case 'high-risk alias init smoke test' "$high_risk_alias_setup" || return 1
   test_runner_signal_exit || return 1
   test_runner_syntax_loop || return 1
+  test_global_alias_opt_in || return 1
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
   test_zoxide_persistent_startup_cache || return 1

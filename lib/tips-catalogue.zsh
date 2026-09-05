@@ -28,11 +28,17 @@ _zsh_tip_pool=(
   "Run weather for a concise HTTPS forecast"
   "Run peek <file> for a quick file preview"
   "Run headers <url> to follow redirects and print HTTP headers"
-  "Use G, L, or W to pipe to grep, less, or wc -l"
-  "Use NE to hide stderr or NUL to hide all output"
   "Use command substitutions safely; helper errors stay on stderr"
   "Press Tab after a custom command to see valid arguments"
 )
+
+if (( ${+galiases[G]} )); then
+  _zsh_tip_pool+=(
+    "Use G, L, or W to pipe to grep, less, or wc -l"
+    "Use NE to hide stderr or NUL to hide all output"
+    "Quote a global alias such as 'H' to keep it literal"
+  )
+fi
 
 if [[ -r /sys/firmware/acpi/platform_profile || -r /sys/devices/platform/asus-nb-wmi/fan_boost_mode ]]; then
   _zsh_tip_pool+=("Run fanprofile to show the current laptop performance profile")

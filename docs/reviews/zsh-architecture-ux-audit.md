@@ -110,6 +110,8 @@ Unquoted tokens such as `H`, `T`, `G` and `L` expand anywhere in a command. For 
 
 **Fix:** make global aliases opt-in for a shared configuration. Existing personal users can preserve them with one setting. Include a clear quoting example and show their enabled state in `zdoctor`. This is a design change, not a claim that Zsh expansion is malfunctioning.
 
+**Status (2026-09-05): fixed.** `70-globals.zsh` defines `G/L/W/H/T/NE/NUL` only when `ZSH_GLOBAL_ALIASES=1` is exported before startup; quoting (`echo 'H'`) keeps tokens literal and is documented in the module header, GUIDE, and tips. Disabled aliases disappear from default `zhelp` via the existing unavailable-category path, and the globals tips only load when enabled. Enabled-state reporting in `zdoctor` follows in the discovery stage.
+
 [Evidence: global aliases](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/70-globals.zsh).
 
 ### M4 — Onboarding fails quietly and assumes too much

@@ -405,7 +405,13 @@ It is an alias for `curl --http1.1 -fsSL https://wttr.in` and does not implement
 
 ### Global aliases
 
-Global aliases expand as unquoted tokens anywhere in a command line:
+Global aliases are opt-in because unquoted tokens such as `H`, `T`, `G`, and `L` expand anywhere in a command line. For example, with aliases enabled, an interactively parsed `echo H` behaves as `echo | head`; a filename or search term can become shell syntax. They stay undefined by default. Personal users who want the previous behavior preserve it with one setting before startup:
+
+```zsh
+export ZSH_GLOBAL_ALIASES=1  # in ~/.zshrc, before sourcing init.zsh
+```
+
+Quote a token to keep it literal (`echo 'H'` prints `H`). When disabled, `zhelp` lists these entries as unavailable rather than offering them:
 
 | Alias | Expansion | Example |
 |---|---|---|
