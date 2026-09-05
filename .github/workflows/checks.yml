@@ -27,3 +27,40 @@ jobs:
       # the live dependency audit remains an optional host-environment check.
       - name: Run required checks
         run: zsh scripts/run-tests.zsh
+
+  fzf-pty:
+    name: Real fzf PTY (${{ matrix.fzf-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        fzf-version:
+          - 0.68.0
+          - 0.74.3
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Zsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Install fzf ${{ matrix.fzf-version }}
+        env:
+          FZF_VERSION: ${{ matrix.fzf-version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/fzf-bin"
+          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 \
+            "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/fzf-bin"
+          chmod +x "$RUNNER_TEMP/fzf-bin/fzf"
+          "$RUNNER_TEMP/fzf-bin/fzf" --version
+
+      - name: Run real fzf PTY checks
+        env:
+          FZF_BIN: ${{ runner.temp }}/fzf-bin/fzf
+          FZF_EXPECTED_VERSION: ${{ matrix.fzf-version }}
+        run: python3 scripts/test-fzf-pty.py

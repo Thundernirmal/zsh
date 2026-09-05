@@ -2,6 +2,8 @@
 
 Reviewed 4 September 2026. Repository: Thundernirmal/zsh, branch `master`, commit `8233c85ad52bd1e17d82cb1e7e05f944a227f00d`.
 
+**Remediation completed 5 September 2026.** All prioritized findings, workflow improvements, and maintenance recommendations below are implemented. The original audit evidence remains pinned to its reviewed commit; use [GUIDE.md](../../GUIDE.md) for current behavior. WSL crash investigation is outside this work at the maintainer’s request.
+
 ## Verdict
 
 Keep the current modular Zsh approach. The project has strong foundations: deliberate startup boundaries, lazy loading, shared presentation primitives, guarded integrations, and substantial regression coverage. Its biggest remaining problems concern trustworthy selection, honest failure reporting, and discoverability. Another visual redesign should come after those fixes.
@@ -122,7 +124,7 @@ The README gives the source snippet but omits a concrete clone/setup step. The e
 
 **Fix:** document installation into an empty target directory, a standalone `compinit` setup, the OMZ setup, and verification. Resolve the module root from the entrypoint if portability is desired; otherwise make the fixed path a prominent setup check. Use `zdoctor` for diagnosis without adding startup noise. Distinguish optional features from the checker's “required for intended setup” tools.
 
-**Status (2026-09-05): fixed.** README and GUIDE now document cloning into an empty `~/.config/zsh`, the fixed-path requirement, standalone `compinit -i` setup, OMZ ordering, and verification via `check-deps.sh` plus `zdoctor`. Startup stays silent; the new on-demand `zdoctor` (lazy-loaded, with shell completion and help entry) reports install location, unreadable modules, `compinit` readiness, required/optional tool versions including the fzf minimum, glyph resolution, and fzf/zoxide/cgm/npkg/global-alias state, exiting nonzero while a failure is present. Network and Secret Service stay untouched unless `--network`/`--secrets` are passed explicitly. Covered by `scripts/test-doctor.zsh`.
+**Status (2026-09-05): fixed.** README and GUIDE now document cloning into an empty `~/.config/zsh`, the fixed-path requirement, standalone `compinit -i` setup, OMZ ordering, and verification via `check-deps.sh` plus `zdoctor`. Startup stays silent; the new on-demand `zdoctor` (lazy-loaded, with shell completion and help entry) reports install location, unreadable modules, `compinit` readiness, required/optional tool availability and the fzf version minimum, glyph resolution, and fzf/zoxide/cgm/npkg/global-alias state, exiting nonzero while a failure is present. Network and Secret Service stay untouched unless `--network`/`--secrets` are passed explicitly. Covered by `scripts/test-doctor.zsh`.
 
 [Evidence: README](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/README.md), [bootstrap](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/init.zsh), [completion guard](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/66-compdefs.zsh#L1-L9).
 
@@ -146,7 +148,7 @@ Padding and truncation use `${#text}`. Wide CJK characters and combining sequenc
 
 **Fix:** introduce one display-width primitive and use it consistently after control-character sanitization. Verify narrow, wide-character and combining-character fixtures. Do not add per-row external processes just to calculate width.
 
-**Status (2026-09-05): fixed.** `_ui_char_width`/`_ui_display_width` in `55-ui-helpers.zsh` measure terminal cells purely in Zsh (wide CJK as two, combining marks as zero) and drive `_ui_truncate_reply`, `_ui_pad_reply`, and `_ui_safe_truncate` (with a character-count fallback when the helper is unavailable). Covered by `test_display_width` (narrow, CJK, combining, escape fixtures plus aligned pad/truncate rows) and a cell-based `fbr` CJK fixture.
+**Status (2026-09-05): fixed.** Committed Unicode 16.0 intervals now cover nonspacing/format marks and assigned wide code points, load on first non-ASCII measurement, and use binary search without external processes. Truncation drops orphaned combining marks at suffix cuts. `_ui_char_width`/`_ui_display_width` in `55-ui-helpers.zsh` measure terminal cells purely in Zsh (wide CJK as two, combining marks as zero) and drive `_ui_truncate_reply`, `_ui_pad_reply`, and `_ui_safe_truncate` (with a character-count fallback when the helper is unavailable). Covered by `test_display_width` (narrow, CJK, combining, escape fixtures plus aligned pad/truncate rows) and a cell-based `fbr` CJK fixture.
 
 [Evidence: truncation and padding](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/55-ui-helpers.zsh#L216-L288).
 
@@ -198,4 +200,21 @@ Visual polish is already relatively mature. The next meaningful upgrade is makin
 ### Follow-up standards and specification review
 
 - **Standards:** corrected documentation drift, first-use cached command guards in `zdoctor`, and inherited changes that bypassed existing fixture isolation. Fixed repository-relative loading and quiet startup remain intact. No unresolved hard standards violation was found in this stage.
-- **Spec:** all prioritized findings H1/H2/M1–M6 and the workflow table are implemented. Catalogue domain splitting and real-fzf minimum/newer PTY acceptance remain in the maintenance stage. Terminal-dependent emoji grapheme shaping is documented rather than claimed as universally exact.
+- **Spec:** all prioritized findings H1/H2/M1–M6 and the workflow table are implemented. Catalogue domain splitting and real-fzf minimum/newer PTY acceptance are complete in the maintenance stage. Terminal-dependent emoji grapheme shaping is documented rather than claimed as universally exact.
+
+- 2026-09-05, maintenance stage: split the monolithic implementation into fixed common, files/search, system/network, Git, package orchestration, backend adapter, and Nix modules. `mkcd`, `path`, and `fbr` no longer parse package code. Added a regression for removing Nix between startup and first use, so a missing executable cannot leave a recursive lazy loader. Disk collection now produces records plus explicit state, diagnostics, and status before rich/plain rendering; signal cleanup and partial-result behavior remain covered. Comparing Zsh’s parsed function bodies before/after the split found no removed implementations and only the intended changes to `dusage`, `bigfiles`, and `fbr` (local shell-option emulation).
+- Real fzf PTY acceptance passes locally on **0.68.0 and 0.74.3**, including exported finder options, 50/100-column widths, Unicode/ASCII, preview toggling, multi-selection, `NO_COLOR`, and cancellation. The new separate CI matrix runs those same versions without package mutations. The minimum-version test found an upstream no-color footer default of ANSI black; the shared theme now explicitly resets that footer to terminal-default foreground. [fzf 0.68.0 no-color theme source](https://github.com/junegunn/fzf/blob/v0.68.0/src/tui/tui.go) corroborates the missing footer initialization.
+- Final verification: `zsh scripts/run-tests.zsh` passes with **1,267 `ok:` assertions**, including syntax checks for every new Zsh helper and the fixed-install-path smoke test. These are assertions, not independent end-to-end scenarios. Each real-fzf version passes all four PTY cases. Actual package mutations, real stored credentials, and machine-specific font rendering are not exercised by this automated verification.
+
+### Final acceptance
+
+| Audit scope | Result |
+|---|---|
+| H1/H2 and M1–M6 | Implemented and regression-covered |
+| Discovery, unavailable help, history, lightweight help | Implemented; shared metadata and editable examples retained |
+| Network, credentials, search, extraction, Nix completion | Implemented with documented defaults, fallbacks, and explicit probes |
+| Domain split and shared command registry | Implemented with fixed paths and lazy domain tests |
+| Collection/rendering separation | Implemented for disk scans; rich/plain status parity preserved |
+| Real fzf minimum/newer terminal coverage | Passed locally; separate CI matrix added |
+
+No audit remediation item remains open. The terminal-dependent shaping limits and host/service checks above are documented verification boundaries, not claims of completed manual QA.

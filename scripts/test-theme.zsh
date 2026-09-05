@@ -178,7 +178,7 @@ NO_COLOR=1
 _zsh_theme_detect_color_depth; _ZSH_UI_COLOR_DEPTH=$REPLY
 _zsh_theme_fzf_color_args || exit 17
 print -r -- "nocolor=${(j:,:)reply}"')
-  assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1\nnocolor=--no-color' 'fzf compiler covers every cohesive frame, semantic target, and no-color mode' || return 1
+  assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1\nnocolor=--no-color,--color=bw,footer:-1' 'fzf compiler covers every cohesive frame, semantic target, and no-color mode' || return 1
 
   output=$(run_theme_case '' '
 for layout in compact roomy minimal; do
@@ -356,7 +356,7 @@ print -r -- "resourced=${(V)REPLY} paths=$function_path_count"')
 
   assert_equals "${${(f)output}[1]}" 'ztheme=1 helpers=0 commands=0 package-helpers=0 colors=0 registry=0 palettes=0' 'startup registers commands without parsing their implementations or color helpers' || return 1
   assert_equals "${${(f)output}[2]}" 'helpers=1 colors=1 registry=1 palettes=0 sgr=^[[35m' 'first color use loads trusted command, registry, and SGR helpers without fixed palettes under the terminal default' || return 1
-  assert_equals "${${(f)output}[3]}" 'commands=1 package-helpers=1' 'first general command loads the fixed implementation catalogue' || return 1
+  assert_equals "${${(f)output}[3]}" 'commands=1 package-helpers=0' 'first general command leaves package implementations unloaded' || return 1
   assert_equals "${${(f)output}[4]}" 'resourced=^[[35m paths=1' 're-sourcing preserves lazy helpers and one private function path' || return 1
 }
 

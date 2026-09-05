@@ -14,10 +14,12 @@ fi
 source "$_ZSH_FUNCTIONS_MODULE_DIR/lib/upkg-registry.zsh"
 
 _zsh_functions_load() {
-  (( _ZSH_FUNCTIONS_CATALOGUE_LOADED )) && return 0
-  [[ -r $_ZSH_FUNCTIONS_MODULE_DIR/lib/functions-catalogue.zsh ]] || return 1
-  source "$_ZSH_FUNCTIONS_MODULE_DIR/lib/functions-catalogue.zsh" || return 1
-  typeset -gi _ZSH_FUNCTIONS_CATALOGUE_LOADED=1
+  if (( ! _ZSH_FUNCTIONS_CATALOGUE_LOADED )); then
+    [[ -r $_ZSH_FUNCTIONS_MODULE_DIR/lib/functions-catalogue.zsh ]] || return 1
+    source "$_ZSH_FUNCTIONS_MODULE_DIR/lib/functions-catalogue.zsh" || return 1
+    typeset -gi _ZSH_FUNCTIONS_CATALOGUE_LOADED=1
+  fi
+  _zsh_functions_load_domain "${1:-all}"
 }
 
 _zsh_functions_dispatch() {
@@ -25,7 +27,16 @@ _zsh_functions_dispatch() {
   local command_name=$1
   shift
 
-  _zsh_functions_load || {
+  local domain
+  case $command_name in
+    extract|mkcd|ff|ft|peek|dusage|bigfiles) domain=files ;;
+    fkill|headers|fanprofile|ports|weather|myip|path|zdoctor) domain=system ;;
+    croot|gitcount|fbr) domain=git ;;
+    upkg) domain=upkg ;;
+    npkg|_npkg_cache_dir) domain=nix ;;
+    *) return 1 ;;
+  esac
+  _zsh_functions_load "$domain" || {
     print -u2 -r -- "$command_name: failed to load the trusted function catalogue"
     return 1
   }

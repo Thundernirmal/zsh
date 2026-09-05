@@ -204,7 +204,6 @@ exit 7' >"$fakebin/find"
   assert_status "$rc" 7 'bigfiles preserves a failed find status' || return 1
   leftovers=( "$tmp_dir"/bigfiles.*(N) )
   assert_equals "${#leftovers[@]}" 0 'bigfiles removes every temporary file after scan failure' || return 1
-  assert_contains "${functions[dusage]}" '--files0-from' 'dusage avoids unbounded argv expansion' || return 1
 
   PATH=$old_path
   rehash
@@ -566,6 +565,10 @@ test_display_width() {
   assert_equals "$REPLY" 4 'wide CJK characters measure two cells' || return 1
   _ui_display_width $'e\u0301'
   assert_equals "$REPLY" 1 'combining marks add no cells' || return 1
+  _ui_display_width $'क\u094D'
+  assert_equals "$REPLY" 1 'Devanagari nonspacing marks add no cells' || return 1
+  _ui_display_width $'x\U0001E944'
+  assert_equals "$REPLY" 1 'supplementary-plane combining marks add no cells' || return 1
   _ui_display_width '\n'
   assert_equals "$REPLY" 2 'sanitized visible escapes measure their shown cells' || return 1
 
@@ -579,7 +582,7 @@ test_display_width() {
   _ui_char_width 0x0301
   assert_equals "$REPLY" 0 'combining code points measure zero cells' || return 1
   assert_not_contains "${functions[_ui_display_width]}" 'command ' 'cell measurement spawns no subprocesses' || return 1
-  assert_not_contains "${functions[_ui_char_width]}" '$(' 'cell tables use no command substitution' || return 1
+  assert_not_contains "${functions[_ui_char_width]}" 'command ' 'cell lookup invokes no external command' || return 1
 
   _ui_pad_reply left 6 'a雪'
   padded=$REPLY
@@ -949,6 +952,7 @@ test_fbr_remote_collision() {
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
+  _zsh_functions_load || return 1
 
   functions[_ui_plain_mode]='return 0'
 

@@ -73,7 +73,7 @@ _fzf_export_config() {
   export FZF_DEFAULT_OPTS=$managed
   [[ -n $_FZF_INHERITED_DEFAULT_OPTS ]] && FZF_DEFAULT_OPTS+=" $_FZF_INHERITED_DEFAULT_OPTS"
   [[ -n ${ZSH_FZF_EXTRA_OPTS:-} ]] && FZF_DEFAULT_OPTS+=" ${ZSH_FZF_EXTRA_OPTS}"
-  [[ -n ${NO_COLOR:-} ]] && FZF_DEFAULT_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && FZF_DEFAULT_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
   if [[ -n ${NO_COLOR:-} ]]; then
     # fzf shell-quotes selection placeholders by default; {q} is the query.
@@ -96,7 +96,7 @@ _fzf_export_config() {
   _zsh_theme_join_shell_args "${args[@]}"
   export FZF_CTRL_T_OPTS=$REPLY
   [[ -n $_FZF_INHERITED_CTRL_T_OPTS ]] && FZF_CTRL_T_OPTS+=" $_FZF_INHERITED_CTRL_T_OPTS"
-  [[ -n ${NO_COLOR:-} ]] && FZF_CTRL_T_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && FZF_CTRL_T_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
   _zsh_theme_fzf_context_args History 'Type to filter history' 'Enter insert  Ctrl-P preview  Ctrl-/ wrap  Esc close'
   context_args=( "${reply[@]}" )
@@ -112,7 +112,7 @@ _fzf_export_config() {
   _zsh_theme_join_shell_args "${args[@]}"
   export FZF_CTRL_R_OPTS=$REPLY
   [[ -n $_FZF_INHERITED_CTRL_R_OPTS ]] && FZF_CTRL_R_OPTS+=" $_FZF_INHERITED_CTRL_R_OPTS"
-  [[ -n ${NO_COLOR:-} ]] && FZF_CTRL_R_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && FZF_CTRL_R_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
   _zsh_theme_fzf_context_args Directories 'Type to filter directories' 'Enter cd  Esc close'
   context_args=( "${reply[@]}" )
@@ -120,28 +120,28 @@ _fzf_export_config() {
   _zsh_theme_join_shell_args "${args[@]}"
   export FZF_ALT_C_OPTS=$REPLY
   [[ -n $_FZF_INHERITED_ALT_C_OPTS ]] && FZF_ALT_C_OPTS+=" $_FZF_INHERITED_ALT_C_OPTS"
-  [[ -n ${NO_COLOR:-} ]] && FZF_ALT_C_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && FZF_ALT_C_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
   _zsh_theme_fzf_context_args Completions 'Type to filter completions' 'Enter insert  Esc close'
   args=( "${reply[@]}" )
   _zsh_theme_join_shell_args "${args[@]}"
   export FZF_COMPLETION_OPTS=$REPLY
   [[ -n $_FZF_INHERITED_COMPLETION_OPTS ]] && FZF_COMPLETION_OPTS+=" $_FZF_INHERITED_COMPLETION_OPTS"
-  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
   _zsh_theme_fzf_context_args Paths 'Type to filter paths' 'Enter insert  Tab mark  Esc close'
   args=( "${reply[@]}" --scheme=path )
   _zsh_theme_join_shell_args "${args[@]}"
   export FZF_COMPLETION_PATH_OPTS=$REPLY
   [[ -n $_FZF_INHERITED_COMPLETION_PATH_OPTS ]] && FZF_COMPLETION_PATH_OPTS+=" $_FZF_INHERITED_COMPLETION_PATH_OPTS"
-  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_PATH_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_PATH_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
   _zsh_theme_fzf_context_args Directories 'Type to filter directories' 'Enter insert  Esc close'
   args=( "${reply[@]}" --scheme=path --no-multi )
   _zsh_theme_join_shell_args "${args[@]}"
   export FZF_COMPLETION_DIR_OPTS=$REPLY
   [[ -n $_FZF_INHERITED_COMPLETION_DIR_OPTS ]] && FZF_COMPLETION_DIR_OPTS+=" $_FZF_INHERITED_COMPLETION_DIR_OPTS"
-  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_DIR_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && FZF_COMPLETION_DIR_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
   (( $+functions[_zsh_zoxide_refresh_fzf_opts] )) && _zsh_zoxide_refresh_fzf_opts
   _FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]=$signature

@@ -24,7 +24,7 @@ _zsh_zoxide_refresh_fzf_opts() {
 
   typeset -gx _ZO_FZF_OPTS="$managed $context"
   [[ -n $inherited ]] && _ZO_FZF_OPTS+=" $inherited"
-  [[ -n ${NO_COLOR:-} ]] && _ZO_FZF_OPTS+=' --no-color'
+  [[ -n ${NO_COLOR:-} ]] && _ZO_FZF_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
   typeset -g _ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE=$signature
 }
 

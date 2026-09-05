@@ -4,14 +4,14 @@
 
 - This repo is a shared Zsh config, not an app/workspace: there is no package manager, lockfile, or root-level test runner config. CI automation exists via GitHub Actions in `.github/workflows/checks.yml`.
 - `init.zsh` is the executable source of truth. It sets shell options, then sources modules in this order: `10-history.zsh`, `20-aliases.zsh`, `25-theme.zsh`, `30-zoxide.zsh`, `40-fzf.zsh`, `50-completion.zsh`, `55-ui-helpers.zsh`, `60-functions.zsh`, optional `62-cgm.zsh`, `65-help.zsh`, `66-compdefs.zsh`, `70-globals.zsh`, `80-tips.zsh`.
-- `functions/ztheme`, `functions/_fbr_format_entry`, `lib/functions-catalogue.zsh`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` are trusted repo-local lazy helpers. Normal startup registers fixed loaders and lightweight color stubs; general commands, package workflows, command-only rendering, catalogues, fbr formatting, palette, validation, and conversion code are parsed on first use. `lib/upkg-registry.zsh` is a trusted lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available.
+- `functions/ztheme`, `functions/_fbr_format_entry`, `lib/functions-*.zsh`, `lib/command-registry.zsh`, `lib/ui-width-data.zsh`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` are trusted repo-local lazy helpers. Normal startup registers fixed loaders and lightweight color stubs; general commands, package workflows, command-only rendering, catalogues, fbr formatting, palette, validation, and conversion code are parsed on first use. `lib/upkg-registry.zsh` is a trusted lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available.
 - The module files are the source of truth for behavior. `README.md` and `GUIDE.md` must be kept in sync with them at all times.
 
 ## Documentation Ownership
 
 - `README.md` is the short entrypoint: purpose, five-minute setup, requirements summary, and links. Do not turn it into a second command reference.
 - `GUIDE.md` is the complete user reference. Keep detailed behavior, examples, dependency notes, safety boundaries, and gotchas there.
-- `65-help.zsh` registers the fixed `zhelp` loader; `lib/help-catalogue.zsh` keeps its records terse: one clear summary, usage, editable example, dependency label, and live availability.
+- `65-help.zsh` registers the fixed `zhelp` loader; `lib/command-registry.zsh` keeps shared help/completion records terse: one clear summary, usage, editable example, dependency label, and live availability.
 - `80-tips.zsh` registers the fixed `tips` loader; `lib/tips-catalogue.zsh` contains short, actionable reminders. Add tips only for user-facing actions that users can perform. Do not use tips for implementation notes, release history, or long edge-case explanations.
 - `docs/specs/` contains historical decisions and acceptance criteria. Mark implemented specs clearly and link readers to `GUIDE.md` for current usage.
 - Link between surfaces instead of copying long explanations. When behavior changes, update each affected surface at its intended level of detail.
@@ -24,7 +24,7 @@
   - Guards inside function bodies keep `command -v ... >/dev/null 2>&1`. `$commands` is a cached hash, so it can go stale mid-session and it defeats the `PATH`-stubbed fake binaries in `scripts/test-upkg.zsh`.
 - `40-fzf.zsh` also embeds `command -v` inside the exported `FZF_*_OPTS` preview strings. Those run in a separate shell that fzf spawns, so they must stay `command -v`.
 - `25-theme.zsh` is the single palette and glyph source of truth. Keep its startup path pure Zsh: no executable probes, terminal queries, filesystem theme discovery, downloaded palettes, arbitrary theme sourcing, or `eval`. Renderer and picker code consume semantic roles instead of palette-specific names or raw colors.
-- `60-functions.zsh` owns fixed lazy registration for the general command catalogue and the session-only `ztheme` command. `lib/functions-catalogue.zsh` owns the general implementations, and `functions/ztheme` owns its implementation. Theme export may print safe assignments but must not edit `.zshrc`; invalid settings and failed finder refreshes must remain atomic.
+- `60-functions.zsh` owns fixed lazy registration for the general command catalogue and the session-only `ztheme` command. `lib/functions-catalogue.zsh` owns the fixed domain loader; `lib/functions-common.zsh`, `lib/functions-files.zsh`, `lib/functions-system.zsh`, `lib/functions-git.zsh`, `lib/functions-upkg.zsh`, `lib/functions-upkg-backends.zsh`, and `lib/functions-nix.zsh` own the implementations, and `functions/ztheme` owns its implementation. Theme export may print safe assignments but must not edit `.zshrc`; invalid settings and failed finder refreshes must remain atomic.
 - `30-zoxide.zsh` may source generated integration only after `zsh -fn` validation. Its persistent cache must remain executable-fingerprint-keyed, owner-only, non-symlinked, atomically published, and fixed beneath an absolute `XDG_CACHE_HOME` or `HOME`; a cache miss may fall back to a private temporary file but never to unchecked `eval`.
 - Keep the private `functions/` path idempotent and keep lazy helper sources fixed to the repository directory. Do not replace them with user-controlled discovery or runtime downloads.
 - IMPORTANT: whenever you change a user-facing alias, function, completion behavior, or workflow in this repo, update `80-tips.zsh`, `README.md`, and `GUIDE.md` in the same change so all documentation stays accurate and consistent. Keep each update within the ownership boundaries above; synchronization does not mean duplicating the same prose.
@@ -42,7 +42,7 @@
 Run `zsh scripts/run-tests.zsh` after edits. The runner is the executable source of truth for the ordered syntax checks, regression suites, and fixed-install-path smoke test used by CI.
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
-- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `secret-tool`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
+- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`bat`, `tree`, `fd`/`fdfind`, `jq`, `secret-tool`, `gdbus`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
 - `skills-lock.json` records maintainer skill provenance only; it is not a runtime dependency or package-manager lockfile.
 
 ## Manual QA Checklist

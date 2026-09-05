@@ -1,4 +1,5 @@
 # Shared terminal UI helpers.
+typeset -g _ZSH_UI_HELPERS_DIR=${${(%):-%N}:A:h}
 
 if (( ! $+functions[_zsh_theme_sgr] )); then
   typeset _ui_theme_module=${${(%):-%x}:A:h}/25-theme.zsh
@@ -202,54 +203,45 @@ _ui_repeat() {
   print -nr -- "$out"
 }
 
-# Terminal-cell width of one code point: 0 for combining and format marks,
-# 2 for East Asian wide and fullwidth ranges, 1 otherwise. The ranges follow
-# common wcwidth ranges; emoji grapheme shaping remains terminal-dependent. Pure Zsh so per-row measurement never spawns a
-# subprocess.
+# Terminal cells for one sanitized code point. Binary search over committed
+# Unicode intervals stays pure Zsh and covers combining scripts beyond Latin.
 _ui_char_width() {
   emulate -L zsh
-
-  integer code=$1
-  if (( (code >= 0x0300 && code <= 0x036F) ||
-        (code >= 0x0483 && code <= 0x0489) ||
-        (code >= 0x0591 && code <= 0x05BD) ||
-        code == 0x05BF || (code >= 0x05C1 && code <= 0x05C2) ||
-        (code >= 0x05C4 && code <= 0x05C5) || code == 0x05C7 ||
-        (code >= 0x0610 && code <= 0x061A) ||
-        (code >= 0x064B && code <= 0x065F) || code == 0x0670 ||
-        (code >= 0x06D6 && code <= 0x06DC) ||
-        (code >= 0x06DF && code <= 0x06E4) ||
-        (code >= 0x06E7 && code <= 0x06E8) ||
-        (code >= 0x06EA && code <= 0x06ED) ||
-        (code >= 0x1AB0 && code <= 0x1AFF) ||
-        (code >= 0x1DC0 && code <= 0x1DFF) ||
-        (code >= 0x200B && code <= 0x200F) ||
-        (code >= 0x202A && code <= 0x202E) ||
-        (code >= 0x20D0 && code <= 0x20FF) ||
-        (code >= 0x3099 && code <= 0x309A) ||
-        (code >= 0xFE00 && code <= 0xFE0F) ||
-        (code >= 0xFE20 && code <= 0xFE2F) || code == 0xFEFF )); then
-    REPLY=0
-  elif (( (code >= 0x1100 && code <= 0x115F) ||
-          code == 0x2329 || code == 0x232A ||
-          (code >= 0x2E80 && code <= 0x303E) ||
-          (code >= 0x3041 && code <= 0x33FF) ||
-          (code >= 0x3400 && code <= 0x4DBF) ||
-          (code >= 0x4E00 && code <= 0xA4CF) ||
-          (code >= 0xAC00 && code <= 0xD7A3) ||
-          (code >= 0xF900 && code <= 0xFAFF) ||
-          (code >= 0xFE10 && code <= 0xFE19) ||
-          (code >= 0xFE30 && code <= 0xFE4F) ||
-          (code >= 0xFF00 && code <= 0xFF60) ||
-          (code >= 0xFFE0 && code <= 0xFFE6) ||
-          (code >= 0x1F300 && code <= 0x1F64F) ||
-          (code >= 0x1F900 && code <= 0x1FAFF) ||
-          (code >= 0x20000 && code <= 0x2FFFD) ||
-          (code >= 0x30000 && code <= 0x3FFFD) )); then
-    REPLY=2
-  else
+  integer code=$1 low high middle
+  if (( code < 128 )); then
     REPLY=1
+    return 0
   fi
+  if (( ! ${_ZSH_UI_WIDTH_DATA_LOADED:-0} )); then
+    source "$_ZSH_UI_HELPERS_DIR/lib/ui-width-data.zsh" || return 1
+  fi
+  low=1
+  high=${#_ZSH_UI_ZERO_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_ZERO_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_ZERO_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=0
+      return 0
+    fi
+  done
+  low=1
+  high=${#_ZSH_UI_WIDE_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_WIDE_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_WIDE_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=2
+      return 0
+    fi
+  done
+  REPLY=1
 }
 
 # Terminal-cell width of already-sanitized text. Visible escapes are plain

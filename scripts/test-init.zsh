@@ -625,7 +625,7 @@ fkill >/dev/null
 fkill_rc=$?
 fbr >/dev/null
 fbr_rc=$?
-_npkg_require_picker install >/dev/null
+npkg find >/dev/null
 npkg_rc=$?
 _zsh_help_palette "" 1 >/dev/null
 help_rc=$?
@@ -809,7 +809,7 @@ custom_refreshed=0
 NO_COLOR=1
 _fzf_require_ready
 nocolor=0
-[[ $FZF_DEFAULT_OPTS == *--no-color && $FZF_CTRL_T_OPTS == *--no-color && $FZF_CTRL_R_OPTS == *--no-color && $FZF_ALT_C_OPTS == *--no-color && $FZF_COMPLETION_OPTS == *--no-color && $FZF_COMPLETION_PATH_OPTS == *--no-color && $FZF_COMPLETION_DIR_OPTS == *--no-color && $_ZO_FZF_OPTS == *--no-color ]] && nocolor=1
+[[ $FZF_DEFAULT_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_CTRL_T_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_CTRL_R_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_ALT_C_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_COMPLETION_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_COMPLETION_PATH_OPTS == *--no-color\ --color=bw,footer:-1 && $FZF_COMPLETION_DIR_OPTS == *--no-color\ --color=bw,footer:-1 && $_ZO_FZF_OPTS == *--no-color\ --color=bw,footer:-1 ]] && nocolor=1
 preview_plain=0
 [[ $FZF_CTRL_T_OPTS == *--color=never* && $FZF_CTRL_T_OPTS != *--color=always* ]] && preview_plain=1
 preview_keys=0

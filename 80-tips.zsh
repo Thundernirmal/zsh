@@ -1,6 +1,6 @@
-# Lazy registration for on-demand tips. Glyph previews and shared Ctrl+P
-# history-preview, command-help, and credential-status reminders live in lib/tips-catalogue.zsh. Destructive file operations deliberately
-# keep their native command semantics instead of relying on bypassable aliases.
+# Fixed lazy loader for hook-free, on-demand tips. Command help, glyph previews,
+# and credential-status reminders stay in lib/tips-catalogue.zsh. Destructive
+# file commands keep native semantics across domain loading.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
 typeset -gi _ZSH_TIPS_CATALOGUE_LOADED=${_ZSH_TIPS_CATALOGUE_LOADED:-0}

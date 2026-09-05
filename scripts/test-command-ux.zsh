@@ -191,7 +191,8 @@ exit 7' > "$fakebin/gunzip"
 
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
-  source "$repo_dir/lib/functions-catalogue.zsh"
+  source "$repo_dir/60-functions.zsh"
+  _zsh_functions_load || return 1
   functions[_ui_plain_mode]='return 0'
 
   test_help || return 1

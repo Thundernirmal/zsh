@@ -38,6 +38,7 @@ zsh ./scripts/test-init.zsh
 zsh ./scripts/test-theme.zsh
 zsh ./scripts/test-functions.zsh
 zsh ./scripts/test-command-ux.zsh
+zsh ./scripts/test-domains.zsh
 zsh ./scripts/test-cgm.zsh
 zsh ./scripts/test-upkg.zsh
 zsh ./scripts/test-completions.zsh
