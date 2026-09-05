@@ -34,7 +34,7 @@ _zsh_help_register() {
   local value
 
   [[ -n $id && -n $category && -n $summary && -n $usage && -n $example ]] || return 1
-  [[ $kind == function || $kind == alias ]] || return 1
+  [[ $kind == function || $kind == alias || $kind == action ]] || return 1
   [[ -z ${_ZSH_HELP_CATEGORY[$id]-} ]] || return 1
 
   for value in "$id" "$category" "$summary" "$usage" "$example" "$dependencies"; do
@@ -95,10 +95,13 @@ _zsh_help_register path System 'List PATH entries' 'path' 'path' none function n
 
 # Credentials
 _zsh_help_register cgm Security 'Store and load shell credentials securely' 'cgm <command> [credential ...]' 'cgm env OPENAI_KEY' 'secret-tool and a Secret Service provider' function secret-tool
+_zsh_help_register cgm-env Security 'Load credentials into this shell' 'cgm env <name ...>' 'cgm env OPENAI_KEY' 'secret-tool and a Secret Service provider' action secret-tool
 
 # Packages and meta helpers
 _zsh_help_register upkg Packages 'Check, search, upgrade, and clean detected managers' 'upkg [command] [args] [flags]' 'upkg search ripgrep --only=apt,nix' 'a supported package manager' function package-manager
+_zsh_help_register upkg-plan Packages 'Preview upgrades' 'upkg plan [--only <list>]' 'upkg plan' 'a supported package manager' action package-manager
 _zsh_help_register npkg Packages 'Manage the current Nix profile' 'npkg <command> [args]' 'npkg search ripgrep' 'nix; jq and fzf 0.68.0+ for optional workflows' function nix
+_zsh_help_register npkg-remove Packages 'Remove packages from the Nix profile' 'npkg remove [package ...]' 'npkg remove' 'nix; jq and fzf 0.68.0+ for optional workflows' action nix
 _zsh_help_register G Meta 'Pipe command output to grep' '<command> G <pattern>' 'git log --oneline G fix' grep alias grep
 _zsh_help_register L Meta 'Pipe command output to less' '<command> L' 'git diff L' less alias less
 _zsh_help_register W Meta 'Pipe command output to a line count' '<command> W' 'git log --oneline W' wc alias wc
@@ -106,6 +109,7 @@ _zsh_help_register H Meta 'Pipe command output to head' '<command> H' 'git log -
 _zsh_help_register T Meta 'Pipe command output to tail' '<command> T' 'git log --oneline T' tail alias tail
 _zsh_help_register NE Meta 'Suppress stderr for one command' '<command> NE' 'optional-command NE' none alias none
 _zsh_help_register NUL Meta 'Suppress stdout and stderr for one command' '<command> NUL' 'noisy-command NUL' none alias none
+_zsh_help_register zdoctor Meta 'Diagnose setup and integration status' 'zdoctor [--network] [--secrets]' 'zdoctor' none function none
 _zsh_help_register tips Meta 'Print one short usage tip' 'tips' 'tips' none function none
 _zsh_help_register ztheme Meta 'Inspect or switch shared terminal themes' 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme use nord' none function none
 _zsh_help_register zhelp Meta 'Find commands and queue an example' 'zhelp [--all] [--plain] [query]' 'zhelp package' 'fzf 0.68.0+ for the optional interactive palette' function none
@@ -121,6 +125,9 @@ _zsh_help_entry_exists() {
       ;;
     alias)
       [[ -n ${aliases[$id]-} || -n ${galiases[$id]-} ]]
+      ;;
+    action)
+      [[ -n ${functions[${_ZSH_HELP_EXAMPLE[$id]%% *}]-} ]]
       ;;
     *)
       return 1
@@ -294,7 +301,10 @@ _zsh_help_palette() {
   fi
   _fzf_require_ready || return 1
 
-  _zsh_help_matches "$query" "$include_all"
+  # Seed the picker's query but keep the whole eligible catalogue browsable:
+  # clearing the query must broaden results instead of trapping the user in
+  # the CLI-filtered subset. Plain-text search stays deterministically filtered.
+  _zsh_help_matches "" "$include_all"
   ids=( "${reply[@]}" )
   (( ${#ids[@]} > 0 )) || return 1
 
@@ -363,6 +373,7 @@ zhelp() {
 
   local include_all=0 force_plain=0 query=''
   local -a query_parts matches close
+  local -i hidden_count=0
 
   while (( $# > 0 )); do
     case $1 in
@@ -421,4 +432,11 @@ zhelp() {
   fi
 
   _zsh_help_render_list "${matches[@]}"
+  if (( ! include_all )); then
+    _zsh_help_matches "$query" 1
+    hidden_count=$(( ${#reply[@]} - ${#matches[@]} ))
+    if (( hidden_count > 0 )); then
+      print -r -- "$hidden_count unavailable command(s) hidden; run 'zhelp --all${query:+ $query}' to view requirements."
+    fi
+  fi
 }

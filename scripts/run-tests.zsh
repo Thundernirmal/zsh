@@ -41,6 +41,7 @@ zsh ./scripts/test-cgm.zsh
 zsh ./scripts/test-upkg.zsh
 zsh ./scripts/test-completions.zsh
 zsh ./scripts/test-help.zsh
+zsh ./scripts/test-doctor.zsh
 
 if [[ $repo_dir == ${HOME:-}/.config/zsh ]]; then
   zsh -fc 'source "$HOME/.config/zsh/init.zsh"'

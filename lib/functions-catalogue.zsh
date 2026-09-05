@@ -4891,3 +4891,218 @@ if (( $+commands[nix] )); then
     esac
   }
 fi
+
+_zdoctor_usage() {
+  print 'Usage: zdoctor [--network] [--secrets]'
+  print ''
+  print 'Diagnose the shared Zsh setup without changing it:'
+  print '  install location, module readability, completion readiness,'
+  print '  required and optional tools, glyph configuration, and'
+  print '  integration status (fzf, zoxide, cgm, npkg, global aliases).'
+  print ''
+  print 'Network endpoints and Secret Service are probed only with:'
+  print '  --network   Check the myip and weather endpoints (curl, 8s timeout)'
+  print '  --secrets   Check secret-tool without retrieving any value'
+}
+
+# On-demand setup and integration diagnosis. Reads local state only unless
+# the explicit probe flags are given; never edits configuration.
+zdoctor() {
+  emulate -L zsh
+
+  local arg repo_dir install_base module failures=0 warnings=0
+  local fzf_version fzf_major fzf_minor fzf_patch current_user
+  local -a modules missing_modules
+  local -i check_network=0 check_secrets=0
+
+  for arg in "$@"; do
+    case $arg in
+      --network) check_network=1 ;;
+      --secrets) check_secrets=1 ;;
+      -h|--help) _zdoctor_usage; return 0 ;;
+      --) ;;
+      -*)
+        print -u2 -r -- "Unknown zdoctor option: $arg"
+        _zdoctor_usage >&2
+        return 1
+        ;;
+      *)
+        print -u2 -r -- "Unknown zdoctor argument: $arg"
+        _zdoctor_usage >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ! _ui_plain_mode; then
+    _ui_title_line 'Doctor' 'shared zsh config' accent '*' '*'
+    _ui_section_break
+  fi
+
+  _zdoctor_report() {
+    # Local reporting helper; removed before zdoctor returns.
+    local level=$1 text=$2
+    case $level in
+      ok) print -r -- "ok: $text" ;;
+      warn)
+        print -r -- "warning: $text"
+        (( warnings++ ))
+        ;;
+      fail)
+        print -r -- "fail: $text"
+        (( failures++ ))
+        ;;
+    esac
+  }
+
+  repo_dir=${_ZSH_FUNCTIONS_MODULE_DIR:-${HOME:-}/.config/zsh}
+  install_base=${HOME:-}/.config/zsh
+  if [[ ${repo_dir:A} == ${install_base:A} ]]; then
+    _zdoctor_report ok "install location ($repo_dir)"
+  else
+    _zdoctor_report fail "install location ($repo_dir is not $install_base; move the clone or symlink it there)"
+  fi
+
+  modules=( 10-history 20-aliases 25-theme 30-zoxide 40-fzf 50-completion
+    55-ui-helpers 60-functions 62-cgm 65-help 66-compdefs 70-globals 80-tips )
+  missing_modules=()
+  for module in "${modules[@]}"; do
+    if [[ $module == 62-cgm ]] && (( ! $+commands[secret-tool] )); then
+      continue
+    fi
+    [[ -r $install_base/$module.zsh ]] || missing_modules+=("$module.zsh")
+  done
+  if (( ${#missing_modules[@]} == 0 )); then
+    _zdoctor_report ok 'all expected modules are readable'
+  else
+    _zdoctor_report fail "unreadable modules (startup skips them): ${(j:, :)missing_modules}"
+  fi
+
+  if (( $+functions[compdef] )); then
+    if (( ${+_comps[zhelp]} )); then
+      _zdoctor_report ok 'completion is ready (compinit ran; custom completions registered)'
+    else
+      _zdoctor_report warn 'compinit ran but custom completions are not registered; restart the shell'
+    fi
+  else
+    _zdoctor_report warn 'compinit has not run; add `autoload -Uz compinit && compinit -i` before sourcing init.zsh for Tab completion'
+  fi
+
+  for module in zsh git curl ss lsd zoxide; do
+    if command -v $module >/dev/null 2>&1; then
+      _zdoctor_report ok "required tool: $module"
+    else
+      _zdoctor_report fail "required tool missing: $module (see scripts/check-deps.sh for install hints)"
+    fi
+  done
+  if command -v fzf >/dev/null 2>&1; then
+    fzf_version=$(command fzf --version 2>/dev/null) || fzf_version=''
+    fzf_version=${${fzf_version%% *}:-}
+    if [[ $fzf_version == <->.<-> || $fzf_version == <->.<->.<-> ]]; then
+      fzf_major=${fzf_version%%.*}
+      fzf_minor=${${fzf_version#*.}%%.*}
+      fzf_patch=0
+      [[ $fzf_version == *.*.* ]] && fzf_patch=${fzf_version##*.}
+      if (( fzf_major > 0 || fzf_minor > 68 || ( fzf_minor == 68 && fzf_patch >= 0 ) )); then
+        _zdoctor_report ok "required tool: fzf $fzf_version (minimum 0.68.0)"
+      else
+        _zdoctor_report fail "fzf $fzf_version is older than the 0.68.0 minimum"
+      fi
+    else
+      _zdoctor_report fail 'fzf version is unparseable (minimum 0.68.0)'
+    fi
+  else
+    _zdoctor_report fail 'required tool missing: fzf (minimum 0.68.0)'
+  fi
+
+  for module in bat tree jq secret-tool nix; do
+    if command -v $module >/dev/null 2>&1; then
+      _zdoctor_report ok "optional tool: $module"
+    else
+      _zdoctor_report warn "optional tool missing: $module (only its workflows stay unavailable)"
+    fi
+  done
+  if command -v fd >/dev/null 2>&1 || command -v fdfind >/dev/null 2>&1; then
+    _zdoctor_report ok 'optional tool: fd/fdfind'
+  else
+    _zdoctor_report warn 'optional tool missing: fd/fdfind (ff falls back to find)'
+  fi
+
+  if (( $+functions[_zsh_theme_resolve_glyph_tier] )); then
+    if _zsh_theme_resolve_glyph_tier "${ZSH_UI_GLYPHS:-auto}"; then
+      _zdoctor_report ok "glyphs resolve to $REPLY (ZSH_UI_GLYPHS=${ZSH_UI_GLYPHS:-auto}${NO_NERD_FONT:+, NO_NERD_FONT is set})"
+    else
+      _zdoctor_report fail "ZSH_UI_GLYPHS=${ZSH_UI_GLYPHS:-auto} is invalid (use auto, nerd, unicode, or ascii)"
+    fi
+  else
+    _zdoctor_report warn 'glyph resolver is not loaded yet; run `ztheme list` to load it'
+  fi
+
+  _zdoctor_report ok "fzf integration state: ${_FZF_STATE:-unchecked} (found: ${_FZF_FOUND:-not checked})"
+  if (( $+commands[zoxide] )); then
+    if (( $+functions[zi] )); then
+      _zdoctor_report ok 'zoxide integration is ready'
+    else
+      _zdoctor_report warn 'zoxide is installed but zi is unavailable; restart the shell'
+    fi
+  else
+    _zdoctor_report warn 'zoxide is not installed; z and zi stay unavailable'
+  fi
+  if (( $+functions[cgm] )); then
+    _zdoctor_report ok 'cgm is defined (secret-tool was present at startup)'
+  elif command -v secret-tool >/dev/null 2>&1; then
+    _zdoctor_report warn 'secret-tool is installed but cgm is undefined; restart the shell'
+  else
+    _zdoctor_report warn 'cgm is unavailable (secret-tool is not installed)'
+  fi
+  if (( $+functions[npkg] )); then
+    _zdoctor_report ok 'npkg is defined'
+  elif command -v nix >/dev/null 2>&1; then
+    _zdoctor_report warn 'nix is installed but npkg is undefined; restart the shell'
+  else
+    _zdoctor_report warn 'npkg is unavailable (nix is not installed)'
+  fi
+  if (( ${+galiases[G]} )); then
+    _zdoctor_report ok 'global aliases are enabled (ZSH_GLOBAL_ALIASES=1)'
+  else
+    _zdoctor_report warn "global aliases are disabled; export ZSH_GLOBAL_ALIASES=1 before startup to enable them"
+  fi
+
+  if (( check_network )); then
+    if command -v curl >/dev/null 2>&1; then
+      if command curl -fsS --max-time 8 -o /dev/null https://ifconfig.me/ip 2>/dev/null; then
+        _zdoctor_report ok 'myip endpoint is reachable (https://ifconfig.me/ip)'
+      else
+        _zdoctor_report fail 'myip endpoint is unreachable (https://ifconfig.me/ip)'
+      fi
+      if command curl -fsS --max-time 8 -o /dev/null 'https://wttr.in/?format=3' 2>/dev/null; then
+        _zdoctor_report ok 'weather endpoint is reachable (https://wttr.in/)'
+      else
+        _zdoctor_report fail 'weather endpoint is unreachable (https://wttr.in/)'
+      fi
+    else
+      _zdoctor_report fail 'curl is missing so network endpoints cannot be checked'
+    fi
+  else
+    print -r -- 'note: network endpoints not probed (pass --network to check myip and weather)'
+  fi
+
+  if (( check_secrets )); then
+    if command -v secret-tool >/dev/null 2>&1; then
+      _zdoctor_report ok 'secret-tool is installed; zdoctor never retrieves credential values'
+    else
+      _zdoctor_report fail 'secret-tool is not installed'
+    fi
+  else
+    print -r -- 'note: Secret Service not contacted (pass --secrets to check secret-tool)'
+  fi
+
+  if (( failures > 0 )); then
+    print -r -- "zdoctor: $failures failure(s), $warnings warning(s)"
+    unfunction _zdoctor_report
+    return 1
+  fi
+  print -r -- "zdoctor: healthy ($warnings warning(s))"
+  unfunction _zdoctor_report
+  return 0
+}

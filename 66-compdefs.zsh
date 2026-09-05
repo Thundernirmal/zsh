@@ -292,6 +292,13 @@ if (( $+functions[compdef] )); then
       '*:additional search term:'
   }
 
+  _zsh_zdoctor() {
+    _arguments \
+      '(-h --help)'{-h,--help}'[show zdoctor usage]' \
+      '--network[probe the myip and weather endpoints]' \
+      '--secrets[check secret-tool without retrieving values]'
+  }
+
   _zsh_ztheme() {
     local context state state_descr line
     typeset -A opt_args
@@ -333,6 +340,7 @@ if (( $+functions[compdef] )); then
   compdef _zsh_fkill fkill
   compdef _zsh_headers headers
   compdef _zsh_zhelp zhelp
+  compdef _zsh_zdoctor zdoctor
   compdef _zsh_ztheme ztheme
   compdef _zsh_no_arguments fbr croot path ports myip gitcount fanprofile tips
 

@@ -8,6 +8,7 @@ _zsh_tip_pool=(
   "Use *(D) when a glob should include hidden entries"
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
+  "Run zdoctor to diagnose setup and integration status"
   "Run ztheme use nord to switch dashboard and finder colors for this session"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
@@ -36,7 +37,7 @@ if (( ${+galiases[G]} )); then
   _zsh_tip_pool+=(
     "Use G, L, or W to pipe to grep, less, or wc -l"
     "Use NE to hide stderr or NUL to hide all output"
-    "Quote a global alias such as 'H' to keep it literal"
+    "Use quotes around 'H' to keep a global alias literal"
   )
 fi
 

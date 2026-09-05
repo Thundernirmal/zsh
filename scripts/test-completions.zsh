@@ -94,6 +94,7 @@ test_registration() {
     fkill _zsh_fkill
     headers _zsh_headers
     zhelp _zsh_zhelp
+    zdoctor _zsh_zdoctor
     ztheme _zsh_ztheme
     cgm _zsh_cgm
     fbr _zsh_no_arguments

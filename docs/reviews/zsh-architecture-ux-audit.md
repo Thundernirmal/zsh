@@ -110,7 +110,7 @@ Unquoted tokens such as `H`, `T`, `G` and `L` expand anywhere in a command. For 
 
 **Fix:** make global aliases opt-in for a shared configuration. Existing personal users can preserve them with one setting. Include a clear quoting example and show their enabled state in `zdoctor`. This is a design change, not a claim that Zsh expansion is malfunctioning.
 
-**Status (2026-09-05): fixed.** `70-globals.zsh` defines `G/L/W/H/T/NE/NUL` only when `ZSH_GLOBAL_ALIASES=1` is exported before startup; quoting (`echo 'H'`) keeps tokens literal and is documented in the module header, GUIDE, and tips. Disabled aliases disappear from default `zhelp` via the existing unavailable-category path, and the globals tips only load when enabled. Enabled-state reporting in `zdoctor` follows in the discovery stage.
+**Status (2026-09-05): fixed.** `70-globals.zsh` defines `G/L/W/H/T/NE/NUL` only when `ZSH_GLOBAL_ALIASES=1` is exported before startup; quoting (`echo 'H'`) keeps tokens literal and is documented in the module header, GUIDE, and tips. Disabled aliases disappear from default `zhelp` via the existing unavailable-category path, the globals tips only load when enabled, and `zdoctor` reports the enabled state.
 
 [Evidence: global aliases](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/70-globals.zsh).
 
@@ -121,6 +121,8 @@ Unquoted tokens such as `H`, `T`, `G` and `L` expand anywhere in a command. For 
 The README gives the source snippet but omits a concrete clone/setup step. The entrypoint only loads modules at the fixed install path and silently skips unreadable ones. Missing `compinit` silently disables custom completions. The dependency checker cannot explain those configuration failures.
 
 **Fix:** document installation into an empty target directory, a standalone `compinit` setup, the OMZ setup, and verification. Resolve the module root from the entrypoint if portability is desired; otherwise make the fixed path a prominent setup check. Use `zdoctor` for diagnosis without adding startup noise. Distinguish optional features from the checker's “required for intended setup” tools.
+
+**Status (2026-09-05): fixed.** README and GUIDE now document cloning into an empty `~/.config/zsh`, the fixed-path requirement, standalone `compinit -i` setup, OMZ ordering, and verification via `check-deps.sh` plus `zdoctor`. Startup stays silent; the new on-demand `zdoctor` (lazy-loaded, with shell completion and help entry) reports install location, unreadable modules, `compinit` readiness, required/optional tool versions including the fzf minimum, glyph resolution, and fzf/zoxide/cgm/npkg/global-alias state, exiting nonzero while a failure is present. Network and Secret Service stay untouched unless `--network`/`--secrets` are passed explicitly. Covered by `scripts/test-doctor.zsh`.
 
 [Evidence: README](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/README.md), [bootstrap](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/init.zsh), [completion guard](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/66-compdefs.zsh#L1-L9).
 
@@ -160,6 +162,8 @@ Padding and truncation use `${#text}`. Wide CJK characters and combining sequenc
 | Nix completion | Every completion reads all cached attribute files again | Cache parsed attributes in-session keyed by cache identity/mtime; retain the existing no-network completion rule |
 
 These recommendations are grounded in [help implementation](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/lib/help-catalogue.zsh), [fzf configuration](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/40-fzf.zsh), [commands](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/lib/functions-catalogue.zsh), [CGM](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/62-cgm.zsh) and [completions](https://github.com/Thundernirmal/zsh/blob/8233c85ad52bd1e17d82cb1e7e05f944a227f00d/66-compdefs.zsh). They are not all defects; several deliberately change documented behavior.
+
+**Status (2026-09-05): discovery rows fixed.** Help discovery ships `upkg-plan`, `npkg-remove`, and `cgm-env` action entries that resolve through their parent command; the palette now receives the whole eligible catalogue with the CLI query as a seed so clearing it broadens results (plain search stays filtered); and plain listings name hidden unavailable commands with a pointer to `zhelp --all`. Covered by `test_action_entries_and_browsing`. History-search bindings, command `--help` flags, network timeouts, credential status, search-backend flags, extraction options, and Nix completion caching remain open and are staged separately.
 
 ## What to preserve
 

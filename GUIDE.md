@@ -24,7 +24,13 @@ The configuration is a GNU/Linux-focused layer that is sourced by a machine-loca
 
 ## Setup and scope
 
-The repository is expected at `~/.config/zsh` because `init.zsh` loads modules from that fixed location. Add this near the end of `~/.zshrc`:
+The repository is expected at `~/.config/zsh` because `init.zsh` loads modules from that fixed location. Clone it into an empty target directory:
+
+```sh
+git clone https://github.com/Thundernirmal/zsh.git "$HOME/.config/zsh"
+```
+
+Add this near the end of `~/.zshrc`:
 
 ```zsh
 if [ -r "$HOME/.config/zsh/init.zsh" ]; then
@@ -32,10 +38,18 @@ if [ -r "$HOME/.config/zsh/init.zsh" ]; then
 fi
 ```
 
-Source it after Oh My Zsh when these aliases and functions should override framework defaults. Reload with:
+Source it after Oh My Zsh when these aliases and functions should override framework defaults. Without a framework, run `compinit` before the snippet so Tab completion registers:
+
+```zsh
+autoload -Uz compinit && compinit -i
+```
+
+Reload and verify with:
 
 ```zsh
 exec zsh
+$HOME/.config/zsh/scripts/check-deps.sh
+zdoctor
 ```
 
 The shared layer manages:
@@ -54,7 +68,7 @@ It does not manage:
 - `compinit` startup
 - non-Zsh shells
 
-Unreadable module files are skipped. The optional credential module is skipped entirely when `secret-tool` is absent at startup.
+Unreadable module files are skipped. The optional credential module is skipped entirely when `secret-tool` is absent at startup. Either silence means a degraded shell without an error, so run `zdoctor` when a feature is missing: it reports install location, unreadable modules, completion readiness, tool versions, glyph settings, and integration status, and returns nonzero while a real failure is present.
 
 ## Module layout
 
@@ -69,7 +83,7 @@ Unreadable module files are skipped. The optional credential module is skipped e
 | `40-fzf.zsh` | fzf validation, secure integration cache, structured presentation, previews, and bindings |
 | `50-completion.zsh` | Lightweight global completion styles |
 | `55-ui-helpers.zsh` | Rich terminal rendering and plain fallbacks |
-| `60-functions.zsh` | Fixed lazy registrations for general helpers, session-only `ztheme`, `upkg`, and optional `npkg` |
+| `60-functions.zsh` | Fixed lazy registrations for general helpers, session-only `ztheme`, `upkg`, optional `npkg`, and `zdoctor` |
 | `62-cgm.zsh` | Optional Secret Service credential manager |
 | `65-help.zsh` | Fixed lazy-loader registration for `zhelp` |
 | `66-compdefs.zsh` | Command-aware completion definitions |
@@ -341,9 +355,11 @@ zhelp --plain file     # stable text for a pipe or log
 zhelp --help
 ```
 
-The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. Exact names show usage, an example, and live availability.
+The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. A plain listing that hides entries says how many are unavailable and points at `zhelp --all`. Exact names show usage, an example, and live availability.
 
-In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
+The catalogue also carries action entries for multi-step workflows: `upkg-plan` (preview upgrades), `npkg-remove` (remove a Nix package), and `cgm-env` (load credentials) resolve through their parent command, so they disappear together when the parent is unavailable.
+
+In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. A CLI query only seeds the picker's search text; the whole eligible catalogue stays browsable, so clearing the query broadens results instead of trapping the selection in the pre-filtered rows. Piped or redirected search keeps the deterministic substring filter. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
 Sourcing `65-help.zsh` registers only a fixed repository-local loader. The catalogue, availability checks, and any subprocesses are deferred until `zhelp` is called; command completion loads catalogue data only when zhelp completion is invoked.
 
@@ -356,6 +372,19 @@ tip: Run mkcd <dir> to create and enter a directory
 ```
 
 It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Run it again for another hint.
+
+### zdoctor
+
+`zdoctor` checks the setup and reports problems without changing anything:
+
+```zsh
+zdoctor              # local checks only
+zdoctor --network    # also probe the myip and weather endpoints
+zdoctor --secrets    # also check secret-tool (values are never retrieved)
+zdoctor --help
+```
+
+It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool versions (including the fzf 0.68.0 minimum), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. The exit status is nonzero while any failure is present; warnings alone keep it zero.
 
 ## Aliases
 
@@ -496,6 +525,7 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 | `gitcount` | Show non-merge commit counts by contributor |
 | `fkill [--all] [signal]` | Select processes and send a signal |
 | `fbr` | Select a branch; enter its worktree or check it out |
+| `zdoctor [--network] [--secrets]` | Diagnose setup and integration status |
 
 #### extract
 
@@ -761,15 +791,15 @@ Ctrl+C stops and reaps only the command's recorded evaluation workers, removes i
 
 These are the cross-cutting rules most likely to surprise a new user:
 
-1. **The install path is fixed.** `init.zsh` loads `$HOME/.config/zsh/*.zsh`. A clone elsewhere needs a symlink or a deliberate code change.
+1. **The install path is fixed.** `init.zsh` loads `$HOME/.config/zsh/*.zsh`. A clone elsewhere needs a symlink or a deliberate code change. Run `zdoctor` to confirm the location and catch silently skipped modules.
 2. **Source order matters.** Source this layer after frameworks when its aliases should win. `~/.zshrc` itself is not versioned here.
 3. **File operations keep native semantics.** `mkdir`, `cp`, `mv`, and `rm` are not redefined. Add flags deliberately and keep real backups; shell prompts are not a backup strategy.
 4. **Interactive flags are situational.** If you opt into `-i`, remember that later flags such as `-f` can override it. Review the final command line before destructive operations.
 5. **Ordinary globs exclude dotfiles.** Use `*(D)` only when hidden entries are intentional. In contrast, `ff` and `dusage` explicitly include hidden entries by design.
 6. **Leading-space history is convenience, not secret storage.** `HIST_IGNORE_SPACE` reduces accidental persistence but does not protect process arguments, logs, terminal capture, or already-shared history.
-7. **Global aliases expand anywhere.** Unquoted tokens such as `G` or `NUL` can change a command far from its first word. Quote literal occurrences.
+7. **Global aliases are opt-in and expand anywhere.** They stay undefined unless `ZSH_GLOBAL_ALIASES=1` is exported before startup. Once enabled, unquoted tokens such as `G` or `NUL` can change a command far from its first word. Quote literal occurrences.
 8. **An empty PATH component means the current directory.** `path` preserves and exposes it because silently normalizing PATH would change command lookup.
-9. **Completion needs compinit.** Without `compdef`, command-specific completion quietly does nothing.
+9. **Completion needs compinit.** Without `compdef`, command-specific completion quietly does nothing. Run `zdoctor` to confirm readiness.
 10. **fzf is all-or-nothing at 0.68.0+.** An unsupported build blocks fuzzy workflows instead of enabling a reduced theme or partial bindings. Plain `zhelp` remains available.
 11. **Theme choice is machine-local.** `ztheme use` changes only the current shell, and `ztheme export` prints settings without editing `.zshrc`. This repository does not theme the prompt, terminal, tmux, editor, `bat`, Git, or `LS_COLORS`.
 12. **Ctrl+R does not execute the selection.** It inserts history into the command buffer for review and editing.

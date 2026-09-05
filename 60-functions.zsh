@@ -49,6 +49,7 @@ if (( ! _ZSH_FUNCTIONS_CATALOGUE_LOADED )); then
   function gitcount() { _zsh_functions_dispatch gitcount "$@"; }
   path() { _zsh_functions_dispatch path "$@"; }
   fbr() { _zsh_functions_dispatch fbr "$@"; }
+  zdoctor() { _zsh_functions_dispatch zdoctor "$@"; }
   upkg() { _zsh_functions_dispatch upkg "$@"; }
 
   if (( $+commands[nix] )); then
