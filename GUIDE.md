@@ -179,11 +179,11 @@ Set theme variables before sourcing `init.zsh`. `terminal` is the default. Inval
 
 The fixed palette values are adapted from the MIT-licensed [Catppuccin](https://catppuccin.com/palette/), [Nord](https://github.com/nordtheme/nord), and [Gruvbox](https://github.com/morhetz/gruvbox) projects. The resolver emits RGB when `COLORTERM` is `truecolor` or `24bit`, xterm-256 values when `TERM` contains `256color`, and deterministic ANSI colors otherwise. It uses no terminal query or source-time subprocess.
 
-Glyph selection is independent of palette and color depth. UTF-8 support alone does not prove private-use icons exist in the font, so automatic mode stays with ordinary Unicode and Nerd Font icons are an explicit opt-in:
+Glyph selection is independent of palette and color depth. Automatic mode preserves the package and status icons shown by Nerd Fonts in UTF-8 locales; machines without a Nerd Font can opt into ordinary Unicode with `NO_NERD_FONT=1` or `ZSH_UI_GLYPHS=unicode`:
 
 | Mode | Behavior |
 |---|---|
-| `auto` | Ordinary Unicode in UTF-8 locales; ASCII outside UTF-8 |
+| `auto` | Nerd Font icons in UTF-8 locales; ordinary Unicode when `NO_NERD_FONT=1`; ASCII outside UTF-8 |
 | `nerd` | Private-use Nerd Font icons plus Unicode structure symbols |
 | `unicode` | Ordinary Unicode only, with no private-use glyphs |
 | `ascii` | ASCII pointers, markers, separators, and status symbols only |
