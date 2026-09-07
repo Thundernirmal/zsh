@@ -2,7 +2,7 @@
 # First-use availability checks use Zsh's prehashed command table.
 
 _zsh_tip_pool=(
-  "Run ztheme current to preview glyphs; Nerd Font icons require ZSH_UI_GLYPHS=nerd"
+  "Run ztheme current to preview glyphs; set NO_NERD_FONT=1 if needed"
   "Use .., ..., or .... to move up one, two, or three directories"
   "Use - to return to the previous directory"
   "Run dirs -v to inspect the directory stack"

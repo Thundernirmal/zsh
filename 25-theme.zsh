@@ -110,7 +110,7 @@ _zsh_theme_resolve_glyph_tier() {
       if ! _zsh_theme_locale_is_utf8; then
         REPLY=ascii
       else
-        REPLY=unicode
+        REPLY=nerd
       fi
       ;;
     *) return 1 ;;
