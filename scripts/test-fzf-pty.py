@@ -196,6 +196,15 @@ def drain_until_exit(
                 break
         elif process.poll() is not None:
             break
+    # Linux can report PTY closure just before the child becomes waitable.
+    # Reap it within the original deadline instead of treating that race as a
+    # hang after all final output has already arrived.
+    remaining = max(0.0, deadline - time.monotonic())
+    if process.poll() is None and remaining > 0:
+        try:
+            process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            pass
     if process.poll() is None:
         raise AssertionError(f"PTY child did not exit; output was:\n{decode(output)}")
 
