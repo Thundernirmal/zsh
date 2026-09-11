@@ -290,10 +290,23 @@ fi
 if ! (( $+functions[_ui_visible_count] )); then
   _ui_visible_count() {
     emulate -L zsh
-    integer requested=$1 available=$2 max_rows=$3
-    (( requested < available )) && available=$requested
-    (( available > max_rows )) && available=$max_rows
-    print -r -- "$available"
+    integer requested=$1 total=$2 reserve=${3:-6} height available
+
+    if (( $+functions[_ui_term_height] )); then
+      height=$(_ui_term_height)
+    else
+      height=${LINES:-24}
+      case $height in
+        ''|*[!0-9]*) height=24 ;;
+      esac
+    fi
+    available=$(( height - reserve ))
+
+    (( available < 1 )) && available=1
+    (( requested > total )) && requested=$total
+    (( requested > available )) && requested=$available
+    (( requested < 0 )) && requested=0
+    print -r -- "$requested"
   }
 fi
 

@@ -572,11 +572,17 @@ done
     print -- '_zsh_functions_load || exit 1'
     print -- '_ui_truncate 10 "My File.txt"'
     print -- '_ui_pad left 20 "My File.txt"'
+    print -- 'LINES=24; print -- "visible24=$(_ui_visible_count 999 30 8)"'
+    print -- 'LINES=40; print -- "visible40=$(_ui_visible_count 999 30 8)"'
+    print -- 'print -- "visible-small=$(_ui_visible_count 4 30 8)"'
   } > "$fallback_file"
   output=$(ZDOTDIR=$tmp_prefix TERM=xterm zsh -f "$fallback_file")
   cmd_status=$?
   assert_status "$cmd_status" 0 '60-functions fallback helpers load without ui module' || return 1
   assert_contains "$output" 'My File.txt' 'fallback helpers preserve spaced text' || return 1
+  assert_contains "$output" 'visible24=16' 'fallback visible-count honors terminal height' || return 1
+  assert_contains "$output" 'visible40=30' 'fallback visible-count uses extra rows when available' || return 1
+  assert_contains "$output" 'visible-small=4' 'fallback visible-count keeps small limits unchanged' || return 1
 
   {
     print -- "source '$repo_dir/55-ui-helpers.zsh'"

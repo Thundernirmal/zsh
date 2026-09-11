@@ -264,7 +264,10 @@ printf "%s" "$1" > "$FZF_PLACEHOLDER_RESULT"' >"$helper"
       command chmod +x -- "$helper"
       print -r -- "$hostile" >"$candidate"
       export FZF_PLACEHOLDER_HELPER=$helper FZF_PLACEHOLDER_RESULT=$result FZF_PLACEHOLDER_CANDIDATE=$candidate
-      command script -qefc 'fzf --bind="start:execute-silent($FZF_PLACEHOLDER_HELPER {})+accept" < "$FZF_PLACEHOLDER_CANDIDATE"' /dev/null >/dev/null
+      # --sync makes fzf filter the initial list before firing start; without
+      # it start races the asynchronous input reader and the bound helper is
+      # skipped intermittently, leaving $result uncreated.
+      command script -qefc 'fzf --sync --bind="start:execute-silent($FZF_PLACEHOLDER_HELPER {})+accept" < "$FZF_PLACEHOLDER_CANDIDATE"' /dev/null >/dev/null
       [[ $(<"$result") == "$hostile" && ! -e $marker ]]
       )
       assert_status "$?" 0 'fzf selection placeholders quote hostile arguments without shell execution' || return 1

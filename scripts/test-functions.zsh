@@ -600,6 +600,30 @@ test_display_width() {
   assert_equals "$truncated" $'e\u0301x' 'combining sequences survive truncation' || return 1
 }
 
+test_human_bytes() {
+  local output
+
+  output=$(_ui_human_bytes 0)
+  assert_equals "$output" '0B' 'zero bytes stay unqualified' || return 1
+  output=$(_ui_human_bytes 1023)
+  assert_equals "$output" '1023B' 'byte counts below one KiB stay whole' || return 1
+  output=$(_ui_human_bytes 1024)
+  assert_equals "$output" '1.0KiB' 'one KiB keeps one decimal place' || return 1
+  output=$(_ui_human_bytes 1536)
+  assert_equals "$output" '1.5KiB' 'fractional KiB values keep their tenth' || return 1
+  output=$(_ui_human_bytes 10240)
+  assert_equals "$output" '10KiB' 'two-digit values drop the decimal place' || return 1
+  output=$(_ui_human_kib 1048576)
+  assert_equals "$output" '1.0GiB' 'KiB input converts through the byte formatter' || return 1
+
+  # Regression: `bytes * 10` used to wrap near the signed 64-bit ceiling and
+  # render negative text instead of the rounded unit value.
+  output=$(_ui_human_bytes 999999999999999999)
+  assert_equals "$output" '888PiB' 'large byte counts never overflow into negative text' || return 1
+  output=$(_ui_human_bytes 9223372036854775807)
+  assert_equals "$output" '8192PiB' 'the signed 64-bit ceiling formats without wrapping' || return 1
+}
+
 test_alias_probes_are_quiet() {
   local fakebin="$tmp_dir/fakebin"
   local stdout_file="$tmp_dir/aliases.stdout"
@@ -965,6 +989,7 @@ main() {
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
   test_display_width || return 1
+  test_human_bytes || return 1
   test_alias_probes_are_quiet || return 1
   test_small_helper_success_paths || return 1
   test_fkill_signals || return 1

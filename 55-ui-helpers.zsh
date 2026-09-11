@@ -405,7 +405,7 @@ _ui_human_bytes() {
   local bytes=${1:-0}
   local -a units=(B KiB MiB GiB TiB PiB)
   local divisor=1
-  local scaled rounded
+  local whole remainder tenths scaled rounded
   integer unit_index=1
 
   case $bytes in
@@ -422,9 +422,16 @@ _ui_human_bytes() {
     return 0
   fi
 
-  scaled=$(( (bytes * 10 + divisor / 2) / divisor ))
+  # Divide first and scale from the remainder: `bytes * 10` wraps for byte
+  # counts near the signed 64-bit ceiling, which used to render as a
+  # negative number (for example 999999999999999999 printed "-750.-1PiB").
+  whole=$(( bytes / divisor ))
+  remainder=$(( bytes % divisor ))
+  tenths=$(( (remainder * 10 + divisor / 2) / divisor ))
+  scaled=$(( whole * 10 + tenths ))
+
   if (( scaled >= 100 )); then
-    rounded=$(( (bytes + divisor / 2) / divisor ))
+    rounded=$(( whole + (remainder * 2 >= divisor ? 1 : 0) ))
     print -r -- "${rounded}${units[$unit_index]}"
   else
     print -r -- "$(( scaled / 10 )).$(( scaled % 10 ))${units[$unit_index]}"
