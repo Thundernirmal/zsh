@@ -470,6 +470,8 @@ zi projects
 
 `z` performs ranked directory jumps. `zi` uses zoxide's interactive picker but is wrapped by the shared fzf version gate.
 
+Zoxide initialization supports `NO_UNSET` even before `precmd_functions` or `chpwd_functions` exist. If integration loading fails, existing hooks are restored and previously absent hook arrays remain unset. Startup leaves the caller's `NO_UNSET` setting unchanged.
+
 The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets without replacing zoxide's scoring or candidate generation.
 
 Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata and Zsh version, so warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead.
@@ -843,7 +845,8 @@ Keep each surface at one level:
 | `GUIDE.md` | Full behavior, examples, dependencies, safety boundaries, and gotchas |
 | `lib/help-catalogue.zsh` | One-line command discovery, usage, example, and availability |
 | `lib/tips-catalogue.zsh` | Short, actionable reminders for user-facing actions only |
-| `docs/specs/` | Historical decisions and acceptance criteria |
+
+Completed design plans and audits are retained in Git history; use this guide for current behavior.
 
 When user-facing behavior changes, update every affected surface without copying long explanations between them.
 

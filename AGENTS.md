@@ -13,7 +13,7 @@
 - `GUIDE.md` is the complete user reference. Keep detailed behavior, examples, dependency notes, safety boundaries, and gotchas there.
 - `65-help.zsh` registers the fixed `zhelp` loader; `lib/command-registry.zsh` keeps shared help/completion records terse: one clear summary, usage, editable example, dependency label, and live availability.
 - `80-tips.zsh` registers the fixed `tips` loader; `lib/tips-catalogue.zsh` contains short, actionable reminders. Add tips only for user-facing actions that users can perform. Do not use tips for implementation notes, release history, or long edge-case explanations.
-- `docs/specs/` contains historical decisions and acceptance criteria. Mark implemented specs clearly and link readers to `GUIDE.md` for current usage.
+- Keep current behavior in `GUIDE.md`. Completed specs and audits are retained in Git history; remove stale documents and their links instead of maintaining duplicate historical status notes.
 - Link between surfaces instead of copying long explanations. When behavior changes, update each affected surface at its intended level of detail.
 
 ## Edit Rules

@@ -990,6 +990,39 @@ esac' >"$fakebin/zoxide"
     fi
     assert_no_output "$stderr_file" "non-interactive zoxide $mode startup stays quiet" || return 1
   done
+
+  local hook_state phase expected expected_hooks
+  for mode in success fail empty malformed runtime; do
+    for hook_state in absent empty populated; do
+      case $hook_state in
+        absent) expected_hooks='precmd_set=0 chpwd_set=0 precmd= chpwd=' ;;
+        empty) expected_hooks='precmd_set=1 chpwd_set=1 precmd= chpwd=' ;;
+        populated) expected_hooks='precmd_set=1 chpwd_set=1 precmd=kept-precmd chpwd=kept-chpwd' ;;
+      esac
+      if [[ $mode == success ]]; then
+        expected="z=1 zi=1 nounset=on $expected_hooks"
+      else
+        expected="z=0 zi=0 nounset=on $expected_hooks"
+      fi
+      for phase in cold warm; do
+        ZOXIDE_TEST_MODE=$mode XDG_CACHE_HOME="$tmp_home/zoxide-strict-$mode-$hook_state-cache" \
+          PATH="$fakebin:${zsh_bin:h}" "$zsh_bin" -fuc '
+          source "$1/25-theme.zsh"
+          case $2 in
+            absent) unset precmd_functions chpwd_functions ;;
+            empty) precmd_functions=(); chpwd_functions=() ;;
+            populated) precmd_functions=(kept-precmd); chpwd_functions=(kept-chpwd) ;;
+          esac
+          source "$1/30-zoxide.zsh"
+          print -r -- "z=$+functions[z] zi=$+functions[zi] nounset=$options[nounset] precmd_set=${+precmd_functions} chpwd_set=${+chpwd_functions} precmd=${precmd_functions[*]-} chpwd=${chpwd_functions[*]-}"
+        ' zsh "$repo_dir" "$hook_state" >"$stdout_file" 2>"$stderr_file"
+        assert_status "$?" 0 "strict zoxide $mode with $hook_state hooks sources on $phase startup" || return 1
+        output=$(<"$stdout_file")
+        assert_equals "$output" "$expected" "strict zoxide $mode preserves $hook_state hooks and NO_UNSET on $phase startup" || return 1
+        assert_no_output "$stderr_file" "strict zoxide $mode with $hook_state hooks stays quiet on $phase startup" || return 1
+      done
+    done
+  done
 }
 
 test_zoxide_persistent_startup_cache() {
