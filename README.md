@@ -26,7 +26,7 @@ if [ -r "$HOME/.config/zsh/init.zsh" ]; then
 fi
 ```
 
-Without `compinit`, shells start normally but command-specific Tab completion stays disabled. Unreadable modules are skipped the same quiet way, so one bad file does not prevent startup.
+Without `compinit`, shells start normally but command-specific Tab completion stays disabled. Zoxide startup also supports `NO_UNSET` when shell hook arrays have not been created. Unreadable modules are skipped the same quiet way, so one bad file does not prevent startup.
 
 Reload the shell, check the installation, and discover the commands:
 
@@ -74,6 +74,5 @@ This repository does not manage Oh My Zsh, Starship, PATH setup, `compinit`, or 
 
 - [`GUIDE.md`](./GUIDE.md) — setup, full command reference, dependencies, workflows, and gotchas
 - [`AGENTS.md`](./AGENTS.md) — repository maintenance rules and required verification
-- [`docs/specs/`](./docs/specs/) — historical design and remediation records
 
 For changes, follow the documentation ownership rules and run `zsh scripts/run-tests.zsh`; the maintenance contract is in [`GUIDE.md`](./GUIDE.md#maintenance-and-verification).

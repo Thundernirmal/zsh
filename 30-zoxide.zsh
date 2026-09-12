@@ -115,10 +115,17 @@ if (( $+commands[zoxide] )); then
       _zsh_zoxide_saved_functions[$_zsh_zoxide_function_name]=${functions[$_zsh_zoxide_function_name]}
     fi
   done
-  typeset -a _zsh_zoxide_saved_precmd_functions=( "${precmd_functions[@]}" )
-  typeset -a _zsh_zoxide_saved_chpwd_functions=( "${chpwd_functions[@]}" )
   integer _zsh_zoxide_had_precmd_functions=${+precmd_functions}
   integer _zsh_zoxide_had_chpwd_functions=${+chpwd_functions}
+  typeset -a _zsh_zoxide_saved_precmd_functions=() _zsh_zoxide_saved_chpwd_functions=()
+  # Hook arrays may not exist in a standalone shell with NO_UNSET enabled.
+  # Preserve absence separately from an explicitly empty array for rollback.
+  if (( _zsh_zoxide_had_precmd_functions )); then
+    _zsh_zoxide_saved_precmd_functions=( "${precmd_functions[@]}" )
+  fi
+  if (( _zsh_zoxide_had_chpwd_functions )); then
+    _zsh_zoxide_saved_chpwd_functions=( "${chpwd_functions[@]}" )
+  fi
   integer _zsh_zoxide_init_status
   if _zsh_zoxide_cache_file_for_path "$_zsh_zoxide_path"; then
     _zsh_zoxide_cache_file=$REPLY
