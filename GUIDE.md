@@ -665,7 +665,7 @@ When both `paru` and `pacman` exist, `paru` is active and `pacman` remains avail
 | `--sudo` | Authorize privileged distro upgrade or cleanup paths |
 | `--dry-run` | Preview upgrades or cleanup |
 
-Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user.
+Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user. Empty or whitespace-only values for `--only` and `--skip` are rejected before any backend runs; an empty variable never expands the operation to every manager.
 
 ### Check and upgrade backends
 

@@ -113,7 +113,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Run upkg to check detected package managers for updates"
     "Run upkg search ripgrep to search detected package managers"
     "Run upkg managers to show active and alternate backends"
-    "Use upkg --only=brew,npm to select specific backends"
+    "Use a nonempty list such as upkg --only=brew,npm to limit package operations"
     "Run upkg plan to preview package upgrades"
     "Run upkg clean --dry-run before package cleanup"
   )

@@ -911,7 +911,7 @@ upkg() {
     case $1 in
       --only)
         shift
-        if (( $# == 0 )); then
+        if (( $# == 0 )) || [[ -z ${1//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --only'
           _upkg_usage >&2
           return 1
@@ -920,7 +920,7 @@ upkg() {
         ;;
       --only=*)
         only_raw=${1#--only=}
-        if [ -z "$only_raw" ]; then
+        if [[ -z ${only_raw//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --only'
           _upkg_usage >&2
           return 1
@@ -928,7 +928,7 @@ upkg() {
         ;;
       --skip)
         shift
-        if (( $# == 0 )); then
+        if (( $# == 0 )) || [[ -z ${1//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --skip'
           _upkg_usage >&2
           return 1
@@ -937,7 +937,7 @@ upkg() {
         ;;
       --skip=*)
         skip_raw=${1#--skip=}
-        if [ -z "$skip_raw" ]; then
+        if [[ -z ${skip_raw//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --skip'
           _upkg_usage >&2
           return 1
