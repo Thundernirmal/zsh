@@ -337,6 +337,46 @@ test_lazy_catalogue_paths() {
   assert_status "$?" 0 'hostile inherited catalogue paths cannot source external code' || return 1
 }
 
+test_tip_capabilities() (
+  local fixture_dir="$tmp_dir/tip-tools" manager tool output
+  command mkdir "$fixture_dir"
+  for manager in brew dnf npm flatpak apt paru pacman; do
+    command rm -f -- "$fixture_dir"/*(N)
+    print -r -- '#!/bin/sh' > "$fixture_dir/$manager"
+    command chmod +x "$fixture_dir/$manager"
+    output=$(PATH=$fixture_dir "$zsh_bin" -dfc 'source "$1"; print -rl -- "${_zsh_tip_pool[@]}"' zsh "$repo_dir/lib/tips-catalogue.zsh") || return 1
+    [[ $output != *'plain scalars with cgm'* ]] || return 1
+    case $manager in
+      dnf) [[ $output == *'--only=dnf'* && $output == *'--only dnf'* ]] || return 1 ;;
+      *) [[ $output != *'--only=dnf'* && $output != *'--only dnf'* ]] || return 1 ;;
+    esac
+    case $manager in
+      npm) [[ $output == *'--only npm'* ]] || return 1 ;;
+      *) [[ $output != *'--only npm'* ]] || return 1 ;;
+    esac
+    case $manager in
+      flatpak) [[ $output == *'--only flatpak'* ]] || return 1 ;;
+      *) [[ $output != *'--only flatpak'* ]] || return 1 ;;
+    esac
+    case $manager in
+      apt) [[ $output == *'APT refresh errors'* ]] || return 1 ;;
+      *) [[ $output != *'APT refresh errors'* ]] || return 1 ;;
+    esac
+    case $manager in
+      paru) [[ $output == *'Devel in paru.conf'* ]] || return 1 ;;
+      *) [[ $output != *'Devel in paru.conf'* ]] || return 1 ;;
+    esac
+    [[ $output != *'Run checkupdates'* ]] || return 1
+  done
+  for tool in checkupdates fakeroot; do
+    print -r -- '#!/bin/sh' > "$fixture_dir/$tool"
+    command chmod +x "$fixture_dir/$tool"
+  done
+  output=$(PATH=$fixture_dir "$zsh_bin" -dfc 'source "$1"; print -rl -- "${_zsh_tip_pool[@]}"' zsh "$repo_dir/lib/tips-catalogue.zsh") || return 1
+  [[ $output == *'Run checkupdates'* ]] || return 1
+  print 'ok: manager and credential tips require their own capabilities'
+)
+
 test_tips_are_concise() {
   local tip output
 
@@ -382,6 +422,7 @@ main() {
   test_palette_queue_and_cancel || return 1
   test_source_has_no_subprocesses || return 1
   test_lazy_catalogue_paths || return 1
+  test_tip_capabilities || return 1
   test_tips_are_concise || return 1
 }
 

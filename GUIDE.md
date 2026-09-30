@@ -378,7 +378,7 @@ Sourcing `65-help.zsh` registers only a fixed repository-local loader. The catal
 tip: Run mkcd <dir> to create and enter a directory
 ```
 
-It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Run it again for another hint.
+It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Manager-specific reminders require that manager; the checkupdates reminder also requires Pacman and fakeroot. Credential reminders require the optional `cgm` function. Run it again for another hint.
 
 ### zdoctor
 

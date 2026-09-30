@@ -1,3 +1,4 @@
+# Manager-specific reminders require their own tools when the catalogue loads.
 # Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
 # Extraction preserves native input-link handling.
 # Extraction reminders require an existing, nonempty destination directory.

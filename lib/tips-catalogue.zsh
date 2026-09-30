@@ -10,7 +10,6 @@ _zsh_tip_pool=(
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
   "Run zdoctor after startup changes; restart after repairing a blocked fzf"
-  "Use plain scalars with cgm env; padding and case conversion are rejected"
   "Use ztheme show custom to inspect; ztheme use custom applies the palette"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
@@ -81,6 +80,7 @@ fi
 
 if (( $+functions[cgm] )); then
   _zsh_tip_pool+=(
+    "Use plain scalars with cgm env; padding and case conversion are rejected"
     "Run cgm set OPENAI_KEY to store a credential securely"
     "Run cgm env OPENAI_KEY to load a credential into this shell"
     "Run cgm list to show saved names without retrieving values"
@@ -116,14 +116,9 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
   _zsh_tip_pool+=(
     "Run upkg to check detected package managers; review warnings on stderr"
     "Run upkg search ripgrep; native warnings stay separate from package results"
-    "Run upkg search ripgrep --only=dnf to search RPM package names"
     "Run upkg managers to show active and alternate backends"
-    'Use upkg --only dnf to select DNF even when another distro backend is active'
-    "Run upkg outdated --only npm for a stable table and visible native warnings"
     "Run upkg plan to inventory updates; review the native upgrade transaction"
     "Run upkg clean --dry-run before package cleanup"
-    "Run upkg outdated --only flatpak to include hidden extension update refs"
-    "Run upkg clean --dry-run --only dnf to preview cache removal; check failures"
     "Use Ctrl+C during upkg to stop remaining managers and cleanup phases"
   )
 fi
@@ -131,10 +126,45 @@ fi
 if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] )); then
   _zsh_tip_pool+=(
     "Run upkg upgrade --sudo to authorize system package upgrades"
-    "Run checkupdates for a fresh Arch repo inventory without changing the live DB"
-    "Use Devel in paru.conf to enable development-package commit update checks"
-    "Run upkg upgrade --sudo --only=apt after resolving APT refresh errors"
     "Run upkg clean --sudo to authorize system package cleanup"
+  )
+fi
+
+if (( $+commands[dnf] )); then
+  _zsh_tip_pool+=(
+    "Run upkg search ripgrep --only=dnf to search RPM package names"
+    'Use upkg --only dnf to select DNF even when another distro backend is active'
+    "Run upkg clean --dry-run --only dnf to preview cache removal; check failures"
+  )
+fi
+
+if (( $+commands[npm] )); then
+  _zsh_tip_pool+=(
+    "Run upkg outdated --only npm for a stable table and visible native warnings"
+  )
+fi
+
+if (( $+commands[flatpak] )); then
+  _zsh_tip_pool+=(
+    "Run upkg outdated --only flatpak to include hidden extension update refs"
+  )
+fi
+
+if (( $+commands[apt] )); then
+  _zsh_tip_pool+=(
+    "Run upkg upgrade --sudo --only=apt after resolving APT refresh errors"
+  )
+fi
+
+if (( $+commands[paru] )); then
+  _zsh_tip_pool+=(
+    "Use Devel in paru.conf to enable development-package commit update checks"
+  )
+fi
+
+if (( $+commands[pacman] && $+commands[checkupdates] && $+commands[fakeroot] )); then
+  _zsh_tip_pool+=(
+    "Run checkupdates for a fresh Arch repo inventory without changing the live DB"
   )
 fi
 
