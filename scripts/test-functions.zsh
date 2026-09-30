@@ -859,7 +859,7 @@ test_fbr_worktree_navigation() {
     worktree_paths[$branch]=$worktree_path
   done < <(_fbr_worktree_entries)
 
-  assert_equals "${worktree_paths[worktree-test]-}" "$worktree_dir" 'fbr maps a checked-out branch to its worktree path' || {
+  assert_equals "${worktree_paths[refs/heads/worktree-test]-}" "$worktree_dir" 'fbr maps a checked-out branch to its worktree path' || {
     builtin cd -- "$original_dir"
     return 1
   }
@@ -869,25 +869,25 @@ test_fbr_worktree_navigation() {
   while IFS= read -r -d '' branch && IFS= read -r -d '' worktree_path; do
     worktree_paths[$branch]=$worktree_path
   done < <(_fbr_worktree_entries "$fixture_repo")
-  assert_equals "${worktree_paths[$current_branch]-}" '' 'fbr does not mark the branch in the current checkout as another worktree' || {
+  assert_equals "${worktree_paths[refs/heads/$current_branch]-}" '' 'fbr does not mark the branch in the current checkout as another worktree' || {
     builtin cd -- "$original_dir"
     return 1
   }
-  assert_equals "${worktree_paths[worktree-test]-}" "$worktree_dir" 'fbr still maps branches in other worktrees' || {
+  assert_equals "${worktree_paths[refs/heads/worktree-test]-}" "$worktree_dir" 'fbr still maps branches in other worktrees' || {
     builtin cd -- "$original_dir"
     return 1
   }
 
   command git update-ref refs/heads/-leading HEAD || return 1
-  _fbr_activate -leading '' || return 1
+  _fbr_activate refs/heads/-leading '' || return 1
   assert_equals "$(command git symbolic-ref --short HEAD)" '-leading' 'fbr safely activates a leading-dash local branch' || return 1
   command git switch -- "$current_branch" >/dev/null || return 1
 
-  _fbr_activate origin/remote-safe '' || return 1
+  _fbr_activate refs/remotes/origin/remote-safe '' || return 1
   assert_equals "$(command git symbolic-ref --short HEAD)" 'remote-safe' 'fbr safely activates and tracks a remote branch' || return 1
   command git switch -- "$current_branch" >/dev/null || return 1
 
-  _fbr_activate worktree-test "${worktree_paths[worktree-test]}"
+  _fbr_activate refs/heads/worktree-test "${worktree_paths[refs/heads/worktree-test]}"
   assert_status "$?" 0 'fbr can activate a branch attached to a worktree' || {
     builtin cd -- "$original_dir"
     return 1
@@ -934,14 +934,14 @@ test_fbr_remote_collision() {
   builtin cd -- "$collision_repo" || return 1
   before_ref=$(command git rev-parse HEAD) || { builtin cd -- "$original_dir"; return 1; }
 
-  output=$(_fbr_activate origin/topic '' 2>&1); rc=$?
+  output=$(_fbr_activate refs/remotes/origin/topic '' 2>&1); rc=$?
   assert_status "$rc" 1 'fbr refuses an unrelated same-name remote selection' || { builtin cd -- "$original_dir"; return 1; }
   after_ref=$(command git rev-parse HEAD) || { builtin cd -- "$original_dir"; return 1; }
   assert_equals "$after_ref" "$before_ref" 'fbr keeps the current checkout after refusing a collision' || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" 'does not track local' 'fbr explains the upstream mismatch' || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" "git switch -- topic" 'fbr offers entering the local branch' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "git switch --track -b NEW_BRANCH -- origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "git switch --detach -- origin/topic" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --track -b NEW_BRANCH -- refs/remotes/origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --detach -- refs/remotes/origin/topic" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
 
   upstream=$(command git for-each-ref --format='%(upstream:short)' 'refs/heads/topic' 2>/dev/null) || upstream=''
   assert_equals "$upstream" '' 'unrelated local branch carries no matching upstream' || { builtin cd -- "$original_dir"; return 1; }
@@ -958,12 +958,12 @@ test_fbr_remote_collision() {
   command git branch -D second-divergent -q || { builtin cd -- "$original_dir"; return 1; }
   command git branch --set-upstream-to=origin/topic topic -q || { builtin cd -- "$original_dir"; return 1; }
 
-  output=$(_fbr_activate upstream/topic '' 2>&1); rc=$?
+  output=$(_fbr_activate refs/remotes/upstream/topic '' 2>&1); rc=$?
   assert_status "$rc" 1 'fbr refuses when the local branch tracks a different remote' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "upstream: 'origin/topic'" 'fbr names the actual upstream on mismatch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "upstream: 'refs/remotes/origin/topic'" 'fbr names the actual upstream on mismatch' || { builtin cd -- "$original_dir"; return 1; }
   assert_equals "$(command git symbolic-ref --short HEAD)" "$base_branch" 'fbr stays put on a different-upstream collision' || { builtin cd -- "$original_dir"; return 1; }
 
-  _fbr_activate origin/topic '' >/dev/null 2>&1 || { builtin cd -- "$original_dir"; return 1; }
+  _fbr_activate refs/remotes/origin/topic '' >/dev/null 2>&1 || { builtin cd -- "$original_dir"; return 1; }
   assert_equals "$(command git symbolic-ref --short HEAD)" 'topic' 'fbr enters the local branch when it tracks the selected remote' || { builtin cd -- "$original_dir"; return 1; }
   command git switch -- "$base_branch" >/dev/null || { builtin cd -- "$original_dir"; return 1; }
 
@@ -972,6 +972,69 @@ test_fbr_remote_collision() {
 
   builtin cd -- "$original_dir"
 }
+
+test_fbr_canonical_refs() (
+  local fixture_repo="$tmp_dir/fbr-canonical" worktree_dir="$tmp_dir/fbr canonical worktree"
+  local base_branch local_oid remote_oid rows row selected worktree_branch worktree_path
+  local -A worktree_paths row_by_ref
+  local -a fields
+  command git init -q "$fixture_repo" || return 1
+  builtin cd -- "$fixture_repo" || return 1
+  command git -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' commit --allow-empty -qm initial || return 1
+  base_branch=$(command git symbolic-ref --short HEAD) || return 1
+  local_oid=$(command git rev-parse HEAD) || return 1
+  command git checkout -qb remote-source || return 1
+  command git -c user.name='Zsh Tests' -c user.email='zsh-tests@example.invalid' commit --allow-empty -qm remote || return 1
+  remote_oid=$(command git rev-parse HEAD) || return 1
+  command git switch -- "$base_branch" >/dev/null || return 1
+  command git branch -D remote-source -q || return 1
+  command git remote add origin "$tmp_dir/unfetched-remote.git" || return 1
+  command git update-ref refs/remotes/origin/topic "$remote_oid" || return 1
+  command git update-ref refs/remotes/origin/actual/HEAD "$remote_oid" || return 1
+  command git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/topic || return 1
+  command git branch origin/topic "$local_oid" || return 1
+  command git branch actual/HEAD "$local_oid" || return 1
+  command git branch tagged "$local_oid" || return 1
+  command git branch refs/remotes/unusual "$local_oid" || return 1
+  command git tag tagged "$remote_oid" || return 1
+  command git tag topic "$local_oid" || return 1
+  command git tag origin/topic "$remote_oid" || return 1
+  command git worktree add -q "$worktree_dir" origin/topic || return 1
+  while IFS= read -r -d '' worktree_branch && IFS= read -r -d '' worktree_path; do
+    worktree_paths[$worktree_branch]=$worktree_path
+  done < <(_fbr_worktree_entries "$fixture_repo")
+  rows=$(_fbr_ref_rows '' '' "${(@kv)worktree_paths}") || return 1
+  for row in ${(f)rows}; do
+    fields=("${(@ps:\t:)row}")
+    row_by_ref[$fields[5]]=$row
+  done
+  assert_equals "${row_by_ref[refs/remotes/origin/HEAD]-}" '' 'fbr omits only symbolic remote HEAD aliases' || return 1
+  assert_contains "$rows" 'refs/heads/actual/HEAD' 'fbr retains a local branch ending in HEAD' || return 1
+  assert_contains "$rows" 'refs/remotes/origin/actual/HEAD' 'fbr retains a nonsymbolic remote branch ending in HEAD' || return 1
+  assert_contains "${row_by_ref[refs/heads/refs/remotes/unusual]}" 'refs/remotes/unusual' 'fbr strips only the actual reference namespace from display' || return 1
+  assert_contains "${row_by_ref[refs/heads/origin/topic]}" '[WT] origin/topic' 'fbr maps ambiguous full local refs to worktree badges' || return 1
+  if (( $+commands[fzf] )); then
+    selected=$(print -r -- "$rows" | command fzf --filter=refs/heads/origin/topic --delimiter=$'\t' --nth=5 --accept-nth=5)
+    assert_equals "$selected" refs/heads/origin/topic 'fbr selection retains exact local identity despite namespace/tag collisions' || return 1
+    _fbr_activate "$selected" "${worktree_paths[$selected]}" || return 1
+    assert_equals "$PWD" "$worktree_dir" 'fbr enters the exact ambiguous branch worktree' || return 1
+    builtin cd -- "$fixture_repo" || return 1
+    selected=$(print -r -- "$rows" | command fzf --filter=refs/heads/tagged --delimiter=$'\t' --nth=5 --accept-nth=5)
+    _fbr_activate "$selected" '' >/dev/null 2>&1 || return 1
+    assert_equals "$(command git symbolic-ref HEAD)" refs/heads/tagged 'fbr activates a branch whose name also names a tag' || return 1
+    assert_equals "$(command git rev-parse HEAD)" "$local_oid" 'fbr activates the branch commit rather than the colliding tag' || return 1
+    selected=$(print -r -- "$rows" | command fzf --filter=refs/remotes/origin/topic --delimiter=$'\t' --nth=5 --accept-nth=5)
+    assert_equals "$selected" refs/remotes/origin/topic 'fbr selection retains exact remote identity despite namespace collisions' || return 1
+    assert_equals "$(command git rev-parse "$selected")" "$remote_oid" 'fbr preview payload resolves the exact selected remote commit' || return 1
+    _fbr_activate "$selected" '' >/dev/null 2>&1 || return 1
+    assert_equals "$(command git symbolic-ref HEAD)" refs/heads/topic 'fbr creates a tracking branch even with a colliding tag' || return 1
+    assert_equals "$(command git rev-parse HEAD)" "$remote_oid" 'fbr tracks the selected remote rather than similarly named refs' || return 1
+    assert_equals "$(command git for-each-ref --format='%(upstream)' refs/heads/topic)" refs/remotes/origin/topic 'fbr stores the canonical selected upstream' || return 1
+    command git switch -- "$base_branch" >/dev/null 2>&1 || return 1
+    _fbr_activate "$selected" '' >/dev/null 2>&1 || return 1
+    assert_equals "$(command git symbolic-ref HEAD)" refs/heads/topic 'fbr reuses the correctly tracked local branch despite abbreviated-ref ambiguity' || return 1
+  fi
+)
 
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
@@ -996,6 +1059,7 @@ main() {
   test_fkill_scope_and_review || return 1
   test_fbr_worktree_navigation || return 1
   test_fbr_remote_collision || return 1
+  test_fbr_canonical_refs || return 1
 }
 
 main "$@"

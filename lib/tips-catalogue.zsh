@@ -66,7 +66,7 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Press Ctrl+P in preview pickers to toggle the preview; use Ctrl+/ to wrap"
     "Run fkill TERM to stop selected processes; use fkill 9 only to force"
     "Run fkill --all to include processes from all users"
-    "Run fbr to scan aligned branch details and enter or check out the result"
+    "Run fbr to select exact branches even when branch and tag names collide"
     "Use [WT] in fbr to spot branches checked out in another worktree"
   )
 

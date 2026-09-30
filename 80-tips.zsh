@@ -9,6 +9,7 @@
 # Navigation reminders include startup diagnostics after cache settings change.
 # Cleanup reminders require checking the summary for failed phases.
 # Package search and npm inventory reminders cover visible diagnostics.
+# Git picker reminders keep display labels separate from canonical identities.
 # Package queries may use the network and write caches without changing packages.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
