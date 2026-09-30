@@ -609,7 +609,7 @@ fkill --all 15
 | `cgm delete <name ...>` | Delete stored values and unset local copies |
 | `cgm help` | Show concise command help |
 
-Names must match `[A-Z_][A-Z0-9_]*`. CGM accepts ordinary scalar parameters, optionally local or exported, and rejects special, read-only, non-scalar, or other attributed parameters (including width, padding, and case conversion), so values such as `PATH` cannot be replaced accidentally.
+Names must match `[A-Z_][A-Z0-9_]*`. For credential assignment/export, CGM accepts ordinary scalar parameters, optionally local or exported, and rejects special, read-only, non-scalar, or other attributed parameters (including width, padding, and case conversion), so values such as `PATH` cannot be replaced accidentally. Removal accepts attributed scalars because it does not assign or transform a value; special, read-only, and non-scalar parameters remain protected.
 
 ### Storage and secrecy
 

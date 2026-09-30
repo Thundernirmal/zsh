@@ -511,6 +511,26 @@ test_env_all_validates_every_name_first() {
   print -- 'ok: unsafe env --all exports no earlier credential'
 }
 
+test_attributed_removal() {
+  local attr rc
+  local output_file="$tmp_dir/removal.stdout" error_file="$tmp_dir/removal.stderr"
+  start_case attributed-removal
+  for attr in L4 R4 Z4 u l; do
+    typeset -g "-$attr" ATTRIBUTE_REMOVE=SyntheticSecret
+    cgm unset ATTRIBUTE_REMOVE >"$output_file" 2>"$error_file"; rc=$?
+    assert_status "$rc" 0 "unset removes attributed scalar -$attr" || return 1
+    (( ! ${+parameters[ATTRIBUTE_REMOVE]} )) || return 1
+    typeset -g "-$attr" ATTRIBUTE_REMOVE=SyntheticSecret
+    print -nr -- SyntheticSecret > "$CGM_TEST_BACKEND_DIR/ATTRIBUTE_REMOVE"
+    _cgm_catalog_add ATTRIBUTE_REMOVE || return 1
+    cgm delete ATTRIBUTE_REMOVE >"$output_file" 2>"$error_file"; rc=$?
+    assert_status "$rc" 0 "delete removes attributed scalar -$attr" || return 1
+    (( ! ${+parameters[ATTRIBUTE_REMOVE]} )) || return 1
+    assert_not_exists "$CGM_TEST_BACKEND_DIR/ATTRIBUTE_REMOVE" 'delete removes attributed stored item' || return 1
+    assert_not_contains "$(file_contents "$output_file")" SyntheticSecret 'removal never reveals the synthetic value' || return 1
+  done
+}
+
 test_delete() {
   local secret=delete-secret
   local output_file="$tmp_dir/delete.stdout"
@@ -686,6 +706,7 @@ main() {
   test_env_all_is_atomic || return 1
   test_env_rejects_unsafe_context_and_values || return 1
   test_env_all_validates_every_name_first || return 1
+  test_attributed_removal || return 1
   test_delete || return 1
   test_status_and_backend_check || return 1
   test_runtime_backend_guard || return 1

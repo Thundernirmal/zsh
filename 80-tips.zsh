@@ -3,7 +3,7 @@
 # Extraction reminders require an existing, nonempty destination directory.
 # Reminders cover native file semantics and search errors, package selection,
 # cancellation summaries and completed search results, configured Paru scope, metadata freshness, and cleanup previews.
-# Credential reminders use ordinary scalar variables for exact-value exports.
+# Credential reminders distinguish exact-value scalar exports from scalar removal.
 # Theme reminders distinguish inspecting a palette from applying it.
 # Finder activation tolerates stale widget names while preserving bindings.
 # Finder reminders include restarting after a blocked integration is repaired.

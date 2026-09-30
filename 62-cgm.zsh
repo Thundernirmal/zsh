@@ -97,6 +97,23 @@ _cgm_validate_export_name() {
      $parameter_kind == scalar-local-export ]]
 }
 
+# Removal does not assign bytes: scalar formatting attributes are harmless.
+_cgm_validate_removal_name() {
+  emulate -L zsh
+  local candidate=${1-} parameter_kind
+  _cgm_validate_name "$candidate" || return 1
+  parameter_kind=${parameters[$candidate]-}
+  [[ $parameter_kind != *readonly* && $parameter_kind != *special* ]] || return 1
+  [[ -z $parameter_kind || $parameter_kind == scalar* ]]
+}
+
+_cgm_require_removal_name() {
+  _cgm_require_name "$1" || return 1
+  _cgm_validate_removal_name "$1" && return 0
+  _cgm_error "refusing to unset a non-scalar, special, or read-only Zsh parameter: $1"
+  return 1
+}
+
 _cgm_require_name() {
   local candidate=${1-}
 
@@ -720,7 +737,7 @@ _cgm_unset() {
   _cgm_require_current_shell 'cgm unset ...' || return 1
 
   for name in "$@"; do
-    _cgm_require_export_name "$name" || return 1
+    _cgm_require_removal_name "$name" || return 1
     [[ -z ${seen[$name]-} ]] || continue
     seen[$name]=1
     names+=("$name")
@@ -774,7 +791,7 @@ _cgm_delete() {
   for name in "${names[@]}"; do
     if command secret-tool clear application cgm variable "$name"; then
       if _cgm_catalog_remove "$name"; then
-        if _cgm_validate_export_name "$name" && _cgm_unset_one "$name" 2>/dev/null; then
+        if _cgm_validate_removal_name "$name" && _cgm_unset_one "$name" 2>/dev/null; then
           deleted+=("$name")
         else
           _cgm_error "deleted $name from Linux Secret Service, but could not unset it from this shell."
