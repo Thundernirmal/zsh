@@ -336,6 +336,13 @@ printf "%s\n" "$0" >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/$tool"
   assert_equals "$(file_contents "$invocation_log")" '' 'completion module sourcing invokes no external tools' || return 1
 }
 
+test_upkg_live_dry_run_description() (
+  local -a captured_specs words=(upkg upgrade '')
+  _arguments() { captured_specs=( "$@" ); return 0; }
+  _zsh_upkg || return 1
+  assert_equals "${captured_specs[(r)--dry-run*]}" "--dry-run[${_ZSH_UPKG_FLAGS[(r)--dry-run:*]#*:}]" 'live dry-run completion uses the shared inventory/cleanup contract' || return 1
+)
+
 test_npkg_helper_completion() (
   local -a captured_specs words
   local completion_command message
@@ -368,6 +375,7 @@ main() {
   test_registration || return 1
   test_zhelp_values || return 1
   test_static_values || return 1
+  test_upkg_live_dry_run_description || return 1
   test_npkg_helper_completion || return 1
   test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1

@@ -747,6 +747,8 @@ Flatpak updates and system cleanup may request authorization through polkit. Use
 
 Cancelled cleanup summaries retain completed and failed phase counts, earlier failure details, and the interrupted phase. The interrupted phase is counted as cancelled rather than failed.
 
+Tab completion describes `--dry-run` as an update inventory or cleanup preview, matching the shared flag reference.
+
 Search progress is cleared when each query finishes, before diagnostics, cancellation returns, or the final summary.
 
 Multi-manager runs continue after an ordinary backend failure. Cancellation stops the remaining managers and cleanup phases, preserving status `130` (INT), `143` (TERM), or `129` (HUP):

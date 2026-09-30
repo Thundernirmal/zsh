@@ -101,7 +101,7 @@ if (( $+functions[compdef] )); then
       '--only=[include comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
       '--skip=[exclude comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
       '--sudo[authorize privileged upgrade and cleanup backends]' \
-      '--dry-run[preview upgrades or cleanup without changing packages]' \
+      "--dry-run[${_ZSH_UPKG_FLAGS[(r)--dry-run:*]#*:}]" \
       '1:upkg command:->command' \
       '*:command argument:->argument' && return 0
 
