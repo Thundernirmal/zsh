@@ -124,6 +124,7 @@ fi
 if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] )); then
   _zsh_tip_pool+=(
     "Run upkg upgrade --sudo to authorize system package upgrades"
+    "Run upkg upgrade --sudo --only=apt after resolving APT refresh errors"
     "Run upkg clean --sudo to authorize system package cleanup"
   )
 fi

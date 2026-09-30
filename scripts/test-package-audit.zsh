@@ -200,3 +200,34 @@ print 'ok: warning-only update checks stay current and Arch errors remain failur
   done
 ) || exit 1
 print 'ok: plan and upgrade dry-run identify inventory scope without invoking upgrades'
+(
+  export AUDIT_LOG="$scratch/apt-calls"
+  write_fake apt '
+printf "%s\n" "$*" >> "$AUDIT_LOG"
+case "$*" in
+  "-o APT::Update::Error-Mode=any update") exit "$AUDIT_RC" ;;
+  "full-upgrade") exit 0 ;;
+  *) exit 99 ;;
+esac'
+  write_fake sudo 'exec "$@"'
+  PATH="$scratch:$original_path"
+  _upkg_detect_managers() {
+    typeset -ga _UPKG_ACTIVE_MANAGERS=(apt)
+    typeset -ga _UPKG_ALTERNATE_MANAGERS=()
+  }
+  for root in 0 1; do
+    _upkg_is_root() { (( root )); }
+    export AUDIT_RC=100
+    : > "$AUDIT_LOG"
+    upkg upgrade --sudo --only apt >/dev/null 2>&1
+    assert test "$?" -eq 1
+    calls=$(<"$AUDIT_LOG")
+    assert test "$calls" = '-o APT::Update::Error-Mode=any update'
+    AUDIT_RC=0
+    upkg upgrade --sudo --only apt >/dev/null 2>&1
+    assert test "$?" -eq 0
+    calls=$(<"$AUDIT_LOG")
+    assert test "${calls#*full-upgrade}" != "$calls"
+  done
+) || exit 1
+print 'ok: root and sudo APT upgrades require a successful strict refresh'

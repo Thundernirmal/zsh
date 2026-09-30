@@ -673,7 +673,7 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 
 | Manager | Outdated check | Upgrade |
 |---|---|---|
-| `apt` | `apt list --upgradable` | `apt update`, then `apt full-upgrade` |
+| `apt` | `apt list --upgradable` | `apt -o APT::Update::Error-Mode=any update`, then `apt full-upgrade` |
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` |
 | `pacman` | `pacman -Qu` | `pacman -Syu` |
 | `paru` | repo check plus `paru -Qua` | `paru -Syu` |
@@ -681,6 +681,8 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 | `flatpak` | `flatpak remote-ls --updates` | `flatpak update` |
 | `nix` | `npkg outdated` | `npkg upgrade` |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` |
+
+APT refresh treats every repository error, including transient fetch errors, as a failure and stops before `full-upgrade`; correct the repository/network issue and rerun the command.
 
 `apt`, `dnf`, and `pacman` upgrade paths require root or explicit `--sudo`. Paru also requires the explicit flag, but runs unprefixed so Paru controls privilege escalation. Homebrew and npm always remain unprefixed; an unwritable npm global prefix blocks the upgrade with a user-space setup hint.
 

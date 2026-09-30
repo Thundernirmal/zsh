@@ -814,7 +814,7 @@ _upkg_run_upgrade_apt() {
   _upkg_require_sudo_command || return 0
 
   if _upkg_is_root; then
-    command apt update
+    command apt -o APT::Update::Error-Mode=any update
     rc=$?
     _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then
@@ -823,7 +823,7 @@ _upkg_run_upgrade_apt() {
     fi
     command apt full-upgrade
   else
-    command sudo apt update
+    command sudo apt -o APT::Update::Error-Mode=any update
     rc=$?
     _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then

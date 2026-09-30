@@ -3,6 +3,7 @@
 # file commands keep native semantics across domain loading. Package-search
 # reminders apply on first use, including the independently loaded Nix backend.
 # Nix removal reminders operate on active profile entries.
+# APT reminders require successful metadata refresh before an upgrade.
 # Plan reminders describe an update inventory; native upgrades resolve transactions.
 # Update-check reminders preserve separate query diagnostics.
 # DNF search reminders apply to both DNF4 and DNF5.
