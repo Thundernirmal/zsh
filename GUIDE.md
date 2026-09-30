@@ -725,7 +725,7 @@ Homebrew formulae and casks are queried separately. Broad searches cap follow-up
 
 DNF `clean all` removes all repository cache data, including metadata and cached RPMs that are still valid. Later commands may need to download that data again; cached RPMs will no longer be available for offline reuse. This is broader than removing stale cache entries.
 
-Cleanup uses manager-owned commands. It does not directly delete cache directories, application data, project files, lockfiles, virtual environments, build output, user configuration, or Nix profile generations. It does not claim a portable reclaimed-byte total.
+Pacman orphan-query status 1 counts as empty only with empty stdout and no diagnostics other than native warnings in the C locale. Database errors or unrecognized diagnostics fail that phase; successful cache cleanup still reports a partial result. Cleanup uses manager-owned commands. It does not directly delete cache directories, application data, project files, lockfiles, virtual environments, build output, user configuration, or Nix profile generations. It does not claim a portable reclaimed-byte total.
 
 Dry-run uses native probes where safe. Steps without a safe unprivileged simulation are printed as `would run` and are not invoked. A preview never calls `sudo` or requires `--sudo`.
 

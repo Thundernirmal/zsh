@@ -1359,6 +1359,25 @@ esac
   assert_contains "$output" 'No orphaned packages found.' 'empty pacman orphan query is explained' || return 1
   assert_contains "$(<"$clean_log")" 'sudo pacman -Sc' 'pacman still cleans its cache after an empty orphan query' || return 1
 
+  write_fake pacman '
+printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "-Qtdq") printf "%s\n" "error: failed to read local package database" >&2 ; exit 1 ;;
+  "-Sc") printf "%s\n" "MUTATING pacman cache" >> "$UPKG_TEST_CLEAN_LOG" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'pacman' clean --sudo --only=pacman 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'Pacman orphan database errors fail aggregate cleanup' || return 1
+  assert_contains "$output" 'error: failed to read local package database' 'orphan query error stays visible' || return 1
+  assert_contains "$output" 'pacman: partial - pacman orphan query failed' 'successful cache phase cannot hide failed query' || return 1
+  assert_not_contains "$output" 'No orphaned packages found.' 'database error is not an empty orphan result' || return 1
+  assert_contains "$(<"$clean_log")" 'sudo pacman -Sc' 'independent cache phase still runs after ordinary query failure' || return 1
+  assert_not_contains "$(<"$clean_log")" 'pacman -Rs' 'failed orphan query never removes packages' || return 1
+
+
   write_fake brew '
 printf "%s\n" "brew $*" >> "$UPKG_TEST_CLEAN_LOG"
 case "$*" in

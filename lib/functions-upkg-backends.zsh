@@ -1030,8 +1030,8 @@ _upkg_run_clean_dnf() {
 _upkg_run_clean_pacman() {
   emulate -L zsh
 
-  local orphan_output rc prefix
-  local succeeded=0 failed=0
+  local orphan_output diagnostic line rc prefix
+  local succeeded=0 failed=0 no_match_diagnostics=1
   local -a failures orphans
 
   _upkg_print_section pacman
@@ -1048,8 +1048,14 @@ _upkg_run_clean_pacman() {
 
   prefix=$(_upkg_cleanup_privilege_prefix)
   _upkg_print_cleanup_phase 'Unused packages'
-  orphan_output=$(command pacman -Qtdq)
+  LC_ALL=C _upkg_capture_query pacman -Qtdq
   rc=$?
+  orphan_output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  for line in ${(f)diagnostic}; do
+    [[ -z $line || $line == warning:* ]] || no_match_diagnostics=0
+  done
   _upkg_check_interrupt "$rc" || return $?
   if (( rc == 0 )); then
     orphans=( ${(f)orphan_output} )
@@ -1067,7 +1073,7 @@ _upkg_run_clean_pacman() {
         _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}" || return $?
       fi
     fi
-  elif (( rc == 1 )) && [ -z "$orphan_output" ]; then
+  elif (( rc == 1 && no_match_diagnostics )) && [ -z "$orphan_output" ]; then
     print 'No orphaned packages found.'
     (( succeeded++ ))
   else
