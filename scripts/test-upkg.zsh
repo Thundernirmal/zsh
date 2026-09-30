@@ -558,7 +558,15 @@ done
   esac
  '
 
-  export PATH=$fakebin:$original_path
+  # Keep host package managers out of capability detection (Ubuntu has apt).
+  # Expose only fixture binaries and explicitly allowed support utilities.
+  local utility utility_path
+  for utility in cat sed awk grep sort head tail cut tr wc mkdir chmod mv sleep date uname stat cmp ln find jq zsh env touch du ls id ps readlink kill; do
+    [[ -e $fakebin/$utility ]] && continue
+    utility_path=$(PATH=$original_path whence -p "$utility") || continue
+    write_fake "$utility" "exec \"$utility_path\" \"\$@\"" || return 1
+  done
+  export PATH=$fakebin
   rehash
   export UPKG_TEST_NPM_PREFIX=$tmp_prefix
 
