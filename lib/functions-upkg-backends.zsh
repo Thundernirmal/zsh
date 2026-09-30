@@ -498,36 +498,57 @@ _upkg_run_outdated_dnf() {
 
 _upkg_run_outdated_pacman() {
   emulate -L zsh
+  setopt localtraps
 
-  local output diagnostic rc
-
+  local output diagnostic rc database='' query='pacman -Qu'
+  local detail='cached repository metadata; replacements are resolved during upgrade'
   _upkg_print_section pacman
 
-  _upkg_capture_query pacman -Qu
-  rc=$?
+  if command -v checkupdates >/dev/null 2>&1; then
+    query='checkupdates'
+    detail='fresh separate repository database; replacements are resolved during upgrade'
+    print 'Refreshing a separate repository database with checkupdates.'
+    database=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-arch.XXXXXX") || {
+      _upkg_set_last_result 'failed' 'could not create a separate repository database'
+      return 1
+    }
+    {
+      trap '_upkg_check_interrupt 130; return 130' INT
+      trap '_upkg_check_interrupt 143; return 143' TERM
+      trap '_upkg_check_interrupt 129; return 129' HUP
+      CHECKUPDATES_DB=$database _upkg_capture_query checkupdates --nocolor
+      rc=$?
+    } always {
+      command rm -rf -- "$database"
+    }
+    # checkupdates uses 2 for an empty inventory, and 1 for errors.
+    if (( rc == 2 )) && [[ -z $_UPKG_QUERY_STDOUT ]]; then
+      rc=0
+    fi
+  else
+    print 'Cached repository inventory: install pacman-contrib for fresh checkupdates checks.'
+    _upkg_capture_query pacman -Qu
+    rc=$?
+  fi
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
-  if _upkg_arch_outdated_has_no_updates "$rc" "${output}${diagnostic}"; then
-    print 'No updates available.'
-    _upkg_set_last_result 'up to date' ''
-    return 0
+  if [[ $query == 'pacman -Qu' ]] && _upkg_arch_outdated_has_no_updates "$rc" "${output}${diagnostic}"; then
+    rc=0
   fi
-
   if (( rc != 0 )); then
-    [ -n "$output" ] && print -r -- "$output"
-    _upkg_set_last_result 'failed' 'pacman -Qu failed'
+    [[ -z $output ]] || print -r -- "$output"
+    _upkg_set_last_result 'failed' "$query failed"
     return 1
   fi
-
-  if [ -n "$output" ]; then
+  if [[ -n $output ]]; then
     print -r -- "$output"
-    _upkg_set_last_result 'updates available' ''
+    _upkg_set_last_result 'updates available' "$detail"
   else
-    print 'No updates available.'
-    _upkg_set_last_result 'up to date' ''
+    print 'No updates available in this inventory.'
+    _upkg_set_last_result 'up to date' "$detail"
   fi
 }
 
@@ -536,7 +557,7 @@ _upkg_run_outdated_paru() {
 
   local output diagnostic rc
   _upkg_print_section paru
-  print 'Configured Paru update inventory:'
+  print 'Configured Paru update inventory (repository versions use cached metadata):'
   _upkg_capture_query paru -Qu
   rc=$?
   output=$_UPKG_QUERY_STDOUT

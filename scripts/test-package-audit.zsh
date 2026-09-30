@@ -162,6 +162,7 @@ if command -v jq >/dev/null 2>&1; then
   print 'ok: inactive object/array Nix elements are excluded from checks and removal'
 fi
 (
+  write_fake checkupdates 'printf "%s\n" "query warning" >&2; exit "$AUDIT_RC"'
   for audit_manager in brew flatpak pacman paru; do
     write_fake "$audit_manager" 'printf "%s\n" "query warning" >&2; exit "${AUDIT_RC:-0}"'
   done
@@ -309,3 +310,46 @@ print 'ok: find and grep fallbacks preserve missing-path and invalid-pattern err
   done
 ) || exit 1
 print 'ok: Paru inventories delegate configured scope to one native query'
+
+(
+  refresh_dir="$scratch/arch-refresh"
+  command mkdir "$refresh_dir"
+  for tool in mktemp rm; do
+    command ln -s "$(command -v "$tool")" "$refresh_dir/$tool"
+  done
+  export AUDIT_LOG="$scratch/arch-refresh.log"
+  print -r -- '#!/bin/sh
+printf "%s\n" "$CHECKUPDATES_DB" >> "$AUDIT_LOG"
+[ -d "$CHECKUPDATES_DB" ] || exit 99
+[ "$*" = --nocolor ] || exit 99
+[ "$AUDIT_RC" != 0 ] || printf "%s\n" "fresh-package 1 -> 2"
+exit "$AUDIT_RC"' > "$refresh_dir/checkupdates"
+  command chmod +x "$refresh_dir/checkupdates"
+  PATH=$refresh_dir
+  for code in 0 1 2 130 143 129; do
+    export AUDIT_RC=$code
+    _upkg_run_outdated_pacman >/dev/null 2>&1
+    result=$?
+    case $code in
+      0) assert test "$result" -eq 0; assert test "$_UPKG_LAST_STATE" = 'updates available' ;;
+      2) assert test "$result" -eq 0; assert test "$_UPKG_LAST_STATE" = 'up to date' ;;
+      1) assert test "$result" -eq 1; assert test "$_UPKG_LAST_STATE" = failed ;;
+      *) assert test "$result" -eq "$code" ;;
+    esac
+    databases=( "${(@f)$(<"$AUDIT_LOG")}" )
+    for database in "${databases[@]}"; do
+      assert test ! -e "$database"
+    done
+  done
+  PATH=$original_path
+  command rm "$refresh_dir/checkupdates"
+  print -r -- '#!/bin/sh
+exit 1' > "$refresh_dir/pacman"
+  command chmod +x "$refresh_dir/pacman"
+  PATH=$refresh_dir
+  output=$(_upkg_run_outdated_pacman) || exit 1
+  assert test "${output#*Cached repository inventory}" != "$output"
+  _upkg_run_outdated_pacman >/dev/null
+  assert test "${_UPKG_LAST_DETAIL#*cached repository metadata}" != "$_UPKG_LAST_DETAIL"
+) || exit 1
+print 'ok: Arch refresh uses a private database, handles native statuses, and cleans up'

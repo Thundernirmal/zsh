@@ -675,7 +675,7 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 |---|---|---|
 | `apt` | `apt list --upgradable` | `apt -o APT::Update::Error-Mode=any update`, then `apt full-upgrade` |
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` |
-| `pacman` | `pacman -Qu` | `pacman -Syu` |
+| `pacman` | `checkupdates --nocolor` when available; otherwise cached `pacman -Qu` | `pacman -Syu` |
 | `paru` | `paru -Qu` (configured scope) | `paru -Syu` |
 | `brew` | `brew outdated` | `brew upgrade` |
 | `flatpak` | `flatpak remote-ls --updates` | `flatpak update` |
@@ -749,7 +749,7 @@ Query diagnostics stay on stderr and are kept separate from package rows; a warn
 
 A partial, failed, or blocked selected backend makes the aggregate command return nonzero.
 
-Distribution outdated checks use existing local metadata; `upkg` does not refresh it automatically. On Arch-family systems, an empty status-1 repo or AUR check is treated as no updates. Paru queries and upgrades honor its configured package scope (`Mode`, `AurOnly`, `RepoOnly`, and PKGBUILD repositories) and configured pacman command. The wrapper does not force AUR or repo mode. Development-package commit checks follow Paru’s `Devel` setting; enable it in `paru.conf` when wanted.
+APT checks use existing local metadata. Pacman checks prefer optional `checkupdates` from `pacman-contrib`, refreshing a private, per-call database that is removed afterward. Refresh failures remain failures; there is no silent fallback to cached success. Without that helper, the output and summary explicitly identify cached repository data. Paru keeps its native configured query and labels repository versions as cached. For a separate fresh repository inventory, run `checkupdates` directly; never run `pacman -Sy` alone just to preview updates. Repository version queries do not resolve replacements; review the native `-Syu` transaction. On Arch-family systems, an empty status-1 repo or AUR check is treated as no updates. Paru queries and upgrades honor its configured package scope (`Mode`, `AurOnly`, `RepoOnly`, and PKGBUILD repositories) and configured pacman command. The wrapper does not force AUR or repo mode. Development-package commit checks follow Paru’s `Devel` setting; enable it in `paru.conf` when wanted.
 
 ### Examples
 
