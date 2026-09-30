@@ -231,3 +231,22 @@ esac'
   done
 ) || exit 1
 print 'ok: root and sudo APT upgrades require a successful strict refresh'
+if command -v jq >/dev/null 2>&1; then
+  (
+    _zsh_functions_load_domain nix || exit 1
+    _npkg_nix() { print -r -- "$AUDIT_PROFILE"; }
+    _npkg_eval_installable_record() { print -r -- '{"paths":["/nix/store/current"],"version":"1"}'; }
+    AUDIT_PROFILE='{"elements":{"custom":{"active":true,"originalUrl":"github:example/custom","url":"github:example/custom/rev","attrPath":"packages.test.custom","storePaths":["/nix/store/old"]},"unsupported":{"active":true,"storePaths":["/nix/store/local"]}}}'
+    npkg outdated >/dev/null 2>&1
+    assert test "$?" -eq 1
+    assert test "$_NPKG_OUTDATED_TOTAL" -eq 2
+    assert test "$_NPKG_OUTDATED_CHANGED" -eq 1
+    assert test "$_NPKG_OUTDATED_UNKNOWN" -eq 1
+    AUDIT_PROFILE='{"elements":{"custom":{"active":true,"originalUrl":"github:example/custom","url":"github:example/custom/rev","attrPath":"packages.test.custom","storePaths":["/nix/store/current"]}}}'
+    npkg outdated >/dev/null 2>&1
+    assert test "$?" -eq 0
+    assert test "$_NPKG_OUTDATED_TOTAL" -eq 1
+    assert test "$_NPKG_OUTDATED_STATE" = current
+  ) || exit 1
+  print 'ok: Nix inventories include custom flakes and expose unsupported active entries'
+fi

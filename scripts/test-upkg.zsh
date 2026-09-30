@@ -1592,15 +1592,15 @@ esac
     assert_not_contains "$output" 'Everything is up to date.' 'missing-data report never prints success' || return 1
 
     set_npkg_fixture \
-      '{"elements":[{"active":true,"originalUrl":"github:example/tools","uri":"github:example/tools/locked","attrPath":"packages.test.tool","storePaths":["/nix/store/tool"]}]}' \
+      '{"elements":[{"active":false,"originalUrl":"github:example/tools","uri":"github:example/tools/locked","attrPath":"packages.test.tool","storePaths":["/nix/store/tool"]}]}' \
       '{}'
     run_npkg_outdated_capture
     cmd_status=$?
     output=$NPKG_TEST_OUTPUT
-    assert_status "$cmd_status" 0 'profile without active nixpkgs elements is complete' || return 1
-    assert_equals "$_NPKG_OUTDATED_STATE" current 'zero-count nixpkgs profile exposes current state' || return 1
-    assert_equals "$_NPKG_OUTDATED_TOTAL" 0 'zero-count nixpkgs profile checks no elements' || return 1
-    assert_contains "$output" 'No nixpkgs packages found in the current profile.' 'zero-count profile keeps its dedicated message' || return 1
+    assert_status "$cmd_status" 0 'profile without active elements is complete' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" current 'zero-count profile exposes current state' || return 1
+    assert_equals "$_NPKG_OUTDATED_TOTAL" 0 'zero-count profile checks no elements' || return 1
+    assert_contains "$output" 'No active packages found in the current profile.' 'zero-count profile keeps its dedicated message' || return 1
     assert_equals "$(<"$NPKG_TEST_EVAL_LOG")" '' 'zero-count profile performs no evaluation' || return 1
 
     set_npkg_fixture '__FAIL__' '{}'

@@ -513,7 +513,6 @@
         | (($value.originalUrl // $value.originalUri // "") | text) as $original
         | (($value.uri // $value.url // "") | text) as $locked
         | ($value.storePaths // null) as $stores
-        | select((($original + " " + $locked) | ascii_downcase | contains("nixpkgs")))
         | {
             displayName: (
               if (($value.name // "") | text) != "" then (($value.name // "") | text)
@@ -577,7 +576,7 @@
     pkg_count=${#names[@]}
     if (( pkg_count == 0 )); then
       _npkg_set_outdated_state current 0 0 0
-      echo "No nixpkgs packages found in the current profile."
+      echo "No active packages found in the current profile."
       return 0
     fi
 
@@ -657,7 +656,7 @@
       locked_file="${tmp_dir}/${idx}.locked"
 
       if (( ! structurally_valid[$idx] )); then
-        detail='incomplete profile data'
+        detail='incomplete profile data (an evaluable flake source, attribute, and installed outputs are required)'
       fi
 
       if [[ -s $locked_file ]]; then

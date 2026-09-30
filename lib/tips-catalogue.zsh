@@ -104,6 +104,7 @@ fi
 if (( $+commands[nix] && $+commands[jq] )) && [[ ${_FZF_STATE:-blocked} == ready ]]; then
   _zsh_tip_pool+=(
     "Run npkg find nvim to open a seeded package picker"
+    "Run npkg outdated to check every active profile entry for output changes"
     "Run npkg remove with no arguments to select active installed packages"
   )
 fi

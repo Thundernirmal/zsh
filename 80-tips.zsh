@@ -2,6 +2,7 @@
 # and credential-status reminders stay in lib/tips-catalogue.zsh. Destructive
 # file commands keep native semantics across domain loading. Package-search
 # reminders apply on first use, including the independently loaded Nix backend.
+# Nix inventory reminders cover every active profile entry, including other flakes.
 # Nix removal reminders operate on active profile entries.
 # APT reminders require successful metadata refresh before an upgrade.
 # Plan reminders describe an update inventory; native upgrades resolve transactions.

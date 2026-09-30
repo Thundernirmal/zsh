@@ -768,7 +768,7 @@ upkg clean --sudo --only=apt
 
 ## Nix profile manager: npkg
 
-`npkg` is defined only when `nix` is available. It wraps the current `nix profile` with shorter commands and optional pickers while enabling the required `nix-command flakes` features.
+`npkg` is defined only when `nix` is available. It requires the modern experimental CLI with `nix profile add` and `nix profile upgrade --all`; older CLIs using only `profile install` or wildcard upgrade selectors are unsupported. Check those subcommands with `--help` when installing Nix. It wraps the current `nix profile` with shorter commands and optional pickers while enabling the required `nix-command flakes` features.
 
 ### Commands
 
@@ -798,7 +798,7 @@ The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refr
 
 Explicitly inactive profile elements are excluded from outdated checks and the removal picker; a missing or null activity field retains the default active behavior.
 
-`npkg outdated` compares the complete installed store-path set for each active nixpkgs profile element with the output set selected by the currently evaluated installable:
+`npkg outdated` compares the complete installed store-path set for each active profile element, including flakes outside nixpkgs with the output set selected by the currently evaluated installable:
 
 | State | Meaning |
 |---|---|
@@ -808,7 +808,7 @@ Explicitly inactive profile elements are excluded from outdated checks and the r
 
 A change is not necessarily an upgrade. It can be a downgrade, rebuild, changed input, output-selection change, or packaging change. Display versions are informational and never determine state.
 
-A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active nixpkgs elements is a complete zero-count result.
+A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active elements is a complete zero-count result. Active store-path-only entries or entries without an evaluable flake source/attribute are reported as unknown instead of being silently excluded. Pinned flake references remain pinned: `npkg upgrade` cannot advance their revision, and their evaluated identity can correctly remain current. Reinstall from an unlocked reference only when changing that pin is intentional.
 
 Ctrl+C stops and reaps only the command's recorded evaluation workers, removes its temporary files, preserves unrelated background jobs, and returns `130`. The `upkg` Nix bridge consumes the stable internal `current`, `changed`, or `partial` state rather than matching display text.
 
