@@ -14,6 +14,7 @@ _zsh_tip_pool=(
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"
+  "Use ff or ft stderr to diagnose failed searches on fallback backends"
   "Run ft <pattern> [path] to search file contents"
   "Run extract --keep file.gz to preserve the compressed input"
   "Run extract --destination existing-dir archive.tar.gz to choose where to unpack"

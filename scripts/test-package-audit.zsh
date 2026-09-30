@@ -274,3 +274,23 @@ fi
   assert test "${(j:,:)_UPKG_SELECTED_MANAGERS}" = dnf
 ) || exit 1
 print 'ok: every installed distro backend remains explicitly selectable'
+
+(
+  _zsh_functions_load_domain files || exit 1
+  fallback_dir="$scratch/fallbacks"
+  command mkdir "$fallback_dir"
+  command ln -s "$(command -v find)" "$fallback_dir/find"
+  command ln -s "$(command -v grep)" "$fallback_dir/grep"
+  PATH=$fallback_dir
+  ff needle "$scratch/nonexistent" > "$scratch/search.stdout" 2> "$scratch/search.stderr"
+  assert test "$?" -eq 1
+  assert test -s "$scratch/search.stderr"
+  assert test ! -s "$scratch/search.stdout"
+  ft needle "$scratch/nonexistent" > "$scratch/search.stdout" 2> "$scratch/search.stderr"
+  assert test "$?" -eq 2
+  assert test -s "$scratch/search.stderr"
+  ft '[' "$scratch/fallbacks" > "$scratch/search.stdout" 2> "$scratch/search.stderr"
+  assert test "$?" -eq 2
+  assert test -s "$scratch/search.stderr"
+) || exit 1
+print 'ok: find and grep fallbacks preserve missing-path and invalid-pattern errors'

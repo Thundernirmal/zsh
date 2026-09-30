@@ -315,7 +315,7 @@ ff() {
       # directories and exclude hidden files while retaining the requested root.
       find_args+=( \( -name '.*' ! -path "$search_root" -prune \) -o \( ! -name '.*' -iname "*$pattern*" -print \) )
     fi
-    command find "${find_args[@]}" 2>/dev/null
+    command find "${find_args[@]}"
   fi
 }
 
@@ -398,7 +398,7 @@ ft() {
     fi
     (( fixed_strings )) && search_args+=(-F)
     search_args+=(--color=auto -- "$pattern" "$search_root")
-    command grep "${search_args[@]}" 2>/dev/null
+    command grep "${search_args[@]}"
   fi
 }
 

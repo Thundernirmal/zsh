@@ -1,6 +1,6 @@
 # Fixed lazy loader for hook-free, on-demand tips. Command help, glyph previews,
 # and credential-status reminders stay in lib/tips-catalogue.zsh. Destructive
-# file commands keep native semantics across domain loading. Package-search
+# file commands keep native semantics; search fallbacks preserve errors. Package-search
 # reminders apply on first use, including the independently loaded Nix backend.
 # Nix inventory reminders cover every active profile entry, including other flakes.
 # Nix removal reminders operate on active profile entries.
