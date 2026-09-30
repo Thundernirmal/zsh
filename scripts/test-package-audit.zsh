@@ -161,3 +161,28 @@ if command -v jq >/dev/null 2>&1; then
   ) || exit 1
   print 'ok: inactive object/array Nix elements are excluded from checks and removal'
 fi
+(
+  for audit_manager in brew flatpak pacman paru; do
+    write_fake "$audit_manager" 'printf "%s\n" "query warning" >&2; exit "${AUDIT_RC:-0}"'
+  done
+  PATH="$scratch:$original_path"
+  for audit_manager in brew flatpak pacman paru; do
+    _upkg_detect_managers() {
+      typeset -ga _UPKG_ACTIVE_MANAGERS=("$audit_manager")
+      typeset -ga _UPKG_ALTERNATE_MANAGERS=()
+    }
+    AUDIT_RC=0; export AUDIT_RC
+    upkg outdated --only "$audit_manager" >"$scratch/warning-out" 2>"$scratch/warning-err"
+    assert test "$?" -eq 0
+    assert test "${_UPKG_SUMMARY_STATE[$audit_manager]}" = 'up to date'
+    assert test -s "$scratch/warning-err"
+    output=$(<"$scratch/warning-out")
+    assert test "${output#*query warning}" = "$output"
+    if [[ $audit_manager == pacman || $audit_manager == paru ]]; then
+      AUDIT_RC=1
+      upkg outdated --only "$audit_manager" >/dev/null 2>&1
+      assert test "$?" -eq 1
+    fi
+  done
+) || exit 1
+print 'ok: warning-only update checks stay current and Arch errors remain failures'

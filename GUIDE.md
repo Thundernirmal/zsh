@@ -741,6 +741,8 @@ Multi-manager runs continue after an ordinary backend failure. Cancellation stop
 | `blocked` | Authorization or a required capability was missing |
 | `skipped` | A filter intentionally omitted the manager |
 
+Query diagnostics stay on stderr and are kept separate from package rows; a warning alone never counts as an available update. Arch status-1 checks with diagnostics remain failures rather than being treated as an empty successful check.
+
 A partial, failed, or blocked selected backend makes the aggregate command return nonzero.
 
 Distribution outdated checks use existing local metadata; `upkg` does not refresh it automatically. On Arch-family systems, an empty status-1 repo or AUR check is treated as no updates. A failed Paru repo check can still show AUR results but leaves the backend failed.

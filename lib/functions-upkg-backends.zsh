@@ -432,13 +432,16 @@ _upkg_run_search_npm() {
 _upkg_run_outdated_apt() {
   emulate -L zsh
 
-  local output line rc
+  local output diagnostic line rc
   local -a packages
 
   _upkg_print_section apt
 
-  output=$(command apt list --upgradable 2>&1)
+  _upkg_capture_query apt list --upgradable
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
   output=$(print -r -- "$output" | sed '/^Listing\.\.\.$/d')
   if (( rc != 0 )); then
@@ -465,12 +468,15 @@ _upkg_run_outdated_apt() {
 _upkg_run_outdated_dnf() {
   emulate -L zsh
 
-  local output rc
+  local output diagnostic rc
 
   _upkg_print_section dnf
 
-  output=$(command dnf check-update 2>&1)
+  _upkg_capture_query dnf check-update
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
   case $rc in
@@ -493,15 +499,18 @@ _upkg_run_outdated_dnf() {
 _upkg_run_outdated_pacman() {
   emulate -L zsh
 
-  local output rc
+  local output diagnostic rc
 
   _upkg_print_section pacman
 
-  output=$(command pacman -Qu 2>&1)
+  _upkg_capture_query pacman -Qu
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
-  if _upkg_arch_outdated_has_no_updates "$rc" "$output"; then
+  if _upkg_arch_outdated_has_no_updates "$rc" "${output}${diagnostic}"; then
     print 'No updates available.'
     _upkg_set_last_result 'up to date' ''
     return 0
@@ -525,29 +534,35 @@ _upkg_run_outdated_pacman() {
 _upkg_run_outdated_paru() {
   emulate -L zsh
 
-  local pacman_output='' paru_output='' repo_error=''
+  local pacman_output='' paru_output='' repo_error='' diagnostic=''
   local pacman_rc=0 paru_rc=0
   local had_updates=0 repo_failed=0
 
   _upkg_print_section paru
 
   if command -v pacman >/dev/null 2>&1; then
-    pacman_output=$(command pacman -Qu 2>&1)
+    _upkg_capture_query pacman -Qu
     pacman_rc=$?
+    pacman_output=$_UPKG_QUERY_STDOUT
+    diagnostic=$_UPKG_QUERY_STDERR
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_check_interrupt "$pacman_rc" || return $?
 
-    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
+    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "${pacman_output}${diagnostic}"; then
       pacman_output=''
     elif (( pacman_rc != 0 )); then
       repo_failed=1
       repo_error='pacman -Qu failed while checking paru repo updates'
     fi
   else
-    pacman_output=$(command paru -Qu 2>&1)
+    _upkg_capture_query paru -Qu
     pacman_rc=$?
+    pacman_output=$_UPKG_QUERY_STDOUT
+    diagnostic=$_UPKG_QUERY_STDERR
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_check_interrupt "$pacman_rc" || return $?
 
-    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
+    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "${pacman_output}${diagnostic}"; then
       pacman_output=''
     elif (( pacman_rc != 0 )); then
       repo_failed=1
@@ -555,11 +570,14 @@ _upkg_run_outdated_paru() {
     fi
   fi
 
-  paru_output=$(command paru -Qua 2>&1)
+  _upkg_capture_query paru -Qua
   paru_rc=$?
+  paru_output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$paru_rc" || return $?
 
-  if _upkg_arch_outdated_has_no_updates "$paru_rc" "$paru_output"; then
+  if _upkg_arch_outdated_has_no_updates "$paru_rc" "${paru_output}${diagnostic}"; then
     paru_output=''
     paru_rc=0
   fi
@@ -617,12 +635,15 @@ _upkg_run_outdated_paru() {
 _upkg_run_outdated_brew() {
   emulate -L zsh
 
-  local output rc
+  local output diagnostic rc
 
   _upkg_print_section brew
 
-  output=$(command brew outdated 2>&1)
+  _upkg_capture_query brew outdated
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
@@ -643,12 +664,15 @@ _upkg_run_outdated_brew() {
 _upkg_run_outdated_flatpak() {
   emulate -L zsh
 
-  local output rc
+  local output diagnostic rc
 
   _upkg_print_section flatpak
 
-  output=$(command flatpak remote-ls --updates 2>&1)
+  _upkg_capture_query flatpak remote-ls --updates
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
