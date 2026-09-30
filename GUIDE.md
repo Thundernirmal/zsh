@@ -629,7 +629,7 @@ Deleting a credential cannot recall copies already inherited by child processes.
 
 ## Package manager: upkg
 
-`upkg` detects supported managers each time it runs and provides one interface for read-only checks, search, upgrades, and conservative cleanup.
+`upkg` detects supported managers each time it runs and provides one interface for package inventories, search, upgrades, and manager-owned cleanup. Checks, searches, plans, and cleanup previews do not install or remove packages, but native queries may contact the network, update metadata, or write caches; they are not filesystem-read-only or guaranteed offline.
 
 ### Detection
 
@@ -647,12 +647,12 @@ All other installed distro backends remain available through `--only <id>`. For 
 
 | Command | Behavior |
 |---|---|
-| `upkg` | Read-only outdated check |
-| `upkg outdated` / `check` / `list` | Same read-only check |
+| `upkg` | Package update inventory |
+| `upkg outdated` / `check` / `list` | Same package update inventory |
 | `upkg search <query>` | Search selected managers |
 | `upkg plan` | Inventory available updates without resolving a transaction |
 | `upkg upgrade` / `up` / `update` | Run selected upgrades |
-| `upkg clean` | Remove manager-classified unused or stale data |
+| `upkg clean` | Remove unused packages and manager-owned caches |
 | `upkg managers` | Show active managers and alternates |
 | `upkg help` | Show command help |
 
@@ -681,6 +681,8 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 | `flatpak` | `flatpak remote-ls --updates` | `flatpak update` |
 | `nix` | `npkg outdated` | `npkg upgrade` |
 | `npm` | `npm outdated -g --depth=0` | `npm update -g` |
+
+DNF `check-update` supports both DNF4 and DNF5 and returns native status `100` for available updates, which the wrapper treats as a successful inventory. It may refresh expired metadata; the upgrade explicitly forces fresh metadata with `--refresh`. Unprivileged checks and privileged upgrades may use different caches.
 
 APT refresh treats every repository error, including transient fetch errors, as a failure and stops before `full-upgrade`; correct the repository/network issue and rerun the command.
 
@@ -721,6 +723,8 @@ Homebrew formulae and casks are queried separately. Broad searches cap follow-up
 | `nix` | none | `nix-collect-garbage` |
 | `npm` | remove explicit keys from `npm cache npx ls` | `npm cache verify` |
 
+DNF `clean all` removes all repository cache data, including metadata and cached RPMs that are still valid. Later commands may need to download that data again; cached RPMs will no longer be available for offline reuse. This is broader than removing stale cache entries.
+
 Cleanup uses manager-owned commands. It does not directly delete cache directories, application data, project files, lockfiles, virtual environments, build output, user configuration, or Nix profile generations. It does not claim a portable reclaimed-byte total.
 
 Dry-run uses native probes where safe. Steps without a safe unprivileged simulation are printed as `would run` and are not invoked. A preview never calls `sudo` or requires `--sudo`.
@@ -749,7 +753,13 @@ Query diagnostics stay on stderr and are kept separate from package rows; a warn
 
 A partial, failed, or blocked selected backend makes the aggregate command return nonzero.
 
-APT checks use existing local metadata. Pacman checks prefer optional `checkupdates` from `pacman-contrib`, refreshing a private, per-call database that is removed afterward. Refresh failures remain failures; there is no silent fallback to cached success. Without that helper, the output and summary explicitly identify cached repository data. Paru keeps its native configured query and labels repository versions as cached. For a separate fresh repository inventory, run `checkupdates` directly; never run `pacman -Sy` alone just to preview updates. Repository version queries do not resolve replacements; review the native `-Syu` transaction. On Arch-family systems, an empty status-1 repo or AUR check is treated as no updates. Paru queries and upgrades honor its configured package scope (`Mode`, `AurOnly`, `RepoOnly`, and PKGBUILD repositories) and configured pacman command. The wrapper does not force AUR or repo mode. Development-package commit checks follow Paru’s `Devel` setting; enable it in `paru.conf` when wanted.
+APT checks use existing local metadata.
+
+Pacman checks prefer optional `checkupdates` from `pacman-contrib`, refreshing a private, per-call database that is removed afterward. Refresh failures remain failures; there is no silent fallback to cached success. Without that helper, the output and summary explicitly identify cached repository data. Paru keeps its native configured query and labels repository versions as cached. For a separate fresh repository inventory, run `checkupdates` directly; never run `pacman -Sy` alone just to preview updates. Repository version queries do not resolve replacements; review the native `-Syu` transaction. Cached `pacman -Qu` and native `paru -Qu` accept status `1` as an empty inventory only when both stdout and stderr are empty; `checkupdates` status `1` remains an error.
+
+Paru queries and upgrades honor its configured package scope (`Mode`, `AurOnly`, `RepoOnly`, and PKGBUILD repositories) and configured pacman command. The wrapper does not force AUR or repo mode. Development-package commit checks follow Paru’s `Devel` setting; enable it in `paru.conf` when wanted.
+
+The native contracts are documented in the [DNF4 command reference](https://dnf.readthedocs.io/en/latest/command_ref.html), [DNF5 manual](https://dnf5.readthedocs.io/en/latest/dnf5.8.html), [Paru manual](https://github.com/Morganamilo/paru/blob/master/man/paru.8), and [checkupdates manual](https://man.archlinux.org/man/checkupdates.8.en).
 
 ### Examples
 
@@ -831,9 +841,9 @@ These are the cross-cutting rules most likely to surprise a new user:
 13. **`fkill` defaults to SIGTERM.** `fkill 9` is a force-kill and should be the exception.
 14. **CGM is startup-optional.** Installing `secret-tool` mid-session does not define `cgm` until the module is sourced again or the shell restarts.
 15. **CGM changes only the current shell.** Run `env`, `unset`, and `delete` directly, not through a pipe, command substitution, or subshell. Deletion cannot revoke values inherited by existing processes.
-16. **`upkg` is not entirely read-only.** The default, `outdated`, `search`, and `plan` are read-only; `upgrade` and `clean` mutate manager state. Preview cleanup with `clean --dry-run`.
+16. **Package previews can write caches.** Default checks, search, plan, and cleanup previews avoid package installation/removal but may use network access or write manager metadata. Upgrade and cleanup mutate package or cache state; preview cleanup with `clean --dry-run`.
 17. **`--sudo` authorizes but does not auto-confirm.** Native package-manager and polkit prompts remain authoritative.
-18. **Outdated data can be stale.** Distro checks use local metadata, and `npkg` reports output identity—not version ordering.
+18. **Inventories have limits.** APT and Paru repository queries use cached metadata; Pacman refreshes a separate database when `checkupdates` is available, and DNF may refresh expired metadata. Native upgrades resolve transactions. `npkg` reports output identity rather than version ordering.
 19. **Partial package results fail.** `upkg` continues other managers but returns nonzero for partial, failed, or blocked selected backends. `npkg` returns nonzero when any row is unknown.
 20. **Rich output is presentation.** Use a pipe, redirect, `NO_COLOR`, or an explicit plain option for stable machine-readable text.
 21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows are Linux-oriented.

@@ -120,6 +120,8 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Use complete IDs without empty fields in upkg --only=brew,npm"
     "Run upkg plan to inventory updates; review the native upgrade transaction"
     "Run upkg clean --dry-run before package cleanup"
+    "Use an online connection for package queries that refresh remote metadata"
+    "Run upkg clean --dry-run --only dnf to preview removal of all DNF cache data"
     "Use Ctrl+C during upkg to stop remaining managers and cleanup phases"
   )
 fi

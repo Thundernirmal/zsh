@@ -18,7 +18,7 @@ if (( $+functions[compdef] )); then
     'up:Alias for upgrade'
     'update:Alias for upgrade'
     'plan:Inventory available updates'
-    'clean:Remove unused packages and stale caches'
+    'clean:Remove unused packages and manager-owned caches'
     'managers:Show detected managers and alternates'
     'help:Show usage help'
   )

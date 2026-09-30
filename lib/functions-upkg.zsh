@@ -11,7 +11,7 @@ _upkg_usage() {
     _ui_panel_kv 'search <query>' 'Search package names across detected managers' accent text
     _ui_panel_kv 'upgrade / up / update' 'Run upgrades across selected managers' accent text
     _ui_panel_kv 'plan' 'Inventory available updates without resolving transactions' accent text
-    _ui_panel_kv 'clean' 'Remove unused packages and stale manager-owned caches' accent text
+    _ui_panel_kv 'clean' 'Remove unused packages and manager-owned caches' accent text
     _ui_panel_kv 'managers' 'Show detected managers and alternates' accent text
     _ui_panel_kv 'help' 'Show this help text' accent text
     _ui_section_break
@@ -38,7 +38,7 @@ _upkg_usage() {
   print '  up                  Alias for upgrade'
   print '  update              Alias for upgrade'
   print '  plan                Inventory available updates without resolving transactions'
-  print '  clean               Remove unused packages and stale manager-owned caches'
+  print '  clean               Remove unused packages and manager-owned caches'
   print '  managers            Show detected managers and alternates'
   print '  help                Show this help text'
   print ''
@@ -65,9 +65,9 @@ _upkg_usage() {
   print 'Notes:'
   print '  - upkg with no command defaults to outdated'
   print '  - search prints one compact table with a manager column'
-  print '  - plan and upgrade --dry-run use the read-only outdated checks'
-  print '  - clean is mutating; use clean --dry-run for a read-only preview'
-  print '  - cleanup uses conservative manager commands and never deletes app data or user config directly'
+  print '  - plan and upgrade --dry-run inventory updates without installing packages'
+  print '  - queries and previews may contact the network and write caches'
+  print '  - clean mutates manager state; clean --dry-run previews without removing packages or caches'
   print '  - upgrades never inject sudo automatically'
   print '  - paru upgrades require explicit --sudo opt-in but still run unprefixed'
   print '  - brew upgrades run unprefixed and stay in Homebrew user space'

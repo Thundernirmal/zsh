@@ -158,7 +158,7 @@ test_static_values() {
   values=( "${reply[@]}" )
   assert_equals "${(j: :)values}" 'outdated check list search upgrade up update plan clean managers help' 'upkg commands match the public interface' || return 1
   assert_unique 'upkg command values are unique' "${values[@]}" || return 1
-  assert_equals "${_ZSH_UPKG_COMMAND_SPECS[9]}" 'clean:Remove unused packages and stale caches' 'upkg completion describes cleanup explicitly' || return 1
+  assert_equals "${_ZSH_UPKG_COMMAND_SPECS[9]}" 'clean:Remove unused packages and manager-owned caches' 'upkg completion describes cleanup explicitly' || return 1
 
   spec_values "${_ZSH_UPKG_FLAGS[@]}"
   values=( "${reply[@]}" )

@@ -1,18 +1,7 @@
-# Fixed lazy loader for hook-free, on-demand tips. Command help, glyph previews,
-# and credential-status reminders stay in lib/tips-catalogue.zsh. Destructive
-# file commands keep native semantics; search fallbacks preserve errors. Package-search
-# reminders apply on first use, including the independently loaded Nix backend.
-# Nix inventory reminders cover every active profile entry, including other flakes.
-# Nix removal reminders operate on active profile entries.
-# APT reminders require successful metadata refresh before an upgrade.
-# Plan reminders describe an update inventory; native upgrades resolve transactions.
-# Update-check reminders preserve separate query diagnostics.
-# Arch reminders distinguish fresh separate-database checks from cached queries.
-# Paru reminders honor configured package scope and development checks.
-# DNF search reminders apply to both DNF4 and DNF5.
-# Cancellation stops later package managers and cleanup phases.
-# Manager-selection reminders expose every installed backend with explicit lists that reject empty IDs.
-# The zdoctor reminder covers checking navigation after shell startup changes.
+# Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
+# Reminders cover native file semantics and search errors, package selection,
+# cancellation, configured Paru scope, metadata freshness, and cleanup previews.
+# Package queries may use the network and write caches without changing packages.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
 typeset -gi _ZSH_TIPS_CATALOGUE_LOADED=${_ZSH_TIPS_CATALOGUE_LOADED:-0}
