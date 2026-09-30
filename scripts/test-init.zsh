@@ -261,7 +261,7 @@ case "$1" in
         exit 0
         ;;
       runtime-fail)
-        printf "%s\n" "false"
+        printf "%s\n" "fzf-file-widget() { :; }" "zle -N fzf-file-widget" "bindkey -M emacs ^T fzf-file-widget" "false"
         exit 0
         ;;
       *)
@@ -1054,6 +1054,44 @@ printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }
   assert_equals "${#cache_files[@]}" 1 'cold startup creates one validated zoxide cache file' || return 1
 }
 
+test_fzf_partial_integration_rollback() {
+  local root="$tmp_home/fzf-partial" output
+  command mkdir -p -- "$root"
+  print -r -- 'fzf-file-widget() { print replaced; }
+fzf-cd-widget() { :; }
+__fzf_comprun() { :; }
+zle -N fzf-file-widget
+zle -N fzf-cd-widget
+bindkey -M emacs "^T" fzf-file-widget
+bindkey -M viins "^X" fzf-cd-widget
+bindkey -N fixture_new_map
+unfunction _fzf_saved_fixture
+zle -D fzf-completion
+fzf_default_completion=changed
+export FZF_DEFAULT_OPTS=changed
+false' > "$root/partial.zsh"
+  output=$("$zsh_bin" -dfi -c '
+    source "$1/40-fzf.zsh"
+    fzf-file-widget() { print original; }
+    zle -N fzf-file-widget
+    _fzf_saved_fixture() { :; }
+    zle -A expand-or-complete fzf-completion
+    before_emacs=$(bindkey -M emacs "^T")
+    before_viins=$(bindkey -M viins "^X")
+    before_alias=$(bindkey -lL)
+    export FZF_DEFAULT_OPTS=original-options
+    _fzf_activate_integration_file "$2" /fixture/fzf 0.70.0
+    rc=$?
+    [[ $(bindkey -M emacs "^T") == "$before_emacs" && $(bindkey -M viins "^X") == "$before_viins" ]] || exit 10
+    [[ $(bindkey -lL) == "$before_alias" ]] || exit 11
+    [[ $widgets[fzf-file-widget] == user:fzf-file-widget && ! ${+widgets[fzf-cd-widget]} -eq 1 ]] || exit 12
+    [[ $+functions[_fzf_saved_fixture] == 1 && $widgets[fzf-completion] == builtin ]] || exit 13
+    print -r -- "rc=$rc original=$(fzf-file-widget) cd=$+functions[fzf-cd-widget] completion=$+functions[__fzf_comprun] opts=$FZF_DEFAULT_OPTS default=${+fzf_default_completion}"
+  ' zsh "$repo_dir" "$root/partial.zsh" 2>/dev/null)
+  assert_status "$?" 0 'partial fzf rollback restores widgets, keymaps and aliases' || return 1
+  assert_equals "$output" 'rc=1 original=original cd=0 completion=0 opts=original-options default=0' 'partial fzf rollback restores functions and option presence' || return 1
+}
+
 test_zoxide_rejected_cache_directory() {
   local case_dir="$tmp_home/zoxide-rejected-cache"
   local fakebin="$case_dir/bin" cache_root="$case_dir/cache" shared="$case_dir/shared"
@@ -1121,6 +1159,7 @@ main() {
   test_fzf_persistent_startup_cache || return 1
   test_fzf_quiet_startup_modes || return 1
   test_fzf_runtime_guards || return 1
+  test_fzf_partial_integration_rollback || return 1
   test_fzf_path_cache || return 1
   test_fzf_generated_guards || return 1
   test_fzf_theme_option_refresh || return 1

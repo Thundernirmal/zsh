@@ -398,21 +398,121 @@ _fzf_activate_integration_file() {
   emulate -L zsh
 
   local integration_file=$1 fzf_path=$2 expected_version=$3
+  local name line backup map old_path=$_FZF_CHECKED_PATH old_state=$_FZF_STATE old_found=$_FZF_FOUND
+  local keymaps='' old_signature=${_FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]-}
+  integer committed=0 had_signature=${+_FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]}
+  local -A saved_functions saved_widgets saved_maps saved_values saved_types original_maps backup_maps
+  local -a words names option_names=(
+    FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_ALT_C_OPTS FZF_CTRL_R_OPTS
+    FZF_COMPLETION_OPTS FZF_COMPLETION_PATH_OPTS FZF_COMPLETION_DIR_OPTS
+    fzf_default_completion _ZO_FZF_OPTS _ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE
+  )
+  for name in ${(k)functions}; do
+    [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
+    saved_functions[$name]=${functions[$name]}
+  done
+  for name in "${option_names[@]}"; do
+    (( ${+parameters[$name]} )) || continue
+    saved_values[$name]=${(P)name}
+    saved_types[$name]=${parameters[$name]}
+  done
+  {
+    if [[ -o interactive ]]; then
+      # Clone keymap objects, then restore their original aliases on rollback.
+      # Parsing builtin-generated argument lists avoids evaluating shell text.
+      keymaps=$(builtin bindkey -lL)
+      for line in ${(f)keymaps}; do
+        words=( ${(z)line} ); words=( "${(@Q)words}" )
+        [[ ${words[1]-} == bindkey ]] || return 1
+        original_maps[${words[-1]}]=1
+      done
+      for line in ${(f)keymaps}; do
+        words=( ${(z)line} ); words=( "${(@Q)words}" )
+        map=${words[3]}
+        [[ ${words[2]-} == -N ]] || continue
+        backup="_zsh_fzf_map_${$}_${RANDOM}_${map}"
+        builtin bindkey -N "$backup" "$map" || return 1
+        saved_maps[$map]=$backup
+        backup_maps[$backup]=1
+      done
+      for name in ${(k)widgets}; do
+        [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
+        backup="_zsh_fzf_widget_${$}_${RANDOM}_${name}"
+        builtin zle -A "$name" "$backup" || return 1
+        saved_widgets[$name]=$backup
+      done
+    fi
+    typeset -g _FZF_CACHE_LOADED_SCHEMA=''
+    typeset -g _FZF_CACHE_LOADED_VERSION=''
+    typeset -gi _FZF_CACHE_LOADED_STATUS=1
+    source "$integration_file" 2>/dev/null || return 1
+    (( _FZF_CACHE_LOADED_STATUS == 0 )) || return 1
+    [[ $_FZF_CACHE_LOADED_SCHEMA == "$_FZF_CACHE_SCHEMA" ]] || return 1
+    [[ $_FZF_CACHE_LOADED_VERSION == "$expected_version" ]] || return 1
 
-  typeset -g _FZF_CACHE_LOADED_SCHEMA=''
-  typeset -g _FZF_CACHE_LOADED_VERSION=''
-  typeset -gi _FZF_CACHE_LOADED_STATUS=1
-  source "$integration_file" 2>/dev/null || return 1
-  (( _FZF_CACHE_LOADED_STATUS == 0 )) || return 1
-  [[ $_FZF_CACHE_LOADED_SCHEMA == "$_FZF_CACHE_SCHEMA" ]] || return 1
-  [[ $_FZF_CACHE_LOADED_VERSION == "$expected_version" ]] || return 1
-
-  _FZF_VERSION_STATE_BY_PATH[$fzf_path]=ready
-  _FZF_VERSION_FOUND_BY_PATH[$fzf_path]=$expected_version
-  _FZF_INTEGRATION_STATE_BY_PATH[$fzf_path]=ready
-  _fzf_set_state "$fzf_path" ready "$expected_version"
-  _fzf_wrap_generated_entry_points
-  _fzf_export_config
+    _fzf_set_state "$fzf_path" ready "$expected_version"
+    _fzf_wrap_generated_entry_points
+    _fzf_export_config || return 1
+    _FZF_VERSION_STATE_BY_PATH[$fzf_path]=ready
+    _FZF_VERSION_FOUND_BY_PATH[$fzf_path]=$expected_version
+    _FZF_INTEGRATION_STATE_BY_PATH[$fzf_path]=ready
+    committed=1
+  } always {
+    if (( ! committed )); then
+      names=( ${(k)functions} ${(k)saved_functions} )
+      for name in ${(u)names}; do
+        [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
+        if (( ${+saved_functions[$name]} )); then
+          functions[$name]=${saved_functions[$name]}
+        else
+          unfunction "$name"
+        fi
+      done
+      for name in "${option_names[@]}"; do
+        if (( ${+saved_types[$name]} )); then
+          typeset -g -- "$name=${saved_values[$name]}"
+          if [[ ${saved_types[$name]} == *export* ]]; then
+            typeset -gx -- "$name"
+          else
+            typeset -g +x -- "$name"
+          fi
+        else
+          unset "$name"
+        fi
+      done
+      if (( had_signature )); then
+        _FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]=$old_signature
+      else
+        unset "_FZF_CONFIG_SIGNATURE_BY_PATH[$fzf_path]"
+      fi
+      _fzf_set_state "$old_path" "$old_state" "$old_found"
+      if [[ -o interactive ]]; then
+        names=( ${(k)widgets} ${(k)saved_widgets} )
+        for name in ${(u)names}; do
+          [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
+          if (( ${+saved_widgets[$name]} )); then
+            builtin zle -A "${saved_widgets[$name]}" "$name"
+          else
+            builtin zle -D "$name"
+          fi
+        done
+        for map in ${(k)saved_maps}; do
+          builtin bindkey -A "${saved_maps[$map]}" "$map"
+        done
+        for line in ${(f)keymaps}; do
+          words=( ${(z)line} ); words=( "${(@Q)words}" )
+          [[ ${words[2]-} == -A ]] && builtin bindkey -A "${words[3]}" "${words[4]}"
+        done
+        for line in ${(f)"$(builtin bindkey -lL)"}; do
+          words=( ${(z)line} ); words=( "${(@Q)words}" )
+          map=${words[-1]}
+          (( ${+original_maps[$map]} || ${+backup_maps[$map]} )) || builtin bindkey -D "$map"
+        done
+      fi
+    fi
+    for backup in ${(v)saved_widgets}; do builtin zle -D "$backup"; done
+    for backup in ${(v)saved_maps}; do builtin bindkey -D "$backup"; done
+  }
 }
 
 _fzf_load_cached_integration() {

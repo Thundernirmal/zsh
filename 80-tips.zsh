@@ -4,6 +4,7 @@
 # Reminders cover native file semantics and search errors, package selection,
 # cancellation, configured Paru scope, metadata freshness, and cleanup previews.
 # Credential reminders use ordinary scalar variables for exact-value exports.
+# Finder reminders include restarting after a blocked integration is repaired.
 # Navigation reminders include startup diagnostics after cache settings change.
 # Package queries may use the network and write caches without changing packages.
 
