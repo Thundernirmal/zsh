@@ -1,26 +1,5 @@
-# Manager-specific reminders require their own tools when the catalogue loads.
 # Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
-# Extraction preserves native input-link handling.
-# Extraction reminders require an existing, nonempty destination directory.
-# Reminders cover native file semantics and search errors, package selection,
-# cancellation summaries, private-session query cleanup, and completed search results, configured Paru scope, metadata freshness, and cleanup previews.
-# Credential reminders distinguish exact-value scalar exports from scalar removal.
-# Theme reminders distinguish inspecting a palette from applying it.
-# Finder activation tolerates stale widget names while preserving bindings.
-# Finder reminders include restarting after a blocked integration is repaired.
-# Navigation reminders include startup diagnostics after cache settings change.
-# Cleanup cancellation retains earlier phase counts and identifies the interrupted phase.
-# Package inventory reminders cover visible diagnostics and hidden Flatpak refs.
-# Git picker reminders keep display labels separate from validated canonical identities.
-# Nix inventory reminders preserve visible evaluation diagnostics.
-# Nix helper reminders cover help before work and literal picker queries.
-# Nix search uses native quiet logging while retaining diagnostics.
-# npm search reminders apply across native parseable column layouts.
-# DNF search reminders cover native no-match classification.
-# Fresh Arch inventory setup includes checkupdates and its fakeroot prerequisite.
-# Search progress is cleared before cancellation summaries and diagnostics.
-# Dry-run completion and reminders distinguish update inventories from cleanup previews.
-# Package queries may use the network and write caches without changing packages.
+# The catalogue checks matching tool capabilities when it loads on first use.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
 typeset -gi _ZSH_TIPS_CATALOGUE_LOADED=${_ZSH_TIPS_CATALOGUE_LOADED:-0}

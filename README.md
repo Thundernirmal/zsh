@@ -76,7 +76,7 @@ This repository does not manage Oh My Zsh, Starship, PATH setup, `compinit`, or 
 ## Documentation
 
 - [`GUIDE.md`](./GUIDE.md) — setup, full command reference, dependencies, workflows, and gotchas
-- [`docs/issues/README.md`](./docs/issues/README.md) — open audit findings, reproduction details, and fix acceptance criteria
+- [`docs/issues/README.md`](./docs/issues/README.md) — unresolved issue tracker and consistent report template
 - [`AGENTS.md`](./AGENTS.md) — repository maintenance rules and required verification
 
 For changes, follow the documentation ownership rules and run `zsh scripts/run-tests.zsh`; the maintenance contract is in [`GUIDE.md`](./GUIDE.md#maintenance-and-verification).
