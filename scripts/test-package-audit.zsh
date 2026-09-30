@@ -550,3 +550,30 @@ print 'ok: Nix search requests quiet evaluation while retaining warnings and err
   done
 ) || exit 1
 print 'ok: Nix bridge preserves result globals and separates diagnostic streams'
+
+(
+  _upkg_detect_managers() {
+    typeset -ga _UPKG_ACTIVE_MANAGERS=(brew flatpak)
+    typeset -ga _UPKG_ALTERNATE_MANAGERS=()
+  }
+  _upkg_run_search_brew() { _upkg_check_interrupt 130; }
+  _upkg_run_search_flatpak() { _upkg_finish_search_results flatpak $'org.example.Sample\t1.0.0\tdescription'; }
+  upkg search sample --only brew,flatpak >"$scratch/cancel-search" 2>/dev/null
+  assert test "$?" -eq 130
+  assert test "${#_UPKG_SUMMARY_ORDER}" -eq 1
+  text=$(<"$scratch/cancel-search")
+  [[ $text == *'Search cancelled; results are incomplete.'* && $text == *'across 1 manager(s), 1 cancelled (brew).'* && $text != *'No matches found'* ]] || exit 1
+  upkg search sample --only flatpak,brew >"$scratch/cancel-search" 2>/dev/null
+  assert test "$?" -eq 130
+  text=$(<"$scratch/cancel-search")
+  [[ $text == *'org.example.Sample'* && $text == *'across 2 manager(s), 1 cancelled (brew).'* ]] || exit 1
+  _ui_plain_mode() { return 1; }
+  _UPKG_THEME_MODE=1
+  text=$(_upkg_print_search_summary)
+  [[ $text == *'1 cancelled'* && $text == *'Cancelled managers: brew'* ]] || exit 1
+  _ui_plain_mode() { return 0; }
+  upkg search sample --skip brew >"$scratch/skip-search" 2>/dev/null || exit 1
+  text=$(<"$scratch/skip-search")
+  [[ $text == *'across 1 manager(s).'* ]] || exit 1
+) || exit 1
+print 'ok: cancelled search summaries retain results and count attempted backends'

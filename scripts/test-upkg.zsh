@@ -805,14 +805,14 @@ esac
   assert_status "$cmd_status" 1 'search returns nonzero when one backend fails' || return 1
   assert_contains "$output" 'Error: simulated brew search failure' 'partial search keeps backend error text' || return 1
   assert_contains "$output" 'npm      ripgrep-js' 'partial search still prints successful rows' || return 1
-  assert_contains "$output" 'Search summary: 1 result(s) across 1 manager(s), 1 failed (brew).' 'partial search summary names failed managers' || return 1
+  assert_contains "$output" 'Search summary: 1 result(s) across 2 manager(s), 1 failed (brew).' 'partial search summary names failed managers' || return 1
 
   output=$(upkg search ripgrep --only=brew 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'all-failed search returns nonzero' || return 1
   assert_contains "$output" 'Search results unavailable; failed manager(s): brew.' 'all-failed search names failed managers' || return 1
   assert_not_contains "$output" 'No matches found across selected managers.' 'all-failed search does not report no matches' || return 1
-  assert_contains "$output" 'Search summary: 0 result(s) across 0 manager(s), 1 failed (brew).' 'all-failed search summary names failed managers' || return 1
+  assert_contains "$output" 'Search summary: 0 result(s) across 1 manager(s), 1 failed (brew).' 'all-failed search summary names failed managers' || return 1
 
   write_fake brew "$default_brew_script"
 

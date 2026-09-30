@@ -725,16 +725,21 @@ _upkg_format_search_rows() {
 
   local row manager name version description
   local width manager_width name_width version_width desc_width
-  local failed_count=0
+  local failed_count=0 cancelled_count=0
   local failed_managers=''
   local -a rows=( "$@" ) fields
 
   if (( ${#rows[@]} == 0 )); then
     for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-      [ "${_UPKG_SUMMARY_STATE[$manager]}" = 'failed' ] && (( failed_count++ ))
+      case ${_UPKG_SUMMARY_STATE[$manager]} in
+        failed) (( failed_count++ )) ;;
+        cancelled) (( cancelled_count++ )) ;;
+      esac
     done
 
-    if (( failed_count > 0 )); then
+    if (( cancelled_count > 0 )); then
+      print 'Search cancelled; results are incomplete.'
+    elif (( failed_count > 0 )); then
       failed_managers=$(_upkg_summary_managers_by_state failed)
       if [ -n "$failed_managers" ]; then
         print "Search results unavailable; failed manager(s): $failed_managers."
@@ -814,30 +819,38 @@ _upkg_format_search_rows() {
 _upkg_print_search_summary() {
   emulate -L zsh
 
-  local manager state suffix failed_managers
+  local manager state suffix failed_managers cancelled_managers
   local result_count=${#_UPKG_SEARCH_ROWS[@]}
   local manager_count=0
-  local failed_count=0
+  local failed_count=0 cancelled_count=0
 
   for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
     state=${_UPKG_SUMMARY_STATE[$manager]}
+    [[ $state == skipped ]] && continue
+    (( manager_count++ ))
     case $state in
-      'matches found'|'no matches') (( manager_count++ )) ;;
       failed) (( failed_count++ )) ;;
+      cancelled) (( cancelled_count++ )) ;;
     esac
   done
 
   failed_managers=$(_upkg_summary_managers_by_state failed)
+  cancelled_managers=$(_upkg_summary_managers_by_state cancelled)
 
   if (( failed_count > 0 )); then
     if [ -n "$failed_managers" ]; then
-      suffix=", $failed_count failed ($failed_managers)."
+      suffix=", $failed_count failed ($failed_managers)"
     else
-      suffix=", $failed_count failed."
+      suffix=", $failed_count failed"
     fi
   else
-    suffix='.'
+    suffix=''
   fi
+
+  if (( cancelled_count > 0 )); then
+    suffix+=", $cancelled_count cancelled ($cancelled_managers)"
+  fi
+  suffix+='.'
 
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
     _ui_section_break
@@ -856,7 +869,14 @@ _upkg_print_search_summary() {
       print -nr -- ' '
       _ui_badge "$failed_count failed" danger
     fi
+    if (( cancelled_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$cancelled_count cancelled" warning
+    fi
     print ''
+    if (( cancelled_count > 0 )); then
+      print -r -- "  Cancelled managers: $cancelled_managers"
+    fi
     if (( failed_count > 0 )) && [ -n "$failed_managers" ]; then
       print -nr -- '  '
       _ui_color danger
