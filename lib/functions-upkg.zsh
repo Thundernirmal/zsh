@@ -322,6 +322,7 @@ _upkg_print_summary() {
     partial 0
     blocked 0
     failed 0
+    cancelled 0
     skipped 0
     other 0
   )
@@ -372,6 +373,10 @@ _upkg_print_summary() {
     if (( status_counts[blocked] > 0 )); then
       print -nr -- ' '
       _ui_badge "${status_counts[blocked]} blocked" warning
+    fi
+    if (( status_counts[cancelled] > 0 )); then
+      print -nr -- ' '
+      _ui_badge "${status_counts[cancelled]} cancelled" warning
     fi
     if (( status_counts[failed] > 0 )); then
       print -nr -- ' '

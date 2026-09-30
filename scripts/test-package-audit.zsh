@@ -577,3 +577,20 @@ print 'ok: Nix bridge preserves result globals and separates diagnostic streams'
   [[ $text == *'across 1 manager(s).'* ]] || exit 1
 ) || exit 1
 print 'ok: cancelled search summaries retain results and count attempted backends'
+
+(
+  source "$repo_dir/55-ui-helpers.zsh"
+  _ui_plain_mode() { return 1; }
+  _UPKG_THEME_MODE=1
+  _UPKG_OPERATION=clean
+  typeset -ga _UPKG_SUMMARY_ORDER
+  typeset -gA _UPKG_SUMMARY_STATE _UPKG_SUMMARY_DETAIL
+  _UPKG_SUMMARY_ORDER=(brew)
+  _UPKG_SUMMARY_STATE=(brew cancelled)
+  _UPKG_SUMMARY_DETAIL=(brew 'interrupted')
+  output=$(_upkg_print_summary)
+  [[ $output == *'0 cleaned'* && $output == *'1 cancelled'* && $output != *'1 failed'* && $output != *'0 ok'* ]] || exit 1
+  metadata=$(_ui_status_metadata cancelled)
+  [[ $metadata == *$'\tcancelled\t'* ]] || exit 1
+) || exit 1
+print 'ok: rich cancellation has its own aggregate bucket and preserves cleanup layout'

@@ -52,7 +52,7 @@ Fuzzy pickers share one rounded frame with unfilled input and footer rows, restr
 - Optional `cgm` credential storage through Linux Secret Service with exact-value scalar exports.
 - Shared themes for rich dashboards and every fzf entry point, with atomic session switching and read-only inspection through `ztheme` and deterministic plain-text fallbacks.
 
-Package previews avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, cancellation summaries, and cleanup effects.
+Package previews avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, distinct cancellation summaries, and cleanup effects.
 
 ## Requirements
 

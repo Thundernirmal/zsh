@@ -6,7 +6,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 | ID | Priority | Issue |
 | --- | --- | --- |
-| [ZSH-021](021-cancelled-counted-as-failed-in-rich-ui.md) | P2 | The rich summary counts cancelled managers as failed and loses the cleanup layout |
 | [ZSH-022](022-cgm-unset-delete-reject-attributed-scalars.md) | P1 — a user cannot remove a credential from the shell through the tool, and `cgm delete` can clear storage while leaving the value live | cgm unset and delete refuse attributed scalar credentials |
 | [ZSH-023](023-fzf-snapshot-cost-per-startup.md) | P2 | fzf activation snapshots every function and widget on each interactive startup |
 | [ZSH-024](024-cancellation-does-not-signal-children.md) | P2 | Cancellation traps do not signal the running package or evaluation children |

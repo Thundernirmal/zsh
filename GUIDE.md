@@ -757,6 +757,8 @@ Multi-manager runs continue after an ordinary backend failure. Cancellation stop
 
 Query diagnostics stay on stderr and are kept separate from package rows; a warning alone never counts as an available update. Arch status-1 checks with diagnostics remain failures rather than being treated as an empty successful check.
 
+Rich summaries count cancelled backends separately from failed backends and retain the cleanup operation layout.
+
 A partial, failed, or blocked selected backend makes the aggregate command return nonzero.
 
 APT checks use existing local metadata.
