@@ -462,7 +462,7 @@ esac
 
   write_fake paru '
 case "$*" in
-  "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
+  "-Qu") printf "%s\n" "ripgrep 14.1.0-1 -> 14.1.1-1" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
   "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
   *) exit 2 ;;
@@ -940,8 +940,8 @@ esac
   output=$(upkg plan --only=paru)
   cmd_status=$?
   assert_status "$cmd_status" 0 'paru plan succeeds when repo and AUR checks succeed' || return 1
-  assert_contains "$output" 'Repo updates:' 'paru plan includes repo updates' || return 1
-  assert_contains "$output" 'AUR updates:' 'paru plan includes AUR updates' || return 1
+  assert_contains "$output" 'ripgrep 14.1.0-1 -> 14.1.1-1' 'paru plan includes native repo results' || return 1
+  assert_contains "$output" 'yay-bin 12.4.2-1 -> 12.5.0-1' 'paru plan includes native AUR results' || return 1
 
   output=$(upkg upgrade --dry-run --only=npm)
   assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'dry-run previews npm instead of upgrading' || return 1
@@ -1037,7 +1037,7 @@ exit 1
 
   write_fake paru '
 case "$*" in
-  "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
+  "-Qu") printf "%s\n" "repo database is locked" >&2; exit 1 ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
   *) exit 2 ;;
 esac
@@ -1046,8 +1046,8 @@ esac
   output=$(upkg plan --only=paru 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'paru plan returns nonzero on repo check failure' || return 1
-  assert_contains "$output" 'Repo update check failed; continuing with AUR preview.' 'paru plan warns when repo preview fails' || return 1
-  assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when repo preview fails' || return 1
+  assert_contains "$output" 'repo database is locked' 'paru plan preserves native query failure' || return 1
+  assert_contains "$output" 'paru -Qu failed' 'paru plan summarizes native query failure' || return 1
 
   output=$(upkg upgrade --only=paru 2>&1)
   cmd_status=$?

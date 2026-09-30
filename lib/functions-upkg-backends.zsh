@@ -534,97 +534,28 @@ _upkg_run_outdated_pacman() {
 _upkg_run_outdated_paru() {
   emulate -L zsh
 
-  local pacman_output='' paru_output='' repo_error='' diagnostic=''
-  local pacman_rc=0 paru_rc=0
-  local had_updates=0 repo_failed=0
-
+  local output diagnostic rc
   _upkg_print_section paru
-
-  if command -v pacman >/dev/null 2>&1; then
-    _upkg_capture_query pacman -Qu
-    pacman_rc=$?
-    pacman_output=$_UPKG_QUERY_STDOUT
-    diagnostic=$_UPKG_QUERY_STDERR
-    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
-    _upkg_check_interrupt "$pacman_rc" || return $?
-
-    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "${pacman_output}${diagnostic}"; then
-      pacman_output=''
-    elif (( pacman_rc != 0 )); then
-      repo_failed=1
-      repo_error='pacman -Qu failed while checking paru repo updates'
-    fi
-  else
-    _upkg_capture_query paru -Qu
-    pacman_rc=$?
-    pacman_output=$_UPKG_QUERY_STDOUT
-    diagnostic=$_UPKG_QUERY_STDERR
-    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
-    _upkg_check_interrupt "$pacman_rc" || return $?
-
-    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "${pacman_output}${diagnostic}"; then
-      pacman_output=''
-    elif (( pacman_rc != 0 )); then
-      repo_failed=1
-      repo_error='paru -Qu failed'
-    fi
-  fi
-
-  _upkg_capture_query paru -Qua
-  paru_rc=$?
-  paru_output=$_UPKG_QUERY_STDOUT
+  print 'Configured Paru update inventory:'
+  _upkg_capture_query paru -Qu
+  rc=$?
+  output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
-  _upkg_check_interrupt "$paru_rc" || return $?
+  _upkg_check_interrupt "$rc" || return $?
 
-  if _upkg_arch_outdated_has_no_updates "$paru_rc" "${paru_output}${diagnostic}"; then
-    paru_output=''
-    paru_rc=0
-  fi
-
-  if (( repo_failed )); then
-    print 'Repo updates:'
-    if [ -n "$pacman_output" ]; then
-      print -r -- "$pacman_output"
-    else
-      print 'Repo update check failed.'
-    fi
-    print 'Repo update check failed; continuing with AUR preview.'
-  elif [ -n "$pacman_output" ]; then
-    print 'Repo updates:'
-    print -r -- "$pacman_output"
-    had_updates=1
-  fi
-
-  if (( paru_rc != 0 )); then
-    (( repo_failed || had_updates )) && print ''
-    print 'AUR updates:'
-    [ -n "$paru_output" ] && print -r -- "$paru_output"
-    if (( repo_failed )); then
-      _upkg_set_last_result 'failed' "$repo_error; paru -Qua failed"
-    else
-      _upkg_set_last_result 'failed' 'paru -Qua failed'
-    fi
-    return 1
-  fi
-
-  if [ -n "$paru_output" ]; then
-    (( repo_failed || had_updates )) && print ''
-    print 'AUR updates:'
-    print -r -- "$paru_output"
-    had_updates=1
-  elif (( repo_failed )); then
-    print ''
-    print 'AUR updates:'
+  if _upkg_arch_outdated_has_no_updates "$rc" "${output}${diagnostic}"; then
     print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+    return 0
   fi
-
-  if (( repo_failed )); then
-    _upkg_set_last_result 'failed' "$repo_error; AUR preview still shown"
+  if (( rc != 0 )); then
+    [[ -z $output ]] || print -r -- "$output"
+    _upkg_set_last_result 'failed' 'paru -Qu failed'
     return 1
   fi
-
-  if (( had_updates )); then
+  if [[ -n $output ]]; then
+    print -r -- "$output"
     _upkg_set_last_result 'updates available' ''
   else
     print 'No updates available.'

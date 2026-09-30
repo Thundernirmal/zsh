@@ -676,7 +676,7 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 | `apt` | `apt list --upgradable` | `apt -o APT::Update::Error-Mode=any update`, then `apt full-upgrade` |
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` |
 | `pacman` | `pacman -Qu` | `pacman -Syu` |
-| `paru` | repo check plus `paru -Qua` | `paru -Syu` |
+| `paru` | `paru -Qu` (configured scope) | `paru -Syu` |
 | `brew` | `brew outdated` | `brew upgrade` |
 | `flatpak` | `flatpak remote-ls --updates` | `flatpak update` |
 | `nix` | `npkg outdated` | `npkg upgrade` |
@@ -749,7 +749,7 @@ Query diagnostics stay on stderr and are kept separate from package rows; a warn
 
 A partial, failed, or blocked selected backend makes the aggregate command return nonzero.
 
-Distribution outdated checks use existing local metadata; `upkg` does not refresh it automatically. On Arch-family systems, an empty status-1 repo or AUR check is treated as no updates. A failed Paru repo check can still show AUR results but leaves the backend failed.
+Distribution outdated checks use existing local metadata; `upkg` does not refresh it automatically. On Arch-family systems, an empty status-1 repo or AUR check is treated as no updates. Paru queries and upgrades honor its configured package scope (`Mode`, `AurOnly`, `RepoOnly`, and PKGBUILD repositories) and configured pacman command. The wrapper does not force AUR or repo mode. Development-package commit checks follow Paru’s `Devel` setting; enable it in `paru.conf` when wanted.
 
 ### Examples
 

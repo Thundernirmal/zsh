@@ -7,6 +7,7 @@
 # APT reminders require successful metadata refresh before an upgrade.
 # Plan reminders describe an update inventory; native upgrades resolve transactions.
 # Update-check reminders preserve separate query diagnostics.
+# Paru reminders honor configured package scope and development checks.
 # DNF search reminders apply to both DNF4 and DNF5.
 # Cancellation stops later package managers and cleanup phases.
 # Manager-selection reminders expose every installed backend with explicit lists that reject empty IDs.

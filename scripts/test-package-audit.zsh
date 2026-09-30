@@ -294,3 +294,18 @@ print 'ok: every installed distro backend remains explicitly selectable'
   assert test -s "$scratch/search.stderr"
 ) || exit 1
 print 'ok: find and grep fallbacks preserve missing-path and invalid-pattern errors'
+
+(
+  export AUDIT_LOG="$scratch/paru-scope.log"
+  write_fake pacman 'printf "%s\n" "unexpected pacman $*" >> "$AUDIT_LOG"; exit 2'
+  write_fake paru 'printf "%s\n" "paru $*" >> "$AUDIT_LOG"; printf "%s\n" "$AUDIT_SCOPE"'
+  PATH="$scratch:$original_path"
+  for inventory in 'repo-only 1 -> 2' 'aur-only 1 -> 2' 'custom-devel 1 -> latest-commit'; do
+    export AUDIT_SCOPE=$inventory
+    : > "$AUDIT_LOG"
+    output=$(_upkg_run_outdated_paru) || exit 1
+    assert test "${output#*$inventory}" != "$output"
+    assert test "$(<"$AUDIT_LOG")" = 'paru -Qu'
+  done
+) || exit 1
+print 'ok: Paru inventories delegate configured scope to one native query'
