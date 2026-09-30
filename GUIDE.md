@@ -790,7 +790,7 @@ upkg clean --sudo --only=apt
 |---|---|
 | `npkg add <pkg ...>` / `install` / `i` | Add packages |
 | `npkg add` | Open the install picker |
-| `npkg find [query]` / `pick` / `fzf` | Open a seeded install picker |
+| `npkg find [--] [query ...]` / `pick` / `fzf` | Open a seeded install picker |
 | `npkg search <query>` / `s` | Plain nixpkgs search |
 | `npkg list` / `ls` | List the current profile |
 | `npkg remove <pkg ...>` / `rm` / `uninstall` / `delete` | Remove profile elements |
@@ -801,6 +801,10 @@ upkg clean --sudo --only=apt
 | `npkg help` | Show help |
 
 Bare install names become `nixpkgs#<name>`. Flake references, paths, and arguments beginning with `-` pass through without that expansion. Use `nix` directly for advanced flags not represented by the wrapper.
+
+`refresh`, `outdated`/`check`/`diff`, and `find`/`pick`/`fzf` handle `-h` or `--help` before any Nix query, cache access, or picker launch. Help returns zero. Refresh and outdated aliases accept no operands or profile flags; unsupported arguments fail before work. Picker aliases preserve query words, including leading dashes; `--` ends help recognition and is removed from the query, so `npkg find -- --help` searches for the literal word `--help`. A help word before `--` shows usage, even after other query words.
+
+Native `add`/`install`/`i`, `remove` aliases, `list`/`ls`, `search`/`s`, and `upgrade` aliases retain their argument forwarding. Their help flags go to native Nix and can have its normal initialization behavior.
 
 ### Picker cache and dependencies
 

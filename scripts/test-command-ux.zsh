@@ -239,6 +239,87 @@ test_extract_input_symlinks() {
   [[ -f $root/archive.data && -L $root/links/alias.tar.gz ]] || return 1
 }
 
+test_npkg_helper_arguments() (
+  _zsh_functions_load nix || return 1
+  local log_file="$tmp_dir/npkg-argument-calls" marker="$tmp_dir/npkg-cache-marker"
+  local output rc command_name flag expected
+  print -r -- untouched > "$marker"
+  _npkg_cache_dir() { print -r -- cache >> "$log_file"; print -r -- changed > "$marker"; }
+  _npkg_refresh_index() { print -r -- refresh >> "$log_file"; print -r -- changed > "$marker"; }
+  _npkg_outdated() { print -r -- outdated >> "$log_file"; print -r -- changed > "$marker"; }
+  _npkg_pick_installables() { print -r -- "picker:${(j:|:)@}" >> "$log_file"; }
+  _npkg_remove_picker() { print -r -- remove-picker >> "$log_file"; }
+  _npkg_nix() { print -r -- "native:${(j:|:)@}" >> "$log_file"; }
+  # Help/validation must work even when all external dependencies are absent.
+  local PATH=''
+  for command_name in refresh outdated check diff find pick fzf; do
+    for flag in -h --help; do
+      : > "$log_file"
+      output=$(npkg "$command_name" "$flag" 2>&1); rc=$?
+      assert_status "$rc" 0 "npkg $command_name honors $flag without dependencies" || return 1
+      assert_contains "$output" "Usage: npkg $command_name" 'helper help names its selected subcommand' || return 1
+      [[ ! -s $log_file && $(<"$marker") == untouched ]] || return 1
+      print -r -- "ok: npkg $command_name $flag does no Nix/cache/picker work"
+    done
+  done
+  for command_name in refresh outdated check diff; do
+    for flag in operand --unknown '--profile /fixture/other'; do
+      : > "$log_file"
+      output=$(npkg "$command_name" ${=flag} 2>&1); rc=$?
+      assert_status "$rc" 1 "npkg $command_name rejects unsupported arguments" || return 1
+      assert_contains "$output" 'accepts no operands' 'npkg rejects unsupported profile/operand input clearly' || return 1
+      [[ ! -s $log_file && $(<"$marker") == untouched ]] || return 1
+    done
+    : > "$log_file"
+    npkg "$command_name" >/dev/null || return 1
+    [[ $command_name == refresh ]] && expected=refresh || expected=outdated
+    [[ $(<"$log_file") == $expected ]] || return 1
+    print -r -- "ok: npkg $command_name invokes work only for valid no-operand input"
+    print -r -- untouched > "$marker"
+  done
+  for command_name in find pick fzf; do
+    : > "$log_file"
+    npkg "$command_name" alpha 'two words' -leading || return 1
+    [[ $(<"$log_file") == 'picker:alpha|two words|-leading' ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" -- --help -h 'two words' || return 1
+    [[ $(<"$log_file") == 'picker:--help|-h|two words' ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" alpha -- -- --help || return 1
+    [[ $(<"$log_file") == 'picker:alpha|--|--help' ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" alpha --help >/dev/null || return 1
+    [[ ! -s $log_file ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" || return 1
+    [[ $(<"$log_file") == 'picker:' ]] || return 1
+    print -r -- "ok: npkg $command_name preserves multiword/literal/leading-dash queries"
+  done
+  for command_name in add install i remove rm uninstall delete list ls search s upgrade up update; do
+    case $command_name in
+      add|install|i) expected='native:profile|add|--help' ;;
+      remove|rm|uninstall|delete) expected='native:profile|remove|--help' ;;
+      list|ls) expected='native:profile|list|--help' ;;
+      search|s) expected='native:search|--help' ;;
+      upgrade|up|update) expected='native:profile|upgrade|--help' ;;
+    esac
+    : > "$log_file"
+    npkg "$command_name" --help || return 1
+    [[ $(<"$log_file") == $expected ]] || return 1
+    print -r -- "ok: npkg $command_name preserves native help forwarding"
+  done
+  : > "$log_file"
+  npkg add bat 'github:example/flake#pkg' || return 1
+  [[ $(<"$log_file") == 'native:profile|add|nixpkgs#bat|github:example/flake#pkg' ]] || return 1
+  : > "$log_file"
+  npkg list --profile '/fixture/two words' || return 1
+  [[ $(<"$log_file") == 'native:profile|list|--profile|/fixture/two words' ]] || return 1
+  : > "$log_file"
+  npkg search 'two words' || return 1
+  [[ $(<"$log_file") == 'native:search|nixpkgs|two words' ]] || return 1
+  print 'ok: npkg native operands retain expansion, quoting, and profile forwarding'
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -246,6 +327,7 @@ main() {
   functions[_ui_plain_mode]='return 0'
 
   test_help || return 1
+  test_npkg_helper_arguments || return 1
   test_search_options || return 1
   test_network_timeouts || return 1
   test_extract_destination || return 1

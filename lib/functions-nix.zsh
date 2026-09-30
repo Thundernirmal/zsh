@@ -11,7 +11,7 @@
     print 'Commands:'
     print '  add [pkg ...]        Add package(s); with no args opens an fzf picker'
     print '  install [pkg ...]    Alias for add'
-    print '  find [query]         Fuzzy-pick nixpkgs attribute names and add selections'
+    print '  find [--] [query ...] Fuzzy-pick nixpkgs attributes and add selections'
     print '  search <query>       Run a plain nixpkgs search with descriptions'
     print '  list                 List packages in the current profile'
     print '  remove [pkg ...]     Remove package(s); with no args opens an fzf picker'
@@ -33,7 +33,29 @@
     print '  - npkg find searches a cached list of nixpkgs attribute names'
     print '  - npkg refresh and outdated need jq'
     print '  - Interactive add/find/remove needs jq and fzf 0.68.0+'
+    print '  - refresh/outdated/check/diff accept no operands; -h/--help shows usage'
+    print '  - find/pick/fzf recognizes -h/--help before --; after -- they are query text'
+    print '  - Native add/remove/list/search/upgrade arguments pass through as documented'
     print '  - Advanced nix flags can be passed through by calling nix directly'
+  }
+
+  _npkg_helper_usage() {
+    emulate -L zsh
+    case $1 in
+      refresh)
+        print 'Usage: npkg refresh [-h|--help]'
+        print 'Rebuild the cached nixpkgs attribute index. No operands are accepted.'
+        ;;
+      outdated|check|diff)
+        print -r -- "Usage: npkg $1 [-h|--help]"
+        print 'Compare installed and evaluated outputs in the current profile. No operands are accepted.'
+        ;;
+      find|pick|fzf)
+        print -r -- "Usage: npkg $1 [-h|--help] [--] [query ...]"
+        print 'Open the install picker with the supplied query words.'
+        print 'Use -- before a literal -h or --help query word.'
+        ;;
+    esac
   }
 
   _npkg_current_system() {
@@ -839,12 +861,42 @@
     emulate -L zsh
 
     local cmd=${1:-help}
-    local installable
-    local -a expanded
+    local installable argument
+    local literal_query=0
+    local -a expanded query_args
 
     if (( $# > 0 )); then
       shift
     fi
+
+    # Validate helper-owned arguments before cache/evaluation/picker work.
+    # Native passthrough commands keep their own option handling below.
+    case $cmd in
+      refresh|outdated|check|diff)
+        for argument in "$@"; do
+          case $argument in
+            -h|--help) _npkg_helper_usage "$cmd"; return 0 ;;
+          esac
+        done
+        if (( $# > 0 )); then
+          print -u2 -r -- "npkg $cmd: unsupported arguments; this command accepts no operands"
+          _npkg_helper_usage "$cmd" >&2
+          return 1
+        fi
+        ;;
+      find|pick|fzf)
+        for argument in "$@"; do
+          if (( ! literal_query )); then
+            case $argument in
+              --) literal_query=1; continue ;;
+              -h|--help) _npkg_helper_usage "$cmd"; return 0 ;;
+            esac
+          fi
+          query_args+=("$argument")
+        done
+        set -- "${query_args[@]}"
+        ;;
+    esac
 
     case $cmd in
       install|add|i)

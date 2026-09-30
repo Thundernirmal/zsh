@@ -336,11 +336,39 @@ printf "%s\n" "$0" >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/$tool"
   assert_equals "$(file_contents "$invocation_log")" '' 'completion module sourcing invokes no external tools' || return 1
 }
 
+test_npkg_helper_completion() (
+  local -a captured_specs words
+  local completion_command message
+  local cache_calls=0
+  _arguments() {
+    captured_specs=( "$@" )
+    state=argument
+    line=( "$completion_command" )
+    return 1
+  }
+  _message() { message=$1; }
+  _zsh_npkg_cached_packages() { (( cache_calls++ )); return 0; }
+  for completion_command in refresh outdated check diff; do
+    words=(npkg "$completion_command" '')
+    message=''
+    _zsh_npkg || return 1
+    assert_equals "$message" 'no operands; use -h or --help for usage' "npkg $completion_command completion explains helper arguments" || return 1
+    assert_equals "$cache_calls" 0 'no-operand completion does not read package cache' || return 1
+  done
+  for completion_command in find pick fzf; do
+    words=(npkg "$completion_command" '')
+    _zsh_npkg || return 1
+    [[ ${(j: :)captured_specs} == *'--[treat following words as literal picker query]'* ]] || return 1
+    print -r -- "ok: npkg $completion_command completion offers literal query separator"
+  done
+)
+
 main() {
   test_without_compinit || return 1
   test_registration || return 1
   test_zhelp_values || return 1
   test_static_values || return 1
+  test_npkg_helper_completion || return 1
   test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1
   test_cached_cgm_names || return 1

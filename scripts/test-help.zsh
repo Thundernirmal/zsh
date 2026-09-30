@@ -147,7 +147,7 @@ test_plain_rendering_and_availability() {
   assert_contains " ${(j: :)reply} " ' npkg ' '--all results include unavailable commands' || return 1
 
   output=$(zhelp --plain --all package)
-  assert_contains "$output" 'Manage the current Nix profile [needs nix; jq and fzf 0.68.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
+  assert_contains "$output" 'Manage Nix profiles; helper commands support --help [needs nix; jq and fzf 0.68.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
 
   output=$(zhelp --plain --all upkg)
   assert_contains "$output" 'upkg: Check, search, upgrade, and clean detected managers' 'exact lookup renders a concise command summary' || return 1

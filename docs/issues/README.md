@@ -1,16 +1,12 @@
 # Open issue reports
 
-This directory tracks the 1 unresolved findings from the 2026-09-30 full repository audit at commit `12e276a`. It describes defects and the behavior required after repair. Creating these reports does not fix the implementation or promise that no other defects exist.
+This directory contains unresolved defects and their repair requirements. Each report records evidence, affected commands, reproduction, expected behavior after the fix, and validation criteria. Use [TEMPLATE.md](TEMPLATE.md) for a consistent structure.
 
-Each report records its evidence, affected commands, reproduction, required behavior, and validation criteria. Completed findings and their audit evidence remain in Git history.
+There are currently no open issue reports. Completed reports and audit evidence remain in Git history; [GUIDE.md](../../GUIDE.md) describes current behavior.
 
 ## Issue index
 
-P1 indicates a high-priority safety-contract failure. P2 indicates a correctness or workflow failure needing repair. Priority does not establish that an exploit occurred.
-
-| ID | Priority | Issue | Affected surface |
-| --- | --- | --- | --- |
-| [ZSH-013](013-npkg-subcommand-help-and-arguments.md) | P2 | Nix helper subcommands perform work for help and ignore unsupported arguments | npkg refresh; npkg find/pick/fzf; npkg outdated/check/diff |
+Add unresolved reports here with their stable ID, priority, title, and affected surface. P1 indicates a high-priority safety-contract failure; P2 indicates a correctness or workflow failure needing repair. Priority does not establish that an exploit occurred.
 
 ## Report structure
 
@@ -46,6 +42,6 @@ Before marking a fix ready:
 
 ## Maintenance
 
-Keep only unresolved reports here. When an issue is fixed, verified, and reviewed, update current behavior in [GUIDE.md](../../GUIDE.md), remove its report and index row, and preserve the explanation and verification evidence in the fix commit. Completed audits and specifications belong in Git history under the repository maintenance rules. Update the count and evidence summary above when removing reports. Stable issue IDs must not be renumbered or reused.
+Keep only unresolved reports here. When an issue is fixed, verified, and reviewed, update current behavior in [GUIDE.md](../../GUIDE.md), remove its report and index row, and preserve the explanation and verification evidence in the fix commit. Completed audits and specifications belong in Git history under the repository maintenance rules. Update the index when adding or removing reports. Stable issue IDs must not be renumbered or reused.
 
 [README.md](../../README.md) is the project entrypoint; [GUIDE.md](../../GUIDE.md) is the user reference. These issue reports are repair requirements, rather than a replacement command reference.

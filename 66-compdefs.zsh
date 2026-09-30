@@ -195,9 +195,14 @@ if (( $+functions[compdef] )); then
   _zsh_npkg() {
     local context state state_descr line
     typeset -A opt_args
+    local -a picker_options
+    case ${words[2]-} in
+      find|pick|fzf) picker_options=('--[treat following words as literal picker query]') ;;
+    esac
 
     _arguments -C \
-      '(-h --help)'{-h,--help}'[show usage help]' \
+      '(-h --help)'{-h,--help}'[show helper usage or native Nix help]' \
+      "${picker_options[@]}" \
       '1:npkg command:->command' \
       '*:command argument:->argument' && return 0
 
@@ -218,6 +223,9 @@ if (( $+functions[compdef] )); then
             ;;
           upgrade|up|update)
             _message 'package name'
+            ;;
+          refresh|outdated|check|diff)
+            _message 'no operands; use -h or --help for usage'
             ;;
           *)
             _message 'no additional arguments'

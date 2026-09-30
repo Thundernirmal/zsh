@@ -99,14 +99,14 @@ fi
 
 if (( $+commands[nix] && $+commands[jq] )); then
   _zsh_tip_pool+=(
-    "Run npkg refresh to rebuild the nixpkgs attribute cache"
+    "Run npkg refresh --help for usage without rebuilding the attribute cache"
     "Run npkg outdated to check for Nix output changes"
   )
 fi
 
 if (( $+commands[nix] && $+commands[jq] )) && [[ ${_FZF_STATE:-blocked} == ready ]]; then
   _zsh_tip_pool+=(
-    "Run npkg find nvim to open a seeded package picker"
+    "Use npkg find -- --help to search for the literal --help query"
     "Run npkg outdated to check every active profile entry for output changes"
     "Run npkg remove with no arguments to select active installed packages"
   )

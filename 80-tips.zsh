@@ -10,6 +10,7 @@
 # Cleanup reminders require checking the summary for failed phases.
 # Package inventory reminders cover visible diagnostics and hidden Flatpak refs.
 # Git picker reminders keep display labels separate from canonical identities.
+# Nix helper reminders cover help before work and literal picker queries.
 # Package queries may use the network and write caches without changing packages.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
