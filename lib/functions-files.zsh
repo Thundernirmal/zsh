@@ -108,7 +108,8 @@ extract() {
     return 1
   fi
 
-  archive=${archive_arg:A}
+  # Normalize the operand without replacing a symlink with its target.
+  archive=${archive_arg:a}
   [[ -n $destination ]] && destination=${destination:A}
 
   case $archive in

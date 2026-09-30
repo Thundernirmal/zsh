@@ -17,6 +17,7 @@ _zsh_tip_pool=(
   "Use ff or ft stderr to diagnose failed searches on fallback backends"
   "Run ft <pattern> [path] to search file contents"
   "Run extract --keep file.gz to preserve the compressed input"
+  "Use extract --destination DIR link.gz to retain a compressed link target"
   "Use a nonempty existing directory with extract --destination DIR archive.tar.gz"
   "Use ff --no-ignore or ft --hidden --no-ignore to broaden a search"
   "Use ft --fixed-strings to search literal text"

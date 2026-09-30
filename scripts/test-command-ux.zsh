@@ -215,6 +215,30 @@ exit 7' > "$fakebin/gunzip"
   assert_status "${#leftovers}" 0 'failed decompression publishes no partial output and cleans staging files' || return 1
 }
 
+test_extract_input_symlinks() {
+  local root="$tmp_dir/input-links" rc
+  command mkdir -p -- "$root/links" "$root/dest" "$root/tar-source"
+  print -r -- linked-payload > "$root/payload"
+  command gzip -c -- "$root/payload" > "$root/target.gz"
+  command ln -s -- "$root/target.gz" "$root/links/alias.gz"
+  extract "$root/links/alias.gz" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 1 'native gunzip refuses default symlink extraction' || return 1
+  [[ -f $root/target.gz && -L $root/links/alias.gz && ! -e $root/links/alias ]] || return 1
+  print -- 'ok: default symlink extraction leaves target and link untouched'
+  extract --destination "$root/dest" "$root/links/alias.gz" || return 1
+  assert_file_contains "$root/dest/alias" linked-payload 'destination uses link filename and retains target' || return 1
+  [[ -f $root/target.gz && -L $root/links/alias.gz ]] || return 1
+  extract --keep "$root/links/alias.gz" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 1 'keep preserves native gzip symlink refusal' || return 1
+  [[ -f $root/target.gz && ! -e $root/links/alias ]] || return 1
+  print -r -- tar-payload > "$root/tar-source/member"
+  command tar -czf "$root/archive.data" -C "$root/tar-source" member
+  command ln -s -- "$root/archive.data" "$root/links/alias.tar.gz"
+  extract --destination "$root/dest" "$root/links/alias.tar.gz" || return 1
+  assert_file_contains "$root/dest/member" tar-payload 'archive link dispatch uses supplied suffix' || return 1
+  [[ -f $root/archive.data && -L $root/links/alias.tar.gz ]] || return 1
+}
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -227,6 +251,7 @@ main() {
   test_extract_destination || return 1
   test_extract_empty_destination || return 1
   test_extract_stream_safety || return 1
+  test_extract_input_symlinks || return 1
 }
 
 main "$@"
