@@ -10,6 +10,7 @@ _zsh_tip_pool=(
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
   "Run zdoctor after changing startup or cache settings to check integrations"
+  "Use plain scalars with cgm env; padding and case conversion are rejected"
   "Run ztheme use nord to switch dashboard and finder colors for this session"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"

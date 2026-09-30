@@ -378,6 +378,38 @@ test_env_suppresses_shell_tracing() {
   unset TRACE_TOKEN
 }
 
+test_env_rejects_transforming_attributes() {
+  local output_file="$tmp_dir/attributes.stdout" error_file="$tmp_dir/attributes.stderr"
+  local attr rc old_value old_kind
+  start_case attributes
+  print -nr -- new-normal > "$CGM_TEST_BACKEND_DIR/ATTRIBUTE_NORMAL"
+  print -nr -- SyntheticSecret > "$CGM_TEST_BACKEND_DIR/ATTRIBUTE_TOKEN"
+  _cgm_catalog_add ATTRIBUTE_NORMAL || return 1
+  _cgm_catalog_add ATTRIBUTE_TOKEN || return 1
+  for attr in L4 R4 Z4 u l; do
+    typeset -gx ATTRIBUTE_NORMAL=old-normal
+    typeset -g "-$attr" ATTRIBUTE_TOKEN=old
+    old_value=$ATTRIBUTE_TOKEN
+    old_kind=$parameters[ATTRIBUTE_TOKEN]
+    : > "$CGM_TEST_LOG"
+    cgm env ATTRIBUTE_NORMAL ATTRIBUTE_TOKEN > "$output_file" 2> "$error_file"; rc=$?
+    assert_status "$rc" 1 "env rejects transforming scalar -$attr" || return 1
+    assert_equals "$ATTRIBUTE_TOKEN" "$old_value" "-$attr rejection preserves value" || return 1
+    assert_equals "$parameters[ATTRIBUTE_TOKEN]" "$old_kind" "-$attr rejection preserves attributes" || return 1
+    assert_equals "$ATTRIBUTE_NORMAL" old-normal 'batch rejection preserves other variables' || return 1
+    assert_equals "$(file_contents "$CGM_TEST_LOG")" '' 'attribute rejection occurs before lookup' || return 1
+    assert_not_contains "$(file_contents "$error_file")" SyntheticSecret 'rejection does not expose fixture secret' || return 1
+    cgm env --all > "$output_file" 2> "$error_file"; rc=$?
+    assert_status "$rc" 1 "env --all rejects -$attr before lookup" || return 1
+    assert_equals "$(file_contents "$CGM_TEST_LOG")" '' 'env --all attribute rejection performs no lookup' || return 1
+    unset ATTRIBUTE_TOKEN
+  done
+  local ATTRIBUTE_TOKEN=old
+  cgm env ATTRIBUTE_TOKEN > "$output_file" 2> "$error_file" || return 1
+  assert_equals "$ATTRIBUTE_TOKEN" SyntheticSecret 'ordinary local scalar retains exact lookup bytes' || return 1
+  unset ATTRIBUTE_NORMAL
+}
+
 test_env_all_is_atomic() {
   local output_file="$tmp_dir/env-all.stdout"
   local error_file="$tmp_dir/env-all.stderr"
@@ -650,6 +682,7 @@ main() {
   test_set_validation_and_rollback || return 1
   test_env_literal_and_catalogue_repair || return 1
   test_env_suppresses_shell_tracing || return 1
+  test_env_rejects_transforming_attributes || return 1
   test_env_all_is_atomic || return 1
   test_env_rejects_unsafe_context_and_values || return 1
   test_env_all_validates_every_name_first || return 1
