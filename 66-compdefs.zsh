@@ -17,7 +17,7 @@ if (( $+functions[compdef] )); then
     'upgrade:Upgrade selected packages'
     'up:Alias for upgrade'
     'update:Alias for upgrade'
-    'plan:Preview available upgrades'
+    'plan:Inventory available updates'
     'clean:Remove unused packages and stale caches'
     'managers:Show detected managers and alternates'
     'help:Show usage help'
@@ -26,7 +26,7 @@ if (( $+functions[compdef] )); then
     '--only:Include comma-separated manager IDs'
     '--skip:Exclude comma-separated manager IDs'
     '--sudo:Authorize privileged upgrade and cleanup backends'
-    '--dry-run:Preview upgrades or cleanup without changing packages'
+    '--dry-run:Inventory updates or preview cleanup without changing packages'
     '--help:Show usage help'
   )
   typeset -ga _ZSH_EXTRACT_EXTENSIONS=(

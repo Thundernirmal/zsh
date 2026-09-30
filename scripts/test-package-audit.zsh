@@ -186,3 +186,17 @@ fi
   done
 ) || exit 1
 print 'ok: warning-only update checks stay current and Arch errors remain failures'
+(
+  _upkg_detect_managers() {
+    typeset -ga _UPKG_ACTIVE_MANAGERS=(brew)
+    typeset -ga _UPKG_ALTERNATE_MANAGERS=()
+  }
+  _upkg_run_outdated_brew() { _upkg_set_last_result 'up to date' ''; }
+  _upkg_run_upgrade_brew() { exit 99; }
+  for args in 'plan' 'upgrade --dry-run'; do
+    output=$(upkg ${=args} --only brew)
+    assert test "$?" -eq 0
+    assert test "${output#*Update inventory:}" != "$output"
+  done
+) || exit 1
+print 'ok: plan and upgrade dry-run identify inventory scope without invoking upgrades'

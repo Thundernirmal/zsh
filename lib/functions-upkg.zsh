@@ -10,7 +10,7 @@ _upkg_usage() {
     _ui_panel_kv 'outdated / check / list' 'Show outdated packages across detected managers' accent text
     _ui_panel_kv 'search <query>' 'Search package names across detected managers' accent text
     _ui_panel_kv 'upgrade / up / update' 'Run upgrades across selected managers' accent text
-    _ui_panel_kv 'plan' 'Preview available upgrades without changing packages' accent text
+    _ui_panel_kv 'plan' 'Inventory available updates without resolving transactions' accent text
     _ui_panel_kv 'clean' 'Remove unused packages and stale manager-owned caches' accent text
     _ui_panel_kv 'managers' 'Show detected managers and alternates' accent text
     _ui_panel_kv 'help' 'Show this help text' accent text
@@ -18,7 +18,7 @@ _upkg_usage() {
     _ui_panel_kv '--only <list>' 'Include comma-separated manager IDs' muted text
     _ui_panel_kv '--skip <list>' 'Exclude comma-separated manager IDs' muted text
     _ui_panel_kv '--sudo' 'Authorize privileged upgrade and cleanup backends' muted text
-    _ui_panel_kv '--dry-run' 'Preview upgrades or cleanup without changing packages' muted text
+    _ui_panel_kv '--dry-run' 'Inventory updates or preview cleanup without changing packages' muted text
     _ui_section_break
     _ui_panel_kv 'Managers' 'apt, dnf, pacman, paru, brew, flatpak, nix, npm' muted text
     _ui_panel_kv 'Preview' 'upkg plan --only brew,npm' muted text
@@ -37,7 +37,7 @@ _upkg_usage() {
   print '  upgrade             Run upgrades across selected managers'
   print '  up                  Alias for upgrade'
   print '  update              Alias for upgrade'
-  print '  plan                Preview available upgrades without changing packages'
+  print '  plan                Inventory available updates without resolving transactions'
   print '  clean               Remove unused packages and stale manager-owned caches'
   print '  managers            Show detected managers and alternates'
   print '  help                Show this help text'
@@ -46,7 +46,7 @@ _upkg_usage() {
   print '  --only <list>       Comma-separated manager IDs to include'
   print '  --skip <list>       Comma-separated manager IDs to exclude'
   print '  --sudo              Authorize privileged upgrade and cleanup backends'
-  print '  --dry-run           Preview upgrades or cleanup without changing packages'
+  print '  --dry-run           Inventory updates or preview cleanup without changing packages'
   print ''
   print 'Supported manager IDs:'
   print '  apt, dnf, pacman, paru, brew, flatpak, nix, npm'
@@ -55,7 +55,7 @@ _upkg_usage() {
   print '  upkg                                  # check for outdated packages'
   print '  upkg search ripgrep                  # compare package search matches'
   print '  upkg --only brew,npm                 # check selected managers'
-  print '  upkg plan                            # preview upgrades'
+  print '  upkg plan                            # inventory updates'
   print '  upkg upgrade --dry-run --only npm    # preview selected upgrades'
   print '  upkg upgrade --sudo --only apt       # run a privileged backend'
   print '  upkg clean --dry-run --only brew,npm # preview manager-owned cleanup'
@@ -1220,6 +1220,10 @@ upkg() {
   if [ "$cmd" = 'search' ]; then
     typeset -g -a _UPKG_SEARCH_ROWS
     _UPKG_SEARCH_ROWS=()
+  fi
+
+  if [[ $cmd == plan ]]; then
+    print 'Update inventory: dependency changes, replacements, removals, and conflicts are resolved by the native upgrade command.'
   fi
 
   run_order=( "${_UPKG_SELECTED_MANAGERS[@]}" )

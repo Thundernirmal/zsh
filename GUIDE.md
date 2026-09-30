@@ -360,7 +360,7 @@ zhelp --help
 
 The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. A plain listing that hides entries says how many are unavailable and points at `zhelp --all`. Exact names show usage, an example, and live availability.
 
-The catalogue also carries action entries for multi-step workflows: `upkg-plan` (preview upgrades), `npkg-remove` (remove a Nix package), and `cgm-env` (load credentials) resolve through their parent command, so they disappear together when the parent is unavailable.
+The catalogue also carries action entries for multi-step workflows: `upkg-plan` (inventory updates), `npkg-remove` (remove a Nix package), and `cgm-env` (load credentials) resolve through their parent command, so they disappear together when the parent is unavailable.
 
 In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. A CLI query only seeds the picker's search text; the whole eligible catalogue stays browsable, so clearing the query broadens results instead of trapping the selection in the pre-filtered rows. Piped or redirected search keeps the deterministic substring filter. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
@@ -650,7 +650,7 @@ When both `paru` and `pacman` exist, `paru` is active and `pacman` remains avail
 | `upkg` | Read-only outdated check |
 | `upkg outdated` / `check` / `list` | Same read-only check |
 | `upkg search <query>` | Search selected managers |
-| `upkg plan` | Preview available upgrades |
+| `upkg plan` | Inventory available updates without resolving a transaction |
 | `upkg upgrade` / `up` / `update` | Run selected upgrades |
 | `upkg clean` | Remove manager-classified unused or stale data |
 | `upkg managers` | Show active managers and alternates |
@@ -663,9 +663,11 @@ When both `paru` and `pacman` exist, `paru` is active and `pacman` remains avail
 | `--only <ids>` / `--only=<ids>` | Run only comma-separated manager IDs |
 | `--skip <ids>` / `--skip=<ids>` | Exclude comma-separated manager IDs |
 | `--sudo` | Authorize privileged distro upgrade or cleanup paths |
-| `--dry-run` | Preview upgrades or cleanup |
+| `--dry-run` | Inventory updates for upgrade, or preview cleanup |
 
 Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user. Empty or whitespace-only values for `--only` and `--skip` are rejected before any backend runs; an empty variable never expands the operation to every manager.
+
+`plan` and `upgrade --dry-run` run outdated queries. Their output explicitly identifies an update inventory: dependencies, replacements, removals, and conflicts are resolved later by the native upgrade command. Review the native transaction before confirming, especially APT `full-upgrade`, which may remove packages. Inventory and upgrade can also use different metadata snapshots.
 
 ### Check and upgrade backends
 

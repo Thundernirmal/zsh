@@ -196,8 +196,8 @@ exit 0' > "$fakebin/secret-tool"
 test_action_entries_and_browsing() {
   local output count eligible row_log fakebin="$tmp_dir/browse-fakebin" old_path=$PATH
 
-  _zsh_help_matches 'preview upgrades' 1
-  assert_equals "${(j: :)reply}" 'upkg-plan' 'action entries expose package previews by task' || return 1
+  _zsh_help_matches 'inventory available updates' 1
+  assert_equals "${(j: :)reply}" 'upkg-plan' 'action entries expose package inventories by task' || return 1
   _zsh_help_matches 'load credentials' 1
   assert_equals "${(j: :)reply}" 'cgm-env' 'action entries expose credential loading by task' || return 1
 
