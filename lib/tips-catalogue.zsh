@@ -119,7 +119,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Run upkg search ripgrep --only=dnf to search RPM package names"
     "Run upkg managers to show active and alternate backends"
     'Use upkg --only dnf to select DNF even when another distro backend is active'
-    "Run upkg outdated --only npm for a table independent of npm format settings"
+    "Run upkg outdated --only npm for a stable table and visible native warnings"
     "Run upkg plan to inventory updates; review the native upgrade transaction"
     "Run upkg clean --dry-run before package cleanup"
     "Use an online connection for package queries that refresh remote metadata"

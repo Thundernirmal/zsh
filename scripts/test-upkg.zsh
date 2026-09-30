@@ -1040,6 +1040,54 @@ esac
     done
   done
 
+  write_fake npm '
+case "$*" in
+  "outdated -g --depth=0 --json=false --parseable=false --color=false")
+    [ "$UPKG_TEST_NPM_STDOUT" = empty ] || printf "%s\n" "Package Current Wanted Latest Location" "eslint 8.0.0 8.1.0 9.0.0 global"
+    [ -z "$UPKG_TEST_NPM_DIAGNOSTIC" ] || printf "%s\n" "$UPKG_TEST_NPM_DIAGNOSTIC" >&2
+    exit "$UPKG_TEST_NPM_RC" ;;
+  *) exit 2 ;;
+esac
+'
+  local diagnostic native_rc inventory npm_case_dir="$tmp_prefix/npm-query"
+  local npm_case_stdout="$tmp_prefix/npm-query.stdout" npm_case_stderr="$tmp_prefix/npm-query.stderr"
+  command mkdir -p "$npm_case_dir"
+  for diagnostic in 'npm warn Unknown user config "example"' 'npm WARN deprecated config' $'npm notice Update available\nnpm notice Run npm install -g npm' 'npm error registry unavailable' 'unexpected query diagnostic'; do
+    for native_rc in 0 1 2 130; do
+      for inventory in empty updates; do
+        expected_status=1; expected_state=failed
+        if (( native_rc == 130 )); then
+          expected_status=130
+        elif (( native_rc == 0 )); then
+          expected_status=0
+          [[ $inventory == empty ]] && expected_state='up to date' || expected_state='updates available'
+        elif (( native_rc == 1 )) && [[ $inventory == updates && $diagnostic == 'npm '(warn|WARN|notice)* ]]; then
+          expected_status=0; expected_state='updates available'
+        fi
+        (
+          export TMPDIR=$npm_case_dir UPKG_TEST_NPM_STDOUT=$inventory UPKG_TEST_NPM_RC=$native_rc UPKG_TEST_NPM_DIAGNOSTIC=$diagnostic
+          _upkg_run_outdated_npm
+          local backend_status=$?
+          print -r -- "backend-state=$_UPKG_LAST_STATE"
+          exit $backend_status
+        ) >"$npm_case_stdout" 2>"$npm_case_stderr"
+        cmd_status=$?
+        assert_status "$cmd_status" "$expected_status" "npm diagnostic case $native_rc/$inventory preserves status" || return 1
+        assert_equals "$(<"$npm_case_stderr")" "$diagnostic" "npm diagnostic case $native_rc/$inventory preserves stderr" || return 1
+        if (( native_rc != 130 )); then
+          assert_contains "$(<"$npm_case_stdout")" "backend-state=$expected_state" "npm diagnostic case $native_rc/$inventory has correct state" || return 1
+        fi
+        assert_not_contains "$(<"$npm_case_stdout")" "$diagnostic" "npm diagnostics remain separate from package rows" || return 1
+        assert_equals "$(command ls -A "$npm_case_dir")" '' 'npm query capture is cleaned on every result' || return 1
+      done
+    done
+  done
+  output=$(export UPKG_TEST_NPM_STDOUT=empty UPKG_TEST_NPM_RC=130 UPKG_TEST_NPM_DIAGNOSTIC='npm warn interrupted'
+    run_upkg_with_managers 'npm brew' outdated --only=npm,brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 130 'npm cancellation propagates through manager loop' || return 1
+  assert_not_contains "$output" '==> Homebrew' 'npm cancellation stops subsequent managers' || return 1
+
   output=$(upkg --dry-run --only=flatpak)
   assert_contains "$output" 'org.example.App stable' 'bare dry-run previews selected managers' || return 1
 

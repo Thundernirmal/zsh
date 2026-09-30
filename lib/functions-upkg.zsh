@@ -596,6 +596,19 @@ _upkg_require_sudo_command() {
   return 1
 }
 
+_upkg_npm_diagnostics_are_benign() {
+  emulate -L zsh
+
+  local line
+  for line in ${(f)1}; do
+    [[ -z $line ]] && continue
+    # npm's logger prefixes every line, including multi-line notices. Unknown
+    # diagnostics remain failures when exit 1 accompanies a partial table.
+    [[ $line == 'npm '(warn|WARN|notice|NOTICE)([[:space:]]*|) ]] || return 1
+  done
+  return 0
+}
+
 _upkg_npm_outdated_looks_valid() {
   emulate -L zsh
 

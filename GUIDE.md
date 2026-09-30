@@ -688,7 +688,7 @@ APT refresh treats every repository error, including transient fetch errors, as 
 
 `apt`, `dnf`, and `pacman` upgrade paths require root or explicit `--sudo`. Paru also requires the explicit flag, but runs unprefixed so Paru controls privilege escalation. Homebrew and npm always remain unprefixed; an unwritable npm global prefix blocks the upgrade with a user-space setup hint.
 
-npm inventories explicitly select an uncolored table, overriding inherited JSON and parseable output preferences. Registry, authentication, and global-prefix settings remain native npm configuration. Empty successful output means up to date; unrecognized nonempty output fails the inventory.
+npm inventories explicitly select an uncolored table, overriding inherited JSON and parseable output preferences. Registry, authentication, and global-prefix settings remain native npm configuration. Empty successful output means up to date; unrecognized nonempty output fails the inventory. Native diagnostics remain on stderr. npm status 1 with a recognized table and only `npm warn`/`npm WARN` or `npm notice` diagnostics means updates available; error or unrecognized diagnostics keep that result failed.
 
 The Nix outdated and plan paths require `jq`; Nix upgrade does not. Nix cleanup depends on `nix-collect-garbage`, not `jq`.
 

@@ -698,26 +698,14 @@ _upkg_run_outdated_nix() {
 _upkg_run_outdated_npm() {
   emulate -L zsh
 
-  local stdout_file stderr_file stdout_output stderr_output rc
+  local stdout_output stderr_output rc
 
   _upkg_print_section npm
-
-  stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stdout.XXXXXX") || {
-    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
-    return 1
-  }
-  stderr_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stderr.XXXXXX") || {
-    command rm -f -- "$stdout_file"
-    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
-    return 1
-  }
-
-  command npm outdated -g --depth=0 --json=false --parseable=false --color=false >"$stdout_file" 2>"$stderr_file"
+  LC_ALL=C _upkg_capture_query npm outdated -g --depth=0 --json=false --parseable=false --color=false
   rc=$?
-
-  stdout_output=$(<"$stdout_file")
-  stderr_output=$(<"$stderr_file")
-  command rm -f -- "$stdout_file" "$stderr_file"
+  stdout_output=$_UPKG_QUERY_STDOUT
+  stderr_output=$_UPKG_QUERY_STDERR
+  [[ -z $stderr_output ]] || print -u2 -r -- "$stderr_output"
   _upkg_check_interrupt "$rc" || return $?
 
   case $rc in
@@ -730,25 +718,22 @@ _upkg_run_outdated_npm() {
         _upkg_set_last_result 'updates available' ''
       else
         print -r -- "$stdout_output"
-        [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
         _upkg_set_last_result 'failed' 'npm outdated returned unrecognized output'
         return 1
       fi
       ;;
     1)
-      if [ -z "$stderr_output" ] && _upkg_npm_outdated_looks_valid "$stdout_output"; then
+      if _upkg_npm_diagnostics_are_benign "$stderr_output" && _upkg_npm_outdated_looks_valid "$stdout_output"; then
         print -r -- "$stdout_output"
         _upkg_set_last_result 'updates available' ''
       else
         [ -n "$stdout_output" ] && print -r -- "$stdout_output"
-        [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
         _upkg_set_last_result 'failed' 'npm outdated -g failed'
         return 1
       fi
       ;;
     *)
       [ -n "$stdout_output" ] && print -r -- "$stdout_output"
-      [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
       _upkg_set_last_result 'failed' 'npm outdated -g failed'
       return 1
       ;;

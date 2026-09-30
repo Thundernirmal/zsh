@@ -8,7 +8,7 @@
 # Finder reminders include restarting after a blocked integration is repaired.
 # Navigation reminders include startup diagnostics after cache settings change.
 # Cleanup reminders require checking the summary for failed phases.
-# npm inventory reminders use the wrapper’s explicit table-format contract.
+# npm inventory reminders cover stable formatting and visible diagnostics.
 # Package queries may use the network and write caches without changing packages.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
