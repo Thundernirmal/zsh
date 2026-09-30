@@ -1,6 +1,7 @@
 # Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
 # Reminders cover native file semantics and search errors, package selection,
 # cancellation, configured Paru scope, metadata freshness, and cleanup previews.
+# Navigation reminders include startup diagnostics after cache settings change.
 # Package queries may use the network and write caches without changing packages.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}

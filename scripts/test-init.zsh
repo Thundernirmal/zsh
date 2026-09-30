@@ -1054,6 +1054,44 @@ printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }
   assert_equals "${#cache_files[@]}" 1 'cold startup creates one validated zoxide cache file' || return 1
 }
 
+test_zoxide_rejected_cache_directory() {
+  local case_dir="$tmp_home/zoxide-rejected-cache"
+  local fakebin="$case_dir/bin" cache_root="$case_dir/cache" shared="$case_dir/shared"
+  local fallback="$case_dir/fallback" output mode
+  local -a leftovers
+  command mkdir -p -- "$fakebin" "$cache_root/zsh" "$shared" "$fallback"
+  command ln -s -- "$shared" "$cache_root/zsh/zoxide"
+  print -r -- '#!/bin/sh
+printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }"
+[ "$ZOXIDE_TEST_MODE" = runtime ] && printf "%s\n" "return 1"
+exit 0' > "$fakebin/zoxide"
+  command chmod +x -- "$fakebin/zoxide"
+  for mode in success runtime; do
+    output=$(ZOXIDE_TEST_MODE=$mode XDG_CACHE_HOME="$cache_root" TMPDIR="$fallback" \
+      PATH="$fakebin:${zsh_bin:h}" "$zsh_bin" -fc '
+        source "$1/30-zoxide.zsh"
+        _zsh_zoxide_cache_file_for_path "${commands[zoxide]:A}"
+        [[ -e $REPLY ]] || print missing
+        print -r -- "z=$+functions[z]"
+        # A rejected directory must never be used for failure cleanup either.
+        print -r -- sentinel >| "$REPLY"
+        source "$1/30-zoxide.zsh"
+        print -r -- "sentinel=$(<$REPLY)"
+      ' zsh "$repo_dir" 2>/dev/null)
+    assert_status "$?" 0 "$mode rejected cache fixture completes" || return 1
+    assert_contains "$output" missing "$mode does not publish in rejected directory" || return 1
+    if [[ $mode == success ]]; then
+      assert_contains "$output" 'z=1' 'private fallback initializes valid integration' || return 1
+    else
+      assert_contains "$output" 'z=0' 'failed private fallback rolls back integration' || return 1
+    fi
+    assert_contains "$output" 'sentinel=sentinel' "$mode leaves rejected cache files untouched" || return 1
+    leftovers=( "$fallback"/*(N) )
+    assert_equals "${#leftovers}" 0 "$mode removes fallback files" || return 1
+    command rm -f -- "$shared"/*(N)
+  done
+}
+
 main() {
   local -a high_risk_aliases
   local high_risk_alias_setup
@@ -1077,6 +1115,7 @@ main() {
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
   test_zoxide_persistent_startup_cache || return 1
+  test_zoxide_rejected_cache_directory || return 1
   test_glob_policy || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1

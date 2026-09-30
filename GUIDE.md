@@ -474,7 +474,7 @@ Zoxide initialization supports `NO_UNSET` even before `precmd_functions` or `chp
 
 The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets without replacing zoxide's scoring or candidate generation.
 
-Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata and Zsh version, so warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead.
+Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata and Zsh version, so warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead. A rejected cache directory is never used for publication or failure cleanup; private fallback files are removed after activation.
 
 ### fzf requirement and startup
 

@@ -126,7 +126,7 @@ if (( $+commands[zoxide] )); then
   if (( _zsh_zoxide_had_chpwd_functions )); then
     _zsh_zoxide_saved_chpwd_functions=( "${chpwd_functions[@]}" )
   fi
-  integer _zsh_zoxide_init_status
+  integer _zsh_zoxide_init_status _zsh_zoxide_persistent=0
   if _zsh_zoxide_cache_file_for_path "$_zsh_zoxide_path"; then
     _zsh_zoxide_cache_file=$REPLY
   fi
@@ -134,6 +134,7 @@ if (( $+commands[zoxide] )); then
   if [[ -n $_zsh_zoxide_cache_file ]] &&
     _zsh_zoxide_cache_file_is_safe "$_zsh_zoxide_cache_file" &&
     _zsh_zoxide_cache_header_matches "$_zsh_zoxide_cache_file" "$_zsh_zoxide_path"; then
+    _zsh_zoxide_persistent=1
     _zsh_zoxide_activate_file "$_zsh_zoxide_cache_file" "$_zsh_zoxide_path"
     _zsh_zoxide_init_status=$?
   else
@@ -146,6 +147,7 @@ if (( $+commands[zoxide] )); then
         if command mkdir -p -- "$_zsh_zoxide_cache_dir" 2>/dev/null &&
           [[ -d $_zsh_zoxide_cache_dir && -O $_zsh_zoxide_cache_dir && ! -L $_zsh_zoxide_cache_dir ]] &&
           command chmod 700 -- "$_zsh_zoxide_cache_dir" 2>/dev/null; then
+          _zsh_zoxide_persistent=1
           _zsh_zoxide_temp_file=$(command mktemp "$_zsh_zoxide_cache_dir/.integration.XXXXXX" 2>/dev/null)
         fi
       fi
@@ -172,8 +174,8 @@ if (( $+commands[zoxide] )); then
         fi
 
         if (( _zsh_zoxide_init_status == 0 )); then
-          if [[ -n $_zsh_zoxide_cache_file ]] &&
-            command mv -f -- "$_zsh_zoxide_temp_file" "$_zsh_zoxide_cache_file" 2>/dev/null; then
+          if (( _zsh_zoxide_persistent )) &&
+            command mv -fT -- "$_zsh_zoxide_temp_file" "$_zsh_zoxide_cache_file" 2>/dev/null; then
             _zsh_zoxide_temp_file=''
             _zsh_zoxide_activate_file "$_zsh_zoxide_cache_file" "$_zsh_zoxide_path"
           else
@@ -190,7 +192,7 @@ if (( $+commands[zoxide] )); then
   fi
 
   [[ -n $_zsh_zoxide_temp_file ]] && command rm -f -- "$_zsh_zoxide_temp_file"
-  if (( _zsh_zoxide_init_status != 0 )) && [[ -n $_zsh_zoxide_cache_file ]]; then
+  if (( _zsh_zoxide_init_status != 0 && _zsh_zoxide_persistent )); then
     command rm -f -- "$_zsh_zoxide_cache_file" 2>/dev/null
   fi
 
@@ -234,7 +236,7 @@ if (( $+commands[zoxide] )); then
 
   unset _zsh_zoxide_init_output _zsh_zoxide_init_status _zsh_zoxide_path \
     _zsh_zoxide_cache_file _zsh_zoxide_cache_dir _zsh_zoxide_temp_file \
-    _zsh_zoxide_zsh_path \
+    _zsh_zoxide_zsh_path _zsh_zoxide_persistent \
     _zsh_zoxide_function_name _zsh_zoxide_function_names \
     _zsh_zoxide_saved_functions _zsh_zoxide_had_functions \
     _zsh_zoxide_saved_precmd_functions _zsh_zoxide_saved_chpwd_functions \
