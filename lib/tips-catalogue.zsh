@@ -11,7 +11,7 @@ _zsh_tip_pool=(
   "Run zhelp to find a command and queue an editable example"
   "Run zdoctor after startup changes; restart after repairing a blocked fzf"
   "Use plain scalars with cgm env; padding and case conversion are rejected"
-  "Run ztheme use nord to switch dashboard and finder colors for this session"
+  "Use ztheme show custom to inspect; ztheme use custom applies the palette"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"

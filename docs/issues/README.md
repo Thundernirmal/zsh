@@ -1,8 +1,8 @@
 # Open issue reports
 
-This directory tracks the 8 unresolved findings from the 2026-09-30 full repository audit at commit `12e276a`. It describes defects and the behavior required after repair. Creating these reports does not fix the implementation or promise that no other defects exist.
+This directory tracks the 7 unresolved findings from the 2026-09-30 full repository audit at commit `12e276a`. It describes defects and the behavior required after repair. Creating these reports does not fix the implementation or promise that no other defects exist.
 
-The audit covered startup, aliases, lazy loading, file/system/Git/package commands, Nix, credentials, themes, help, completion, documentation, and CI. The complete regression runner and four real fzf terminal cases passed at the audited baseline. The findings identify behavior not covered by those passing tests. 7 reports have reproduced evidence; ZSH-012 is established by the official Flatpak manual and upstream filtering code. A review subagent independently checked the findings.
+The audit covered startup, aliases, lazy loading, file/system/Git/package commands, Nix, credentials, themes, help, completion, documentation, and CI. The complete regression runner and four real fzf terminal cases passed at the audited baseline. The findings identify behavior not covered by those passing tests. 6 reports have reproduced evidence; ZSH-012 is established by the official Flatpak manual and upstream filtering code. A review subagent independently checked the findings.
 
 ## Issue index
 
@@ -10,7 +10,6 @@ P1 means a high-priority safety-contract failure: unsafe generated-code activati
 
 | ID | Priority | Issue | Affected surface |
 | --- | --- | --- | --- |
-| [ZSH-006](006-custom-theme-state-mutation.md) | P2 | Custom-theme inspection and failed switching mutate the active palette | ztheme show custom; ztheme use custom; ztheme export custom |
 | [ZSH-007](007-pacman-clean-query-errors.md) | P2 | Pacman cleanup classifies orphan-query errors as successful cleanup | upkg clean --only pacman |
 | [ZSH-008](008-npm-outdated-output-format.md) | P2 | Configured npm output formats break update inventory | upkg outdated --only npm; npm update inventory |
 | [ZSH-009](009-npm-outdated-diagnostics.md) | P2 | npm inventory drops success warnings and rejects valid warned results | upkg outdated --only npm; npm update inventory |

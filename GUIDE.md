@@ -255,7 +255,7 @@ ztheme reset                # restore the terminal theme now
 ztheme export nord          # print settings to copy into ~/.zshrc
 ```
 
-`use` and `reset` affect only the current shell session and refresh future fzf and zoxide picker launches; a picker that is already open is unchanged. `use` switches the dashboard palette and preserves an explicit `ZSH_FZF_THEME` fzf-only override, so a deliberate finder choice survives unrelated dashboard switches. `reset` restores the default `terminal` theme and clears any such override so fzf inherits the UI theme again. Invalid names and invalid custom palettes return nonzero without changing the active theme or finder exports.
+`use` and `reset` affect only the current shell session and refresh future fzf and zoxide picker launches; a picker that is already open is unchanged. `use` switches the dashboard palette and preserves an explicit `ZSH_FZF_THEME` fzf-only override, so a deliberate finder choice survives unrelated dashboard switches. `reset` restores the default `terminal` theme and clears any such override so fzf inherits the UI theme again. Inspection with `show` or `export` does not change the active custom palette. Invalid names, invalid custom palettes, and failed finder refreshes return nonzero while preserving the committed palette, selectors, finder exports, and signatures. Edited `ZSH_UI_CUSTOM_COLORS` remain a proposal until a switch succeeds.
 
 To persist a built-in choice, copy the output of `ztheme export <name>` above the `source init.zsh` line in the machine-local `~/.zshrc`. The command prints text only and never edits that file. Exporting a validated `custom` theme also prints its complete role array in stable order.
 
