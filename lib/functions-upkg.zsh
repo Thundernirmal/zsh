@@ -440,10 +440,7 @@ _upkg_capture_query() {
     return 1
   }
   {
-    trap 'return 130' INT
-    trap 'return 143' TERM
-    trap 'return 129' HUP
-    command "$@" >"$capture_dir/stdout" 2>"$capture_dir/stderr"
+    _zsh_run_owned_query command "$@" >"$capture_dir/stdout" 2>"$capture_dir/stderr"
     rc=$?
     _UPKG_QUERY_STDOUT=$(<"$capture_dir/stdout")
     _UPKG_QUERY_STDERR=$(<"$capture_dir/stderr")

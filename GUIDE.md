@@ -128,6 +128,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 | `tree` | `lt` and directory previews when `lsd` is absent | Preview uses `ls`; `lt` is unavailable without `lsd` or `tree` |
 | `fd` / `fdfind` | Faster `ff` search | GNU `find` |
 | `rg` | Faster `ft` content search | Recursive `grep` |
+| `setsid` (util-linux) | Isolated captured package queries | Queries report a missing prerequisite; other commands remain available |
 | `jq` | `npkg refresh`, `npkg outdated`, and Nix pickers | Those workflows are unavailable; basic Nix commands still work |
 | `secret-tool` | Defines `cgm` | The entire module is skipped |
 | `gdbus` | Explicit `cgm check` backend health probe | Health check explains the missing GLib tool; storage and loading still work |
@@ -832,7 +833,7 @@ A change is not necessarily an upgrade. It can be a downgrade, rebuild, changed 
 
 A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active elements is a complete zero-count result. Active store-path-only entries or entries without an evaluable flake source/attribute are reported as unknown instead of being silently excluded. Pinned flake references remain pinned: `npkg upgrade` cannot advance their revision, and their evaluated identity can correctly remain current. Reinstall from an unlocked reference only when changing that pin is intentional.
 
-Ctrl+C stops and reaps only the command's recorded evaluation workers, removes its temporary files, preserves unrelated background jobs, and returns `130`. The `upkg` Nix bridge consumes the stable internal `current`, `changed`, or `partial` state rather than matching display text.
+For `npkg outdated`, INT, TERM, and HUP stop owned evaluation workers and their descendants, remove temporary files, preserve unrelated background jobs, and return `130`, `143`, and `129` respectively. Captured package queries run in private sessions using `setsid` (util-linux). A trusted supervisor remains alive through group termination and escalation, including children forked during shutdown. Linux `/proc` verifies the supervisor identity; signals sent only to the wrapper are forwarded to its owned session. Shared Nix daemon processes and children that deliberately detach into another session or process group are outside this ownership boundary. The `upkg` Nix bridge consumes the stable internal `current`, `changed`, or `partial` state rather than matching display text.
 
 ## Gotchas and safety boundaries
 

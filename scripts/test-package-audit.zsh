@@ -71,6 +71,7 @@ print 'ok: cancellation stops managers and cleanup phases while ordinary errors 
   _zsh_functions_load_domain nix || exit 1
   write_fake jq 'exit 0'
   PATH="$scratch:$original_path"
+  _zsh_run_owned_query() { "$@"; }
   _npkg_nix() { return "$AUDIT_RC"; }
   _upkg_detect_managers() {
     typeset -ga _UPKG_ACTIVE_MANAGERS=(nix brew)
@@ -88,6 +89,7 @@ print 'ok: cancelled Nix profile queries stop later package managers'
 if command -v jq >/dev/null 2>&1; then
   (
     _zsh_functions_load_domain nix || exit 1
+    _zsh_run_owned_query() { "$@"; }
     _npkg_nix() {
       print -r -- '{"elements":{"pkg":{"active":true,"originalUrl":"nixpkgs","url":"github:NixOS/nixpkgs/rev","attrPath":"packages.test.pkg","storePaths":["/nix/store/pkg"]}}}'
     }
@@ -136,6 +138,7 @@ print 'ok: DNF4/5 search distinguishes packages, diagnostics, no matches, and fa
 if command -v jq >/dev/null 2>&1; then
   (
     _zsh_functions_load_domain nix || exit 1
+    _zsh_run_owned_query() { "$@"; }
     _npkg_nix() { print -r -- "$AUDIT_PROFILE"; }
     _npkg_eval_installable_record() { print -r -- '{"paths":["/nix/store/pkg"],"version":"1"}'; }
     inactive='{"active":false,"originalUrl":"nixpkgs","attrPath":"packages.test.inactive","storePaths":[]}'
@@ -236,6 +239,7 @@ print 'ok: root and sudo APT upgrades require a successful strict refresh'
 if command -v jq >/dev/null 2>&1; then
   (
     _zsh_functions_load_domain nix || exit 1
+    _zsh_run_owned_query() { "$@"; }
     _npkg_nix() { print -r -- "$AUDIT_PROFILE"; }
     _npkg_eval_installable_record() { print -r -- '{"paths":["/nix/store/current"],"version":"1"}'; }
     AUDIT_PROFILE='{"elements":{"custom":{"active":true,"originalUrl":"github:example/custom","url":"github:example/custom/rev","attrPath":"packages.test.custom","storePaths":["/nix/store/old"]},"unsupported":{"active":true,"storePaths":["/nix/store/local"]}}}'
@@ -315,7 +319,7 @@ print 'ok: Paru inventories delegate configured scope to one native query'
 (
   refresh_dir="$scratch/arch-refresh"
   command mkdir "$refresh_dir"
-  for tool in mktemp rm; do
+  for tool in mktemp rm setsid; do
     command ln -s "$(command -v "$tool")" "$refresh_dir/$tool"
   done
   export AUDIT_LOG="$scratch/arch-refresh.log"
@@ -594,3 +598,101 @@ print 'ok: cancelled search summaries retain results and count attempted backend
   [[ $metadata == *$'\tcancelled\t'* ]] || exit 1
 ) || exit 1
 print 'ok: rich cancellation has its own aggregate bucket and preserves cleanup layout'
+
+# Reaped workers must leave the cancellation set before a later worker cancels.
+(
+  _zsh_functions_load_domain nix || exit 1
+  local -a job_pids=(9001 9002 9003)
+  local -A job_identities=(9001 first 9002 second 9003 third)
+  integer interrupted=0
+  local signalled=''
+  wait() { [[ $1 == 9002 ]] && return 130; return 0; }
+  _zsh_stop_owned_jobs() { signalled="${(j: :)@}"; }
+  _npkg_wait_workers
+  assert test "$signalled" = 9003
+  assert test "${#job_pids}" -eq 0
+  assert test "${#job_identities}" -eq 0
+  assert test "$interrupted" -eq 130
+) || exit 1
+print 'ok: completed workers leave the cancellation ownership set immediately'
+
+# Signals target only the wrapper PID; no terminal/group signal reaches children.
+(
+  zmodload zsh/system || exit 1
+  zmodload zsh/zselect || exit 1
+  _zsh_functions_load_domain nix || exit 1
+  signal_dir="$scratch/owned-signals"
+  command mkdir "$signal_dir"
+  print -r -- '#!/bin/sh
+sleep 30 &
+child=$!
+trap '\''sleep 30 & late=$!; printf "%s\n" "$late" >> "$AUDIT_OWNED_PIDS"; wait "$child" 2>/dev/null; exit 143'\'' TERM
+printf "%s %s\n" "$$" "$child" > "$AUDIT_OWNED_PIDS"
+wait "$child"' > "$signal_dir/backend"
+  command chmod +x "$signal_dir/backend"
+  command mkdir "$signal_dir/bin"
+  command cat > "$signal_dir/bin/nix" <<'NIX_FIXTURE'
+#!/bin/sh
+shift 2
+if [ "$AUDIT_SIGNAL_MODE" = profile ] || [ "$1" = eval ]; then
+  exec sh "$AUDIT_SIGNAL_BACKEND"
+fi
+printf '%s\n' '{"elements":{"sample":{"originalUrl":"nixpkgs","attrPath":"legacyPackages.test.sample","storePaths":["/nix/store/sample"],"outputs":null}}}'
+NIX_FIXTURE
+  command chmod +x "$signal_dir/bin/nix"
+  for mode in query profile evaluation; do
+    [[ $mode == query ]] || command -v jq >/dev/null 2>&1 || continue
+    for signal in INT TERM HUP; do
+      case $signal in INT) expected=130 ;; TERM) expected=143 ;; HUP) expected=129 ;; esac
+      case_dir="$signal_dir/$mode-$signal"
+      command mkdir "$case_dir"
+      export AUDIT_OWNED_PIDS="$case_dir/pids"
+      (
+        emulate -L zsh
+        setopt localtraps NO_MONITOR
+        local unrelated_pid rc process_state proc_text child_pid
+        local -a child_pids fields leftovers
+        integer alive=0 running=0
+        command sleep 30 &
+        unrelated_pid=$!
+        trap 'builtin kill -TERM "$unrelated_pid" 2>/dev/null; wait "$unrelated_pid" 2>/dev/null' EXIT
+        export TMPDIR=$case_dir
+        unfunction _zsh_run_owned_query 2>/dev/null
+        source "$repo_dir/lib/functions-common.zsh"
+        export AUDIT_SIGNAL_MODE=$mode AUDIT_SIGNAL_BACKEND="$signal_dir/backend"
+        export PATH="$signal_dir/bin:$PATH"
+        if [[ $mode == query ]]; then
+          _upkg_capture_query sh "$signal_dir/backend"
+        else
+          _npkg_outdated >/dev/null 2>&1
+        fi
+        rc=$?
+        builtin kill -0 "$unrelated_pid" 2>/dev/null && alive=1
+        child_pids=( ${=$(<"$AUDIT_OWNED_PIDS")} )
+        for child_pid in "${child_pids[@]}"; do
+          [[ -r /proc/$child_pid/stat ]] || continue
+          proc_text=$(</proc/$child_pid/stat); fields=( ${=${proc_text##*\) }} )
+          [[ ${fields[1]-} == Z ]] || (( running++ ))
+        done
+        leftovers=( "$case_dir"/zsh-query-owner.*(N) "$case_dir"/upkg-query.*(N) "$case_dir"/npkg-profile.*(N) "$case_dir"/npkg-outdated.*(N) )
+        print -r -- "rc=$rc unrelated=$alive running=$running leftovers=${#leftovers}" > "$case_dir/result"
+      ) >"$case_dir/stdout" 2>"$case_dir/stderr" &
+      harness_pid=$!
+      integer ticks=0
+      while [[ ! -s $AUDIT_OWNED_PIDS ]] && (( ticks++ < 300 )); do zselect -t 1; done
+      [[ -s $AUDIT_OWNED_PIDS ]] || { _zsh_stop_owned_jobs "$harness_pid"; wait "$harness_pid"; exit 1; }
+      builtin kill -s "$signal" "$harness_pid" || exit 1
+      ticks=0
+      while [[ ! -s $case_dir/result ]] && (( ticks++ < 300 )); do zselect -t 1; done
+      if [[ ! -s $case_dir/result ]]; then
+        _zsh_stop_owned_jobs "$harness_pid"
+        wait "$harness_pid" 2>/dev/null
+        print -u2 -r -- "not ok: $mode $signal cancellation did not finish promptly"
+        exit 1
+      fi
+      wait "$harness_pid" 2>/dev/null
+      assert test "$(<"$case_dir/result")" = "rc=$expected unrelated=1 running=0 leftovers=0"
+    done
+  done
+) || exit 1
+print 'ok: wrapper INT/TERM/HUP stop owned query/profile/evaluation descendants only'

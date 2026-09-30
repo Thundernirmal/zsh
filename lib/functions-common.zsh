@@ -310,3 +310,80 @@ if ! (( $+functions[_ui_visible_count] )); then
   }
 fi
 
+# Workers own their native query sessions and perform their own shutdown.
+_zsh_stop_owned_jobs() {
+  emulate -L zsh
+  zmodload zsh/system || return 1
+  local pid stat_text expected
+  local -a fields
+  for pid in "$@"; do
+    [[ $pid == <-> && -r /proc/$pid/stat ]] || continue
+    stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+    [[ ${fields[2]-} == "$sysparams[pid]" && ${fields[1]-} != Z ]] || continue
+    expected=${job_identities[$pid]-}
+    [[ -z $expected || ${fields[20]-} == "$expected" ]] || continue
+    builtin kill -TERM "$pid" 2>/dev/null
+  done
+  return 0
+}
+
+# A live supervisor pins the process-group identity through TERM and KILL.
+_zsh_stop_owned_group() {
+  emulate -L zsh
+  local pid=$1 identity=$2 stat_text
+  local -a fields
+  [[ $pid == <-> && -r /proc/$pid/stat ]] || return 0
+  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  [[ ${fields[3]-} == "$pid" && ${fields[4]-} == "$pid" && ${fields[20]-} == "$identity" ]] || return 0
+  builtin kill -TERM -- "-$pid" 2>/dev/null
+  (( $3 )) && zselect -t 10
+  builtin kill -KILL -- "-$pid" 2>/dev/null
+  return 0
+}
+
+# Captured queries have a private session, including children forked during TERM.
+_zsh_run_owned_query() {
+  emulate -L zsh
+  setopt localtraps NO_MONITOR
+  local control_dir='' launcher_pid='' owner_pid='' identity='' command_status=1 signal_status=0
+  local shell_executable
+  local -a record
+  integer ticks=0
+  if ! zmodload zsh/system || ! zmodload zsh/zselect || [[ ! -r /proc/$sysparams[pid]/stat ]] || ! command -v setsid >/dev/null 2>&1; then
+    print -u2 -r -- 'Captured package queries require Linux /proc, Zsh system/zselect, and setsid (util-linux).'
+    return 1
+  fi
+  shell_executable="/proc/$sysparams[pid]/exe"
+  control_dir=$(command mktemp -d "${TMPDIR:-/tmp}/zsh-query-owner.XXXXXXXX") || return 1
+  trap '(( signal_status )) || signal_status=130' INT
+  trap '(( signal_status )) || signal_status=143' TERM
+  trap '(( signal_status )) || signal_status=129' HUP
+  {
+    command setsid --wait "$shell_executable" -df "$_ZSH_FUNCTIONS_MODULE_DIR/lib/query-supervisor.zsh" "$control_dir" "$@" &
+    launcher_pid=$!
+    while [[ ! -s $control_dir/identity ]] && (( ticks++ < 300 )); do
+      builtin kill -0 "$launcher_pid" 2>/dev/null || break
+      zselect -t 1
+    done
+    if [[ -s $control_dir/identity ]]; then
+      record=( ${=$(<"$control_dir/identity")} )
+      owner_pid=${record[1]-}; identity=${record[2]-}
+      while [[ ! -s $control_dir/status ]] && (( ! signal_status )); do
+        builtin kill -0 "$launcher_pid" 2>/dev/null || break
+        zselect -t 1
+      done
+      [[ ! -s $control_dir/status ]] || command_status=$(<"$control_dir/status")
+      [[ $command_status == <-> && $command_status -le 255 ]] || command_status=1
+    fi
+  } always {
+    if [[ -n $owner_pid ]]; then
+      _zsh_stop_owned_group "$owner_pid" "$identity" "$signal_status"
+    elif [[ -n $launcher_pid ]]; then
+      builtin kill -TERM "$launcher_pid" 2>/dev/null
+    fi
+    [[ -z $launcher_pid ]] || wait "$launcher_pid" 2>/dev/null
+    command rm -rf -- "$control_dir"
+  }
+  (( ! signal_status )) || command_status=$signal_status
+  return "$command_status"
+}

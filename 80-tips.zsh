@@ -2,7 +2,7 @@
 # Extraction preserves native input-link handling.
 # Extraction reminders require an existing, nonempty destination directory.
 # Reminders cover native file semantics and search errors, package selection,
-# cancellation summaries and completed search results, configured Paru scope, metadata freshness, and cleanup previews.
+# cancellation summaries, private-session query cleanup, and completed search results, configured Paru scope, metadata freshness, and cleanup previews.
 # Credential reminders distinguish exact-value scalar exports from scalar removal.
 # Theme reminders distinguish inspecting a palette from applying it.
 # Finder activation tolerates stale widget names while preserving bindings.

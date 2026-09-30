@@ -52,7 +52,7 @@ Fuzzy pickers share one rounded frame with unfilled input and footer rows, restr
 - Optional `cgm` credential storage through Linux Secret Service with exact-value scalar exports and safe attributed-scalar removal.
 - Shared themes for rich dashboards and every fzf entry point, with atomic session switching and read-only inspection through `ztheme` and deterministic plain-text fallbacks.
 
-Package previews avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, distinct cancellation summaries, and cleanup effects.
+Package previews avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, distinct cancellation summaries and owned query-process cleanup, and cleanup effects.
 
 ## Requirements
 
@@ -62,7 +62,7 @@ The dependency checker treats these as required for the intended setup:
 - `lsd` and `zoxide`
 - stable `fzf` 0.68.0 or newer
 
-Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. Optional `checkupdates` (`pacman-contrib`) enables fresh Pacman inventories using a separate database. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
+Captured package queries require Linux `/proc` and `setsid` from util-linux. Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. Optional `checkupdates` (`pacman-contrib`) enables fresh Pacman inventories using a separate database. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
 
 If the packaged fzf is older than 0.68.0, upgrade it through a current package source or follow the upstream installation link printed by `scripts/check-deps.sh`.
 

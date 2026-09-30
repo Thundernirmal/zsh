@@ -436,17 +436,23 @@
 
   # Reap only the caller's recorded workers; a cancelled worker stops its peers.
   _npkg_wait_workers() {
-    local pid other_pid worker_status
-    for pid in "${job_pids[@]}"; do
-      wait "$pid" 2>/dev/null
-      worker_status=$?
+    local pid worker_status
+    while (( ${#job_pids} )); do
+      pid=$job_pids[1]
+      while true; do
+        wait "$pid" 2>/dev/null
+        worker_status=$?
+        # A wrapper signal interrupts wait before the worker finishes cleanup.
+        (( interrupted )) && builtin kill -0 "$pid" 2>/dev/null && continue
+        break
+      done
+      job_pids[1]=()
+      unset "job_identities[$pid]"
       case $worker_status in
         129|130|143)
           if (( ! interrupted )); then
             interrupted=$worker_status
-            for other_pid in "${job_pids[@]}"; do
-              command kill "$other_pid" 2>/dev/null
-            done
+            _zsh_stop_owned_jobs "${job_pids[@]}"
           fi
           ;;
       esac
@@ -465,7 +471,7 @@
       return 1
     fi
 
-    local profile_json profile_error_file profile_error entry_data entry_json name attr_path source locked_uri
+    local profile_json profile_error_file profile_capture_dir profile_error entry_data entry_json name attr_path source locked_uri
     local store_paths_json outputs_json structural_value
     local tmp_dir current_record locked_record installed_paths available_paths
     local installed_version available_version package_state display_state marker role detail error_output
@@ -474,28 +480,30 @@
     integer pkg_count=0 changed=0 unknown=0 idx interrupted=0
     integer max_jobs=8
     local -a names attrs sources locked_uris installed_path_sets output_specs structurally_valid
-    local -a installed_versions available_versions statuses unknown_details job_pids
+    local -a installed_versions available_versions statuses unknown_details job_pids worker_fields
+    local -A job_identities
+    local worker_stat
 
-    profile_error_file=$(command mktemp "${TMPDIR:-/tmp}/npkg-profile-error.XXXXXX") || {
+    profile_capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-profile.XXXXXX") || {
       print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
       return 1
     }
-    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM HUP; return 130' INT
-    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM HUP; return 143' TERM
-    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM HUP; return 129' HUP
-
-    profile_json=$(_npkg_nix profile list --json 2>"$profile_error_file") || {
-      local profile_status=$?
+    profile_error_file="$profile_capture_dir/stderr"
+    local profile_status
+    {
+      _zsh_run_owned_query _npkg_nix profile list --json >"$profile_capture_dir/stdout" 2>"$profile_error_file"
+      profile_status=$?
+      profile_json=$(<"$profile_capture_dir/stdout")
       profile_error=$(<"$profile_error_file")
-      command rm -f -- "$profile_error_file"
-      trap - INT TERM HUP
+    } always {
+      command rm -rf -- "$profile_capture_dir"
+    }
+    if (( profile_status != 0 )); then
       case $profile_status in 129|130|143) return "$profile_status" ;; esac
       print -u2 -r -- 'Failed to read Nix profile.'
       [[ -n $profile_error ]] && print -u2 -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
       return 1
-    }
-    command rm -f -- "$profile_error_file"
-    trap - INT TERM HUP
+    fi
 
     print -r -- "$profile_json" | command jq -e '
       type == "object"
@@ -614,9 +622,9 @@
     }
 
     trap 'command rm -rf -- "$tmp_dir"' EXIT
-    trap 'interrupted=130; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' INT
-    trap 'interrupted=143; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' TERM
-    trap 'interrupted=129; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' HUP
+    trap 'interrupted=130; _zsh_stop_owned_jobs "${job_pids[@]}"' INT
+    trap 'interrupted=143; _zsh_stop_owned_jobs "${job_pids[@]}"' TERM
+    trap 'interrupted=129; _zsh_stop_owned_jobs "${job_pids[@]}"' HUP
 
     for (( idx = 1; idx <= pkg_count; idx++ )); do
       (( interrupted )) && break
@@ -625,7 +633,7 @@
       (
         trap - EXIT INT TERM HUP
         local evaluation_status
-        _npkg_eval_installable_record \
+        _zsh_run_owned_query _npkg_eval_installable_record \
           "${sources[$idx]}" \
           "${attrs[$idx]}" \
           "${output_specs[$idx]}" \
@@ -635,7 +643,7 @@
         case $evaluation_status in 129|130|143) exit "$evaluation_status" ;; esac
 
         if [[ -n ${locked_uris[$idx]} ]]; then
-          _npkg_eval_installable_record \
+          _zsh_run_owned_query _npkg_eval_installable_record \
             "${locked_uris[$idx]}" \
             "${attrs[$idx]}" \
             "${output_specs[$idx]}" \
@@ -647,9 +655,14 @@
         :
       ) &
       job_pids+=("$!")
+      if [[ -r /proc/${job_pids[-1]}/stat ]]; then
+        worker_stat=$(</proc/${job_pids[-1]}/stat)
+        worker_fields=( ${=${worker_stat##*\) }} )
+        job_identities[${job_pids[-1]}]=${worker_fields[20]-}
+      fi
 
       if (( interrupted )); then
-        command kill "${job_pids[-1]}" 2>/dev/null
+        _zsh_stop_owned_jobs "${job_pids[-1]}"
         break
       fi
 

@@ -180,6 +180,10 @@ print_hints() {
       ;;
   esac
 
+  if ! have_cmd setsid; then
+    printf '  Optional for captured package queries: install setsid from util-linux (Linux).\n'
+  fi
+
   if ! have_cmd gdbus; then
     printf '  Optional for cgm check: install gdbus (GLib tools; libglib2.0-bin on Debian/Ubuntu).\n'
   fi
@@ -201,6 +205,7 @@ check_fzf
 check_cmd bat optional
 check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
+check_cmd setsid optional
 check_cmd jq optional
 check_cmd secret-tool optional
 check_cmd gdbus optional

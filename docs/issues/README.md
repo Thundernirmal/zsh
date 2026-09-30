@@ -7,7 +7,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 | ID | Priority | Issue |
 | --- | --- | --- |
 | [ZSH-023](023-fzf-snapshot-cost-per-startup.md) | P2 | fzf activation snapshots every function and widget on each interactive startup |
-| [ZSH-024](024-cancellation-does-not-signal-children.md) | P2 | Cancellation traps do not signal the running package or evaluation children |
 | [ZSH-025](025-issue-tracker-restates-maintenance-rules.md) | P2 | The issue tracker's standing pages restate maintenance rules owned elsewhere |
 | [ZSH-026](026-guide-optional-integration-table-missing-checkupdates.md) | P2 | GUIDE's optional-integration table omits checkupdates |
 | [ZSH-027](027-tips-advertise-unavailable-package-workflows.md) | P2 | Tips advertise package workflows the current host cannot perform |
@@ -20,7 +19,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 | [ZSH-034](034-upkg-dry-run-completion-text-drift.md) | P2 | The live upkg completion keeps the pre-rename --dry-run text |
 | [ZSH-035](035-ff-fallback-test-skips-find.md) | P2 | The ff fallback test never reaches the find fallback |
 | [ZSH-036](036-tips-broad-pool-manager-specific.md) | P2 | Manager-specific tips appear in the broad any-manager pool |
-| [ZSH-037](037-guide-npkg-cancellation-statuses.md) | P2 | GUIDE documents only status 130 for npkg cancellation |
 
 ## Report structure and verification
 
