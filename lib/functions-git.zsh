@@ -146,7 +146,7 @@ _fbr_ref_rows() {
     esac
     worktree_path=${worktree_paths[$ref]-}
     _fbr_format_entry "$display_branch" "$relative" "$subject" "$worktree_path" \
-      "$badge_color" "$badge_reset" 32 14 "$ref"
+      "$badge_color" "$badge_reset" 32 14 "$ref" || return $?
     print -r -- "$REPLY"
   done < <(
     command git for-each-ref --sort=-committerdate \

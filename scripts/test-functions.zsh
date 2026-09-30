@@ -807,13 +807,13 @@ test_fbr_worktree_navigation() {
   local -A worktree_paths
 
   assert_equals "${(V)functions[_fbr_format_entry]}" 'builtin autoload -XU' 'fbr formatter starts as a deferred repo-local autoload' || return 1
-  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12
+  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12 refs/heads/short
   first_row=$REPLY
-  assert_equals "$first_row" $'short           \t5 days ago  \tA subject\t\tshort' 'fbr pads branch and relative-date display columns' || return 1
+  assert_equals "$first_row" $'short           \t5 days ago  \tA subject\t\trefs/heads/short' 'fbr pads branch and relative-date display columns' || return 1
   formatter_body=${functions[_fbr_format_entry]}
   assert_not_contains "${(V)formatter_body}" 'builtin autoload -XU' 'first fbr formatting call loads the deferred implementation' || return 1
 
-  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12
+  _fbr_format_entry short '5 days ago' 'A subject' '' '' '' 16 12 refs/heads/short
   second_row=$REPLY
   assert_equals "$second_row" "$first_row" 'repeated fbr formatting stays deterministic' || return 1
 
@@ -824,13 +824,23 @@ test_fbr_worktree_navigation() {
   done
   assert_equals "$private_fpath_count" 1 're-sourcing keeps one trusted functions path' || return 1
 
-  _fbr_format_entry worktree-test '21 hours ago' $'Tabbed\tsubject' '/tmp/work tree' '' '' 16 12
-  assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\tworktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1
+  _fbr_format_entry worktree-test '21 hours ago' $'Tabbed\tsubject' '/tmp/work tree' '' '' 16 12 refs/heads/worktree-test
+  assert_equals "$REPLY" $'[WT] w...ee-test\t21 hours ago\tTabbed\\tsubject\t/tmp/work tree\trefs/heads/worktree-test' 'fbr aligns and sanitizes worktree rows while preserving the raw branch' || return 1
 
-  _fbr_format_entry 'unicode-λ-雪' 'now' $'control-\e[31m' '' '' '' 18 8
-  assert_equals "$REPLY" $'unicode-λ-雪      \tnow     \tcontrol-\\e[31m\t\tunicode-λ-雪' 'fbr pads CJK rows by terminal cells while sanitizing controls byte-for-byte' || return 1
-  _fbr_format_entry '1234567890' '1234567890' subject '' '' '' 5 4
-  assert_equals "$REPLY" $'1...0\t1234\tsubject\t\t1234567890' 'fbr preserves width-boundary truncation byte-for-byte' || return 1
+  _fbr_format_entry 'unicode-λ-雪' 'now' $'control-\e[31m' '' '' '' 18 8 refs/heads/unicode-λ-雪
+  assert_equals "$REPLY" $'unicode-λ-雪      \tnow     \tcontrol-\\e[31m\t\trefs/heads/unicode-λ-雪' 'fbr pads CJK rows by terminal cells while sanitizing controls byte-for-byte' || return 1
+  _fbr_format_entry '1234567890' '1234567890' subject '' '' '' 5 4 refs/heads/1234567890
+  assert_equals "$REPLY" $'1...0\t1234\tsubject\t\trefs/heads/1234567890' 'fbr preserves width-boundary truncation byte-for-byte' || return 1
+
+  local invalid_ref
+  for invalid_ref in '' short refs/tags/short refs/heads/ $'refs/heads/bad\tref'; do
+    REPLY=stale
+    _fbr_format_entry short now subject '' '' '' 16 12 "$invalid_ref" 2>/dev/null
+    assert_status "$?" 1 'fbr formatter rejects missing or noncanonical identity' || return 1
+    assert_equals "$REPLY" '' 'rejected formatter identity leaves no stale row' || return 1
+  done
+  _fbr_format_entry origin/topic now subject '' '' '' 16 12 refs/remotes/origin/topic || return 1
+  assert_equals "${REPLY##*$'\t'}" refs/remotes/origin/topic 'remote display label retains canonical selection identity' || return 1
 
   assert_contains "${functions[fbr]}" '--accept-nth=5' 'fbr asks fzf to return the branch field directly' || return 1
   assert_contains "${functions[fbr]}" "git log --oneline --decorate --color=always -20 {5}" 'fbr relies on fzf quoting the undecorated branch preview field' || return 1

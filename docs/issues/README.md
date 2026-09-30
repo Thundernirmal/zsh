@@ -8,7 +8,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 | --- | --- | --- |
 | [ZSH-023](023-fzf-snapshot-cost-per-startup.md) | P2 | fzf activation snapshots every function and widget on each interactive startup |
 | [ZSH-025](025-issue-tracker-restates-maintenance-rules.md) | P2 | The issue tracker's standing pages restate maintenance rules owned elsewhere |
-| [ZSH-028](028-fbr-identity-falls-back-silently.md) | P2 | The fbr formatter accepts an optional identity that falls back to the display label |
 | [ZSH-030](030-checkupdates-resyncs-repositories-per-run.md) | P2 | Every pacman inventory re-syncs all repository databases |
 | [ZSH-031](031-cancellation-inferred-from-child-status.md) | P2 | Cancellation is inferred from child exit statuses at every call site |
 | [ZSH-032](032-cleanup-abort-discards-completed-phases.md) | P2 | Interrupting a cleanup step discards the accounting of completed phases |

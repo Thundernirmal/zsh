@@ -11,7 +11,7 @@
 # Navigation reminders include startup diagnostics after cache settings change.
 # Cleanup reminders distinguish failed phases from cancelled work.
 # Package inventory reminders cover visible diagnostics and hidden Flatpak refs.
-# Git picker reminders keep display labels separate from canonical identities.
+# Git picker reminders keep display labels separate from validated canonical identities.
 # Nix inventory reminders preserve visible evaluation diagnostics.
 # Nix helper reminders cover help before work and literal picker queries.
 # Nix search uses native quiet logging while retaining diagnostics.
