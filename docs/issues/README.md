@@ -6,7 +6,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 | ID | Priority | Issue |
 | --- | --- | --- |
-| [ZSH-015](015-npm-search-column-layout.md) | P2 | npm search shows keywords as the available version and drops keyword-less matches |
 | [ZSH-016](016-fzf-phantom-widget-aborts-activation.md) | P2 | A stale widget-name key binding aborts fzf integration activation |
 | [ZSH-017](017-theme-atomicity-test-not-isolated.md) | P2 | The theme atomicity regression is not environment-isolated and stops the regression runner |
 | [ZSH-018](018-nix-search-replays-evaluation-progress.md) | P2 | Nix search replays captured evaluation progress to the terminal |

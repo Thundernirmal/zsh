@@ -487,3 +487,18 @@ esac'
   done
 ) || exit 1
 print 'ok: Flatpak inventories include extension and secondary-architecture refs without changing scope'
+
+(
+  write_fake npm 'printf "%s\n" "$AUDIT_NPM_ROWS"'
+  PATH="$scratch:$original_path"
+  export AUDIT_NPM_ROWS=$'current\tdescription\t2026-09-30\t1.2.3\tkeyword\nno-keywords\tdescription\t2026-09-30\t2.0.0\t\nno-description\t2026-09-30\t3.0.0\t\nold-layout\tdescription\tauthor\t2026-09-30\t4.0.0\tkeyword\nold-empty\t\tauthor\tprehistoric\t5.0.0-beta.1+build.2\t'
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_npm sample || exit 1
+  assert test "${#_UPKG_SEARCH_ROWS}" -eq 5
+  assert test "${_UPKG_SEARCH_ROWS[1]}" = $'npm\tcurrent\t1.2.3\tdescription'
+  assert test "${_UPKG_SEARCH_ROWS[2]}" = $'npm\tno-keywords\t2.0.0\tdescription'
+  assert test "${_UPKG_SEARCH_ROWS[3]}" = $'npm\tno-description\t3.0.0\t'
+  assert test "${_UPKG_SEARCH_ROWS[4]}" = $'npm\told-layout\t4.0.0\tdescription'
+  assert test "${_UPKG_SEARCH_ROWS[5]}" = $'npm\told-empty\t5.0.0-beta.1+build.2\t'
+) || exit 1
+print 'ok: npm search supports omitted descriptions, authors, and empty keywords'

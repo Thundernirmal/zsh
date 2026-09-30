@@ -454,6 +454,7 @@ _upkg_run_search_npm() {
 
   local output diagnostic rc line name description author date version
   local -a rows fields
+  integer date_index
 
   _upkg_search_progress npm ''
   LC_ALL=C _upkg_capture_query npm search --parseable --json=false --color=false -- "$@"
@@ -472,9 +473,19 @@ _upkg_run_search_npm() {
 
   for line in ${(f)output}; do
     fields=("${(@ps:\t:)line}")
-    (( ${#fields} >= 5 )) || continue
-    name=$fields[1]; description=$fields[2]; version=$fields[5]
-    [[ $name =~ '^(@[[:alnum:]_.~-]+/)?[[:alnum:]_.~-]+$' && -n $version ]] || continue
+    name=${fields[1]-}; description=''; version=''
+    [[ $name =~ '^(@[[:alnum:]_.~-]+/)?[[:alnum:]_.~-]+$' ]] || continue
+    # npm releases omit empty descriptions/authors in parseable output.
+    # Anchor on the publication date followed by a valid package version.
+    for date_index in 2 3 4; do
+      date=${fields[$date_index]-}
+      [[ $date == prehistoric || $date =~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' ]] || continue
+      version=${fields[$((date_index + 1))]-}
+      [[ $version =~ '^[0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:].-]+)?(\+[[:alnum:].-]+)?$' ]] || { version=''; continue; }
+      (( date_index > 2 )) && description=${fields[2]-}
+      break
+    done
+    [[ -n $version ]] || continue
     rows+=("${name}"$'\t'"${version}"$'\t'"$(_upkg_search_trim "$description")")
   done
 

@@ -48,7 +48,7 @@ Fuzzy pickers share one rounded frame with unfilled input and footer rows, restr
 - Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning.
 - Guarded `zoxide` and `fzf` integration with private validated cache fallbacks, failed-load rollback, and Ctrl+R, Ctrl+T, and Alt+C bindings.
 - File, search, Git branch navigation with canonical selection identities and labeled alternate worktrees, network, disk-usage, and process helpers with pipe-friendly output and normalized numeric or named signals. Search fallbacks preserve diagnostics and exit status; native `mkdir`, `cp`, `mv`, and `rm` behavior is left unchanged.
-- `upkg` update inventories, native upgrades, package search and stable npm inventories with visible diagnostics, complete Flatpak update refs, and cleanup that reports failed phases, with explicit backend selection and support for Paru configuration. Optional modern-CLI `npkg` helpers cover active Nix profile entries, with help before work and explicit argument validation.
+- `upkg` update inventories, native upgrades, package search and stable npm inventories and search versions with visible diagnostics, complete Flatpak update refs, and cleanup that reports failed phases, with explicit backend selection and support for Paru configuration. Optional modern-CLI `npkg` helpers cover active Nix profile entries, with help before work and explicit argument validation.
 - Optional `cgm` credential storage through Linux Secret Service with exact-value scalar exports.
 - Shared themes for rich dashboards and every fzf entry point, with atomic session switching and read-only inspection through `ztheme` and deterministic plain-text fallbacks.
 
