@@ -437,6 +437,8 @@ _fzf_activate_integration_file() {
       done
       for name in ${(k)widgets}; do
         [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
+        # Bindings can create placeholder names that are not defined widgets.
+        [[ -n ${widgets[$name]-} ]] || continue
         backup="_zsh_fzf_widget_${$}_${RANDOM}_${name}"
         builtin zle -A "$name" "$backup" || return 1
         saved_widgets[$name]=$backup
@@ -492,7 +494,7 @@ _fzf_activate_integration_file() {
           [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
           if (( ${+saved_widgets[$name]} )); then
             builtin zle -A "${saved_widgets[$name]}" "$name"
-          else
+          elif [[ -n ${widgets[$name]-} ]]; then
             builtin zle -D "$name"
           fi
         done

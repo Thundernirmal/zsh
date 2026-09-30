@@ -504,6 +504,8 @@ Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
+Stale fzf widget-name bindings do not block activation; failed activation restores the original bindings.
+
 The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths. Every picker uses the same list/search/footer hierarchy and contextual ghost hint. At 100 columns and wider, textual previews sit beside the list; below 100 columns they move underneath. `fkill` and the Nix multi-select pickers show a live selected-item count in the footer. Git and Nix table pickers keep the visible identity column frozen, while `--accept-nth` returns undecorated branch, PID, example, or profile-target fields to the calling workflow; `fbr` returns and previews the canonical full Git ref, separate from its shortened display label and optional `[WT]` badge.
 
 Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` confirms SIGKILL and multi-selections naming targets and signal before sending, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.

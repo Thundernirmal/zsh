@@ -1076,6 +1076,7 @@ false' > "$root/partial.zsh"
     zle -N fzf-file-widget
     _fzf_saved_fixture() { :; }
     zle -A expand-or-complete fzf-completion
+    bindkey -M emacs "^Y" fzf-phantom-widget
     before_emacs=$(bindkey -M emacs "^T")
     before_viins=$(bindkey -M viins "^X")
     before_alias=$(bindkey -lL)
@@ -1090,6 +1091,29 @@ false' > "$root/partial.zsh"
   ' zsh "$repo_dir" "$root/partial.zsh" 2>/dev/null)
   assert_status "$?" 0 'partial fzf rollback restores widgets, keymaps and aliases' || return 1
   assert_equals "$output" 'rc=1 original=original cd=0 completion=0 opts=original-options default=0' 'partial fzf rollback restores functions and option presence' || return 1
+}
+
+test_fzf_phantom_widget_activation() {
+  local root="$tmp_home/fzf-phantom" output
+  command mkdir -p -- "$root"
+  print -r -- '_FZF_CACHE_LOADED_SCHEMA=$_FZF_CACHE_SCHEMA
+_FZF_CACHE_LOADED_VERSION=0.70.0
+_FZF_CACHE_LOADED_STATUS=0
+fzf-file-widget() { :; }
+zle -N fzf-file-widget' > "$root/success.zsh"
+  output=$("$zsh_bin" -dfi -c '
+    source "$1/40-fzf.zsh"
+    bindkey -M emacs "^T" fzf-file-widget
+    zle -D fzf-file-widget 2>/dev/null
+    _fzf_wrap_generated_entry_points() { :; }
+    _fzf_export_config() { return 0; }
+    _fzf_activate_integration_file "$2" /fixture/fzf 0.70.0 || exit 10
+    [[ $widgets[fzf-file-widget] == user:fzf-file-widget ]] || exit 11
+    print -r -- "state=$_FZF_STATE binding=$(bindkey -M emacs "^T")"
+  ' zsh "$repo_dir" "$root/success.zsh" 2>"$root/stderr")
+  assert_status "$?" 0 'phantom fzf widget does not abort successful activation' || return 1
+  assert_contains "$output" 'state=ready' 'phantom activation reaches ready state' || return 1
+  assert_equals "$(file_contents "$root/stderr")" '' 'phantom activation emits no widget errors' || return 1
 }
 
 test_zoxide_rejected_cache_directory() {
@@ -1160,6 +1184,7 @@ main() {
   test_fzf_quiet_startup_modes || return 1
   test_fzf_runtime_guards || return 1
   test_fzf_partial_integration_rollback || return 1
+  test_fzf_phantom_widget_activation || return 1
   test_fzf_path_cache || return 1
   test_fzf_generated_guards || return 1
   test_fzf_theme_option_refresh || return 1

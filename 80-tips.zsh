@@ -5,6 +5,7 @@
 # cancellation, configured Paru scope, metadata freshness, and cleanup previews.
 # Credential reminders use ordinary scalar variables for exact-value exports.
 # Theme reminders distinguish inspecting a palette from applying it.
+# Finder activation tolerates stale widget names while preserving bindings.
 # Finder reminders include restarting after a blocked integration is repaired.
 # Navigation reminders include startup diagnostics after cache settings change.
 # Cleanup reminders require checking the summary for failed phases.
