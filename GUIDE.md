@@ -727,7 +727,7 @@ Flatpak updates and system cleanup may request authorization through polkit. Use
 
 ### Results and exit status
 
-Multi-manager runs continue after a backend fails:
+Multi-manager runs continue after an ordinary backend failure. Cancellation stops the remaining managers and cleanup phases, preserving status `130` (INT), `143` (TERM), or `129` (HUP):
 
 | State | Meaning |
 |---|---|
@@ -736,6 +736,7 @@ Multi-manager runs continue after a backend fails:
 | `cleaned` | Every requested cleanup phase succeeded |
 | `planned` | A cleanup preview completed successfully |
 | `partial` | Some phases succeeded and others failed |
+| `cancelled` | A backend was interrupted; subsequent operations were stopped |
 | `failed` | Required work or a preview probe failed |
 | `blocked` | Authorization or a required capability was missing |
 | `skipped` | A filter intentionally omitted the manager |

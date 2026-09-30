@@ -426,12 +426,25 @@ _upkg_print_summary() {
   fi
 }
 
+# Ordinary backend failures may continue; cancellation must stop orchestration.
+_upkg_check_interrupt() {
+  case $1 in
+    129|130|143)
+      _UPKG_INTERRUPTED_STATUS=$1
+      _upkg_set_last_result 'cancelled' "interrupted (status $1)"
+      return "$1"
+      ;;
+  esac
+  return 0
+}
+
 _upkg_finish_upgrade_result() {
   emulate -L zsh
 
   local rc=$1
   local detail=$2
 
+  _upkg_check_interrupt "$rc" || return $?
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
     return 0
@@ -452,6 +465,7 @@ _upkg_record_cleanup_result() {
   local rc=$1
   local failure_detail=$2
 
+  _upkg_check_interrupt "$rc" || return $?
   # Cleanup handlers provide these caller-local counters and failure details.
   if (( rc == 0 )); then
     (( succeeded++ ))
@@ -906,6 +920,7 @@ upkg() {
   local -A selected_map skipped_map alternate_map display_seen
 
   local _UPKG_THEME_MODE=''
+  local -i _UPKG_INTERRUPTED_STATUS=0
 
   while (( $# > 0 )); do
     case $1 in
@@ -1235,6 +1250,10 @@ upkg() {
     esac
 
     _upkg_record_summary "$manager" "$_UPKG_LAST_STATE" "$_UPKG_LAST_DETAIL"
+    if (( _UPKG_INTERRUPTED_STATUS )); then
+      exit_code=$_UPKG_INTERRUPTED_STATUS
+      break
+    fi
 
     case $_UPKG_LAST_STATE in
       partial|blocked|failed)

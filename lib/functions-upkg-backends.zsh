@@ -10,6 +10,7 @@ _upkg_run_search_apt() {
   _upkg_search_progress apt ''
   output=$(command apt search --names-only -- "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
   output=$(print -r -- "$output" | sed '/^WARNING: apt does not have a stable CLI interface\./d;/^Sorting\.\.\.$/d;/^Full Text Search\.\.\.$/d')
   if (( rc != 0 )); then
@@ -60,6 +61,7 @@ _upkg_run_search_dnf() {
   _upkg_search_progress dnf ''
   output=$(command dnf list --available "${query_patterns[@]}" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
@@ -96,6 +98,7 @@ _upkg_run_search_pacman() {
   _upkg_search_progress pacman ''
   output=$(command pacman -Ss -- "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
@@ -139,6 +142,7 @@ _upkg_run_search_paru() {
   _upkg_search_progress paru ''
   output=$(command paru -Ss -- "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
@@ -184,6 +188,7 @@ _upkg_run_search_brew() {
   _upkg_search_progress brew 'formulae'
   output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula -- "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
   if (( rc != 0 )); then
     if [[ $output != *'No formulae found'* && $output != *'No formulae or casks found'* ]]; then
@@ -203,6 +208,7 @@ _upkg_run_search_brew() {
   _upkg_search_progress brew 'casks'
   output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask -- "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
   if (( rc != 0 )); then
     if [[ $output != *'No casks found'* && $output != *'No formulae or casks found'* ]]; then
@@ -249,6 +255,7 @@ _upkg_run_search_brew() {
     _upkg_search_progress brew 'formula info'
     output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --formula "${formulae_for_info[@]}" 2>&1)
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     _upkg_search_progress_clear
     if (( rc != 0 )); then
       [ -n "$output" ] && print -r -- "$output"
@@ -273,6 +280,7 @@ _upkg_run_search_brew() {
     _upkg_search_progress brew 'cask info'
     output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --cask "${casks_for_info[@]}" 2>&1)
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     _upkg_search_progress_clear
     if (( rc != 0 )); then
       [ -n "$output" ] && print -r -- "$output"
@@ -305,6 +313,7 @@ _upkg_run_search_flatpak() {
   _upkg_search_progress flatpak ''
   output=$(command flatpak search --columns=application,version,name,description -- "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
@@ -349,6 +358,7 @@ _upkg_run_search_nix() {
   _upkg_search_progress nix ''
   output=$(_npkg_nix search nixpkgs "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
@@ -396,6 +406,7 @@ _upkg_run_search_npm() {
   _upkg_search_progress npm ''
   output=$(command npm search --parseable -- "$@" 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
@@ -422,6 +433,7 @@ _upkg_run_outdated_apt() {
 
   output=$(command apt list --upgradable 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   output=$(print -r -- "$output" | sed '/^Listing\.\.\.$/d')
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -453,6 +465,7 @@ _upkg_run_outdated_dnf() {
 
   output=$(command dnf check-update 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   case $rc in
     0)
@@ -480,6 +493,7 @@ _upkg_run_outdated_pacman() {
 
   output=$(command pacman -Qu 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   if _upkg_arch_outdated_has_no_updates "$rc" "$output"; then
     print 'No updates available.'
@@ -514,6 +528,7 @@ _upkg_run_outdated_paru() {
   if command -v pacman >/dev/null 2>&1; then
     pacman_output=$(command pacman -Qu 2>&1)
     pacman_rc=$?
+    _upkg_check_interrupt "$pacman_rc" || return $?
 
     if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
       pacman_output=''
@@ -524,6 +539,7 @@ _upkg_run_outdated_paru() {
   else
     pacman_output=$(command paru -Qu 2>&1)
     pacman_rc=$?
+    _upkg_check_interrupt "$pacman_rc" || return $?
 
     if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
       pacman_output=''
@@ -535,6 +551,7 @@ _upkg_run_outdated_paru() {
 
   paru_output=$(command paru -Qua 2>&1)
   paru_rc=$?
+  _upkg_check_interrupt "$paru_rc" || return $?
 
   if _upkg_arch_outdated_has_no_updates "$paru_rc" "$paru_output"; then
     paru_output=''
@@ -600,6 +617,7 @@ _upkg_run_outdated_brew() {
 
   output=$(command brew outdated 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -625,6 +643,7 @@ _upkg_run_outdated_flatpak() {
 
   output=$(command flatpak remote-ls --updates 2>&1)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -663,6 +682,7 @@ _upkg_run_outdated_nix() {
   rc=$?
   output=$(<"$output_file")
   command rm -f -- "$output_file"
+  _upkg_check_interrupt "$rc" || return $?
 
   [ -n "$output" ] && print -r -- "$output"
 
@@ -716,6 +736,7 @@ _upkg_run_outdated_npm() {
   stdout_output=$(<"$stdout_file")
   stderr_output=$(<"$stderr_file")
   command rm -f -- "$stdout_file" "$stderr_file"
+  _upkg_check_interrupt "$rc" || return $?
 
   case $rc in
     0)
@@ -765,6 +786,7 @@ _upkg_run_upgrade_apt() {
   if _upkg_is_root; then
     command apt update
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then
       _upkg_set_last_result 'failed' 'apt update failed'
       return 1
@@ -773,6 +795,7 @@ _upkg_run_upgrade_apt() {
   else
     command sudo apt update
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then
       _upkg_set_last_result 'failed' 'sudo apt update failed'
       return 1
@@ -780,6 +803,7 @@ _upkg_run_upgrade_apt() {
     command sudo apt full-upgrade
   fi
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'apt full-upgrade failed'
 }
@@ -805,6 +829,7 @@ _upkg_run_upgrade_dnf() {
     command sudo dnf upgrade --refresh
   fi
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'dnf upgrade --refresh failed'
 }
@@ -830,6 +855,7 @@ _upkg_run_upgrade_pacman() {
     command sudo pacman -Syu
   fi
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'pacman -Syu failed'
 }
@@ -849,6 +875,7 @@ _upkg_run_upgrade_paru() {
 
   command paru -Syu
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'paru -Syu failed'
 }
@@ -862,6 +889,7 @@ _upkg_run_upgrade_brew() {
 
   command brew upgrade
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'brew upgrade failed'
 }
@@ -875,6 +903,7 @@ _upkg_run_upgrade_flatpak() {
 
   command flatpak update
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'flatpak update failed'
 }
@@ -888,6 +917,7 @@ _upkg_run_upgrade_nix() {
 
   npkg upgrade
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'npkg upgrade failed'
 }
@@ -914,6 +944,7 @@ _upkg_run_upgrade_npm() {
 
   command npm update -g
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'npm update -g failed'
 }
@@ -931,7 +962,7 @@ _upkg_run_clean_apt() {
     prefix=$(_upkg_cleanup_privilege_prefix)
     _upkg_print_cleanup_phase 'Unused packages'
     print -r -- "preview: ${prefix}apt --simulate autoremove"
-    _upkg_run_cleanup_step 'apt autoremove preview failed' apt --simulate autoremove
+    _upkg_run_cleanup_step 'apt autoremove preview failed' apt --simulate autoremove || return $?
 
     _upkg_print_cleanup_phase 'Package cache'
     print -r -- "would run: ${prefix}apt autoclean"
@@ -951,16 +982,16 @@ _upkg_run_clean_apt() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'apt autoremove failed' apt autoremove
+    _upkg_run_cleanup_step 'apt autoremove failed' apt autoremove || return $?
   else
-    _upkg_run_cleanup_step 'apt autoremove failed' sudo apt autoremove
+    _upkg_run_cleanup_step 'apt autoremove failed' sudo apt autoremove || return $?
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'apt autoclean failed' apt autoclean
+    _upkg_run_cleanup_step 'apt autoclean failed' apt autoclean || return $?
   else
-    _upkg_run_cleanup_step 'apt autoclean failed' sudo apt autoclean
+    _upkg_run_cleanup_step 'apt autoclean failed' sudo apt autoclean || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -979,7 +1010,7 @@ _upkg_run_clean_dnf() {
     prefix=$(_upkg_cleanup_privilege_prefix)
     _upkg_print_cleanup_phase 'Unused packages'
     print 'preview: dnf --cacheonly repoquery --unneeded'
-    _upkg_run_cleanup_step 'dnf cache-only unneeded-package preview failed' dnf --cacheonly repoquery --unneeded
+    _upkg_run_cleanup_step 'dnf cache-only unneeded-package preview failed' dnf --cacheonly repoquery --unneeded || return $?
 
     _upkg_print_cleanup_phase 'Package cache'
     print -r -- "would run: ${prefix}dnf clean all"
@@ -999,16 +1030,16 @@ _upkg_run_clean_dnf() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'dnf autoremove failed' dnf autoremove
+    _upkg_run_cleanup_step 'dnf autoremove failed' dnf autoremove || return $?
   else
-    _upkg_run_cleanup_step 'dnf autoremove failed' sudo dnf autoremove
+    _upkg_run_cleanup_step 'dnf autoremove failed' sudo dnf autoremove || return $?
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'dnf clean all failed' dnf clean all
+    _upkg_run_cleanup_step 'dnf clean all failed' dnf clean all || return $?
   else
-    _upkg_run_cleanup_step 'dnf clean all failed' sudo dnf clean all
+    _upkg_run_cleanup_step 'dnf clean all failed' sudo dnf clean all || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -1037,6 +1068,7 @@ _upkg_run_clean_pacman() {
   _upkg_print_cleanup_phase 'Unused packages'
   orphan_output=$(command pacman -Qtdq)
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   if (( rc == 0 )); then
     orphans=( ${(f)orphan_output} )
     if (( ${#orphans[@]} == 0 )); then
@@ -1048,9 +1080,9 @@ _upkg_run_clean_pacman() {
       (( succeeded++ ))
     else
       if _upkg_is_root; then
-        _upkg_run_cleanup_step 'pacman orphan removal failed' pacman -Rs -- "${orphans[@]}"
+        _upkg_run_cleanup_step 'pacman orphan removal failed' pacman -Rs -- "${orphans[@]}" || return $?
       else
-        _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}"
+        _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}" || return $?
       fi
     fi
   elif (( rc == 1 )) && [ -z "$orphan_output" ]; then
@@ -1068,9 +1100,9 @@ _upkg_run_clean_pacman() {
     (( succeeded++ ))
   else
     if _upkg_is_root; then
-      _upkg_run_cleanup_step 'pacman -Sc failed' pacman -Sc
+      _upkg_run_cleanup_step 'pacman -Sc failed' pacman -Sc || return $?
     else
-      _upkg_run_cleanup_step 'pacman -Sc failed' sudo pacman -Sc
+      _upkg_run_cleanup_step 'pacman -Sc failed' sudo pacman -Sc || return $?
     fi
   fi
 
@@ -1103,10 +1135,10 @@ _upkg_run_clean_paru() {
   fi
 
   _upkg_print_cleanup_phase 'Unused packages'
-  _upkg_run_cleanup_step 'paru -c failed' paru -c
+  _upkg_run_cleanup_step 'paru -c failed' paru -c || return $?
 
   _upkg_print_cleanup_phase 'Package cache'
-  _upkg_run_cleanup_step 'paru -Sc failed' paru -Sc
+  _upkg_run_cleanup_step 'paru -Sc failed' paru -Sc || return $?
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
 }
@@ -1121,16 +1153,16 @@ _upkg_run_clean_brew() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if (( _UPKG_DRY_RUN )); then
-    _upkg_run_cleanup_step 'brew autoremove preview failed' brew autoremove --dry-run
+    _upkg_run_cleanup_step 'brew autoremove preview failed' brew autoremove --dry-run || return $?
   else
-    _upkg_run_cleanup_step 'brew autoremove failed' brew autoremove
+    _upkg_run_cleanup_step 'brew autoremove failed' brew autoremove || return $?
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if (( _UPKG_DRY_RUN )); then
-    _upkg_run_cleanup_step 'brew cleanup preview failed' brew cleanup --dry-run
+    _upkg_run_cleanup_step 'brew cleanup preview failed' brew cleanup --dry-run || return $?
   else
-    _upkg_run_cleanup_step 'brew cleanup failed' brew cleanup
+    _upkg_run_cleanup_step 'brew cleanup failed' brew cleanup || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -1156,10 +1188,10 @@ _upkg_run_clean_flatpak() {
   fi
 
   _upkg_print_cleanup_phase 'Unused user refs'
-  _upkg_run_cleanup_step 'flatpak user cleanup failed' flatpak uninstall --unused --user
+  _upkg_run_cleanup_step 'flatpak user cleanup failed' flatpak uninstall --unused --user || return $?
 
   _upkg_print_cleanup_phase 'Unused system refs'
-  _upkg_run_cleanup_step 'flatpak system cleanup failed' flatpak uninstall --unused --system
+  _upkg_run_cleanup_step 'flatpak system cleanup failed' flatpak uninstall --unused --system || return $?
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
 }
@@ -1180,9 +1212,9 @@ _upkg_run_clean_nix() {
 
   _upkg_print_cleanup_phase 'Unreachable store objects'
   if (( _UPKG_DRY_RUN )); then
-    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage --dry-run
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage --dry-run || return $?
   else
-    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -1272,9 +1304,10 @@ _upkg_run_clean_npm() {
   if (( _UPKG_DRY_RUN )); then
     _upkg_run_npm_npx_cache_command ls
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
     unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
-    _upkg_record_cleanup_result "$rc" 'npx cache preview failed'
+    _upkg_record_cleanup_result "$rc" 'npx cache preview failed' || return $?
     if (( rc != 0 )) && _upkg_npm_npx_cache_unsupported "$output"; then
       print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
     fi
@@ -1288,6 +1321,7 @@ _upkg_run_clean_npm() {
 
   _upkg_run_npm_npx_cache_command ls
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
   listing=${_UPKG_NPM_NPX_STDOUT:-}
   unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
@@ -1299,10 +1333,10 @@ _upkg_run_clean_npm() {
       npx_failure_detail='npx cache cleanup is unsupported'
       print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
     fi
-    _upkg_record_cleanup_result "$rc" "$npx_failure_detail"
+    _upkg_record_cleanup_result "$rc" "$npx_failure_detail" || return $?
   elif [ -z "$listing" ]; then
     print 'No npx cache entries found.'
-    _upkg_record_cleanup_result 0 ''
+    _upkg_record_cleanup_result 0 '' || return $?
   else
     for line in ${(f)listing}; do
       [ -n "$line" ] || continue
@@ -1323,15 +1357,15 @@ _upkg_run_clean_npm() {
 
     if (( parse_failed || ${#npx_keys[@]} == 0 )); then
       print -u2 -- 'Could not safely parse npm npx cache keys; no npx entries were removed.'
-      _upkg_record_cleanup_result 1 'npx cache listing could not be parsed'
+      _upkg_record_cleanup_result 1 'npx cache listing could not be parsed' || return $?
     else
-      _upkg_run_cleanup_step 'npx cache cleanup failed' npm cache npx rm "${npx_keys[@]}"
+      _upkg_run_cleanup_step 'npx cache cleanup failed' npm cache npx rm "${npx_keys[@]}" || return $?
     fi
   fi
 
   _upkg_print_cleanup_phase 'npm cache'
   verify_failures_before=$failed
-  _upkg_run_cleanup_step 'npm cache verify failed' npm cache verify
+  _upkg_run_cleanup_step 'npm cache verify failed' npm cache verify || return $?
   if (( npx_unsupported && failed == verify_failures_before )); then
     failures[-1]='npx cache cleanup is unsupported; npm cache verified'
   fi

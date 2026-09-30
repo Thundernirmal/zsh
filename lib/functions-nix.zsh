@@ -412,6 +412,26 @@
     _npkg_nix eval --json "${source}#${attr_path}" --apply "$apply_expr"
   }
 
+  # Reap only the caller's recorded workers; a cancelled worker stops its peers.
+  _npkg_wait_workers() {
+    local pid other_pid worker_status
+    for pid in "${job_pids[@]}"; do
+      wait "$pid" 2>/dev/null
+      worker_status=$?
+      case $worker_status in
+        129|130|143)
+          if (( ! interrupted )); then
+            interrupted=$worker_status
+            for other_pid in "${job_pids[@]}"; do
+              command kill "$other_pid" 2>/dev/null
+            done
+          fi
+          ;;
+      esac
+    done
+    job_pids=()
+  }
+
   _npkg_outdated() {
     emulate -L zsh
     setopt pipefail localtraps NO_MONITOR NO_NOTIFY
@@ -438,18 +458,22 @@
       print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
       return 1
     }
-    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM; return 130' INT TERM
+    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM HUP; return 130' INT
+    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM HUP; return 143' TERM
+    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM HUP; return 129' HUP
 
     profile_json=$(_npkg_nix profile list --json 2>"$profile_error_file") || {
+      local profile_status=$?
       profile_error=$(<"$profile_error_file")
       command rm -f -- "$profile_error_file"
-      trap - INT TERM
+      trap - INT TERM HUP
+      case $profile_status in 129|130|143) return "$profile_status" ;; esac
       print -u2 -r -- 'Failed to read Nix profile.'
       [[ -n $profile_error ]] && print -u2 -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
       return 1
     }
     command rm -f -- "$profile_error_file"
-    trap - INT TERM
+    trap - INT TERM HUP
 
     print -r -- "$profile_json" | command jq -e '
       type == "object"
@@ -569,19 +593,25 @@
     }
 
     trap 'command rm -rf -- "$tmp_dir"' EXIT
-    trap 'interrupted=1; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' INT TERM
+    trap 'interrupted=130; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' INT
+    trap 'interrupted=143; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' TERM
+    trap 'interrupted=129; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' HUP
 
     for (( idx = 1; idx <= pkg_count; idx++ )); do
       (( interrupted )) && break
       (( structurally_valid[$idx] )) || continue
 
       (
+        trap - EXIT INT TERM HUP
+        local evaluation_status
         _npkg_eval_installable_record \
           "${sources[$idx]}" \
           "${attrs[$idx]}" \
           "${output_specs[$idx]}" \
           >"${tmp_dir}/${idx}.current" \
           2>"${tmp_dir}/${idx}.current.error"
+        evaluation_status=$?
+        case $evaluation_status in 129|130|143) exit "$evaluation_status" ;; esac
 
         if [[ -n ${locked_uris[$idx]} ]]; then
           _npkg_eval_installable_record \
@@ -590,6 +620,8 @@
             "${output_specs[$idx]}" \
             >"${tmp_dir}/${idx}.locked" \
             2>"${tmp_dir}/${idx}.locked.error"
+          evaluation_status=$?
+          case $evaluation_status in 129|130|143) exit "$evaluation_status" ;; esac
         fi
         :
       ) &
@@ -601,24 +633,18 @@
       fi
 
       if (( ${#job_pids[@]} >= max_jobs )); then
-        for pid in "${job_pids[@]}"; do
-          wait "$pid" 2>/dev/null
-        done
-        job_pids=()
+        _npkg_wait_workers
         (( interrupted )) && break
       fi
     done
 
-    for pid in "${job_pids[@]}"; do
-      wait "$pid" 2>/dev/null
-    done
-    job_pids=()
+    _npkg_wait_workers
 
     if (( interrupted )); then
-      trap - INT TERM
+      trap - INT TERM HUP
       command rm -rf -- "$tmp_dir"
       trap - EXIT
-      return 130
+      return "$interrupted"
     fi
 
     for (( idx = 1; idx <= pkg_count; idx++ )); do
@@ -684,11 +710,11 @@
       unknown_details+=("$detail")
     done
 
-    trap - INT TERM
+    trap - INT TERM HUP
     if (( interrupted )); then
       command rm -rf -- "$tmp_dir"
       trap - EXIT
-      return 130
+      return "$interrupted"
     fi
 
     command rm -rf -- "$tmp_dir"

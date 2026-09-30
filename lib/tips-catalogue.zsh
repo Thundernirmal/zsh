@@ -116,6 +116,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Use a nonempty list such as upkg --only=brew,npm to limit package operations"
     "Run upkg plan to preview package upgrades"
     "Run upkg clean --dry-run before package cleanup"
+    "Use Ctrl+C during upkg to stop remaining managers and cleanup phases"
   )
 fi
 
