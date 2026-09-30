@@ -108,11 +108,12 @@ fi
 (
   write_fake dnf '
 case "$*" in
-  "-q --color=never list --available *ripgrep*")
+  "--color=never list --available *ripgrep*")
     printf "%s\n" "Updating and loading repositories:" "Repositories loaded." "Available packages" "ripgrep.x86_64 15.2.0-1.fc44 updates"
     printf "%s\n" "metadata warning" >&2 ;;
-  "-q --color=never list --available *empty4*") printf "%s\n" "Error: No matching Packages to list" >&2; exit 1 ;;
-  "-q --color=never list --available *empty5*") printf "%s\n" "No matches found." >&2; exit 1 ;;
+  "--color=never list --available *empty4*") printf "%s\n" "Error: No matching Packages to list" >&2; exit 1 ;;
+  "-q --color=never list --available *empty5*") exit 1 ;;
+  "--color=never list --available *empty5*") printf "%s\n" "No matches found." >&2; exit 1 ;;
   *) printf "%s\n" "repository failure" >&2; exit 1 ;;
 esac'
   PATH="$scratch:$original_path"

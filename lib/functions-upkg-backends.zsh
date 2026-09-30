@@ -63,7 +63,8 @@ _upkg_run_search_dnf() {
   done
 
   _upkg_search_progress dnf ''
-  LC_ALL=C _upkg_capture_query dnf -q --color=never list --available "${query_patterns[@]}"
+  # Quiet DNF5 suppresses its no-match diagnostic, making status 1 ambiguous.
+  LC_ALL=C _upkg_capture_query dnf --color=never list --available "${query_patterns[@]}"
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
