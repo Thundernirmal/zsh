@@ -435,10 +435,16 @@ _upkg_capture_query() {
   setopt localtraps
   typeset -g _UPKG_QUERY_STDOUT='' _UPKG_QUERY_STDERR=''
   local capture_dir rc
+  local -a inherited_cleanup_dirs
+  if (( ${funcstack[(Ie)_upkg_run_outdated_pacman]} )); then
+    inherited_cleanup_dirs=( "${_ZSH_QUERY_ROOT_CLEANUP_DIRS[@]-}" )
+  fi
+  local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=( "${inherited_cleanup_dirs[@]}" )
   capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-query.XXXXXX") || {
     _UPKG_QUERY_STDERR='Could not create temporary storage for package query.'
     return 1
   }
+  _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$capture_dir" )
   {
     _zsh_run_owned_query command "$@" >"$capture_dir/stdout" 2>"$capture_dir/stderr"
     rc=$?

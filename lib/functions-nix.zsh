@@ -486,12 +486,23 @@
     local -a names attrs sources locked_uris installed_path_sets output_specs structurally_valid
     local -a installed_versions available_versions statuses unknown_details job_pids worker_fields
     local -A job_identities
-    local worker_stat
+    local worker_stat _ZSH_QUERY_ROOT_PID _ZSH_QUERY_ROOT_IDENTITY
+    local -a inherited_cleanup_dirs
+    if (( ${funcstack[(Ie)_upkg_run_outdated_nix]} )); then
+      inherited_cleanup_dirs=( "${_ZSH_QUERY_ROOT_CLEANUP_DIRS[@]-}" )
+    fi
+    local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=( "${inherited_cleanup_dirs[@]}" )
+    zmodload zsh/system || return 1
+    _ZSH_QUERY_ROOT_PID=$sysparams[pid]
+    worker_stat=$(</proc/$_ZSH_QUERY_ROOT_PID/stat)
+    worker_fields=( ${=${worker_stat##*\) }} )
+    _ZSH_QUERY_ROOT_IDENTITY=${worker_fields[20]}
 
     profile_capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-profile.XXXXXX") || {
       print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
       return 1
     }
+    _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$profile_capture_dir" )
     profile_error_file="$profile_capture_dir/stderr"
     local profile_status
     {
@@ -625,6 +636,7 @@
       return 1
     }
 
+    _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$tmp_dir" )
     trap 'command rm -rf -- "$tmp_dir"' EXIT
     trap 'interrupted=130; _zsh_stop_owned_jobs "${job_pids[@]}"' INT
     trap 'interrupted=143; _zsh_stop_owned_jobs "${job_pids[@]}"' TERM

@@ -1,5 +1,6 @@
 # Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
 # The catalogue checks matching tool capabilities when it loads on first use.
+# Package reminders follow the current workflows and ownership boundaries in GUIDE.md.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
 typeset -gi _ZSH_TIPS_CATALOGUE_LOADED=${_ZSH_TIPS_CATALOGUE_LOADED:-0}

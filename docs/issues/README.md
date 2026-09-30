@@ -4,9 +4,7 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 ## Issue index
 
-| ID | Priority | Report |
-| --- | --- | --- |
-| ZSH-039 | P2 (blocking) | [An abandoned captured query outlives its owner or hangs it](039-abandoned-captured-query-outlives-its-owner.md) |
+There are currently no open issue reports.
 
 ## Report structure and verification
 

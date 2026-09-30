@@ -564,6 +564,7 @@ _upkg_run_outdated_pacman() {
   setopt localtraps
 
   local output diagnostic rc database='' query='pacman -Qu'
+  local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=()
   local detail='cached repository metadata; replacements are resolved during upgrade'
   _upkg_print_section pacman
 
@@ -576,6 +577,7 @@ _upkg_run_outdated_pacman() {
       return 1
     }
     {
+      _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$database" )
       trap '_upkg_check_interrupt 130; return 130' INT
       trap '_upkg_check_interrupt 143; return 143' TERM
       trap '_upkg_check_interrupt 129; return 129' HUP
@@ -709,6 +711,7 @@ _upkg_run_outdated_nix() {
   emulate -L zsh
 
   local output diagnostic capture_dir rc state changed unknown
+  local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=()
 
   _upkg_print_section nix
 
@@ -722,6 +725,7 @@ _upkg_run_outdated_nix() {
     _upkg_set_last_result 'failed' 'could not create temporary storage for npkg outdated'
     return 1
   }
+  _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$capture_dir" )
   # Invoke in this process: result globals survive, streams stay independent.
   {
     npkg outdated >"$capture_dir/stdout" 2>"$capture_dir/stderr"

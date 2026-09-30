@@ -53,7 +53,7 @@ Fuzzy pickers share one rounded frame with unfilled input and footer rows, restr
 - On-demand tips include manager-specific reminders only when their tools are available.
 - Shared themes for rich dashboards and every fzf entry point, with atomic session switching and read-only inspection through `ztheme` and deterministic plain-text fallbacks.
 
-Upgrade previews inventory available updates; cleanup previews describe cleanup work. Both avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, cleared search progress and distinct cancellation summaries and owned query-process cleanup, and cleanup effects.
+Upgrade previews inventory available updates; cleanup previews describe cleanup work. Both avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, cleared search progress and distinct cancellation summaries and owned query-process cleanup after cancellation or abnormal owner death, and cleanup effects.
 
 ## Requirements
 
