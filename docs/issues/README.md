@@ -1,8 +1,8 @@
 # Open issue reports
 
-This directory tracks the 12 unresolved findings from the 2026-09-30 full repository audit at commit `12e276a`. It describes defects and the behavior required after repair. Creating these reports does not fix the implementation or promise that no other defects exist.
+This directory tracks the 11 unresolved findings from the 2026-09-30 full repository audit at commit `12e276a`. It describes defects and the behavior required after repair. Creating these reports does not fix the implementation or promise that no other defects exist.
 
-The audit covered startup, aliases, lazy loading, file/system/Git/package commands, Nix, credentials, themes, help, completion, documentation, and CI. The complete regression runner and four real fzf terminal cases passed at the audited baseline. The findings identify behavior not covered by those passing tests. 11 reports have reproduced evidence; ZSH-012 is established by the official Flatpak manual and upstream filtering code. A review subagent independently checked the findings.
+The audit covered startup, aliases, lazy loading, file/system/Git/package commands, Nix, credentials, themes, help, completion, documentation, and CI. The complete regression runner and four real fzf terminal cases passed at the audited baseline. The findings identify behavior not covered by those passing tests. 10 reports have reproduced evidence; ZSH-012 is established by the official Flatpak manual and upstream filtering code. A review subagent independently checked the findings.
 
 ## Issue index
 
@@ -10,7 +10,6 @@ P1 means a high-priority safety-contract failure: unsafe generated-code activati
 
 | ID | Priority | Issue | Affected surface |
 | --- | --- | --- | --- |
-| [ZSH-002](002-extract-empty-destination.md) | P1 | An empty extraction destination enables input removal | extract -C; extract --destination; extract --dest |
 | [ZSH-003](003-extract-input-symlinks.md) | P1 | Extraction follows input symlinks and removes their targets | extract on symlinked inputs |
 | [ZSH-004](004-cgm-transformed-scalar-exports.md) | P2 | CGM exports can transform or truncate credential values | cgm env; cgm env --all |
 | [ZSH-005](005-fzf-partial-integration-rollback.md) | P2 | Failed fzf initialization leaves partial integration installed | fzf startup integration; generated widgets and completion entry points |

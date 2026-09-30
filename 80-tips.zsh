@@ -1,4 +1,5 @@
 # Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
+# Extraction reminders require an existing, nonempty destination directory.
 # Reminders cover native file semantics and search errors, package selection,
 # cancellation, configured Paru scope, metadata freshness, and cleanup previews.
 # Navigation reminders include startup diagnostics after cache settings change.

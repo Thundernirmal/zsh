@@ -62,6 +62,11 @@ extract() {
             return 1
           fi
           destination=$1
+          [[ -n $destination ]] || {
+            print -u2 -r -- 'extract: --destination requires a directory'
+            _extract_usage >&2
+            return 1
+          }
           shift
           continue
           ;;

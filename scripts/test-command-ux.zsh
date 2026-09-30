@@ -161,6 +161,32 @@ test_extract_destination() {
   print -- 'ok: archive input remains after destination extraction'
 }
 
+test_extract_empty_destination() {
+  local root="$tmp_dir/empty-destination" fakebin="$tmp_dir/empty-destination/bin"
+  local option output rc suffix
+  command mkdir -p -- "$fakebin"
+  print -r -- '#!/bin/sh
+printf invoked >> "$EXTRACT_EMPTY_LOG"
+exit 99' > "$fakebin/gunzip"
+  command cp -- "$fakebin/gunzip" "$fakebin/bunzip2"
+  command cp -- "$fakebin/gunzip" "$fakebin/uncompress"
+  command chmod +x -- "$fakebin"/*
+  local old_path=$PATH
+  export EXTRACT_EMPTY_LOG="$root/calls"
+  for suffix in gz bz2 Z; do
+    print -r -- retained > "$root/input.$suffix"
+    for option in -C --destination --dest; do
+      output=$(PATH="$fakebin:$old_path" extract "$option" '' "$root/input.$suffix" 2>&1); rc=$?
+      assert_status "$rc" 1 "$option empty destination rejects .$suffix" || return 1
+      assert_contains "$output" 'requires a directory' 'empty destination explains invalid value' || return 1
+      assert_file_contains "$root/input.$suffix" retained 'invalid destination retains input' || return 1
+    done
+  done
+  [[ ! -e $EXTRACT_EMPTY_LOG ]] || return 1
+  print -- 'ok: empty destinations invoke no decompressor'
+  unset EXTRACT_EMPTY_LOG
+}
+
 test_extract_stream_safety() {
   local root="$tmp_dir/stream" fakebin="$tmp_dir/stream-bin" old_path=$PATH rc
   command mkdir -p -- "$root/dest" "$fakebin"
@@ -199,6 +225,7 @@ main() {
   test_search_options || return 1
   test_network_timeouts || return 1
   test_extract_destination || return 1
+  test_extract_empty_destination || return 1
   test_extract_stream_safety || return 1
 }
 
