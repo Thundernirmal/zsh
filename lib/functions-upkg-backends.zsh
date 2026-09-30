@@ -3,13 +3,16 @@
 _upkg_run_search_apt() {
   emulate -L zsh
 
-  local output rc line header rest
+  local output diagnostic rc line header rest
   local current_name='' current_version='' current_desc=''
   local -a rows
 
   _upkg_search_progress apt ''
-  output=$(command apt search --names-only -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query apt search --names-only -- "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
   output=$(print -r -- "$output" | sed '/^WARNING: apt does not have a stable CLI interface\./d;/^Sorting\.\.\.$/d;/^Full Text Search\.\.\.$/d')
@@ -36,9 +39,11 @@ _upkg_run_search_apt() {
     header=${line%% *}
     rest=${line#"$header"}
     rest=${rest# }
+    current_name=''; current_version=''; current_desc=''
+    [[ $header == */* && $rest != "$line" && -n $rest ]] || continue
+    [[ $header =~ '^[[:alnum:]][[:alnum:]+.:_-]*/[^[:space:]]+$' ]] || continue
     current_name=${header%%/*}
     current_version=${rest%% *}
-    current_desc=''
   done
 
   if [ -n "$current_name" ]; then
@@ -98,17 +103,20 @@ _upkg_run_search_dnf() {
 _upkg_run_search_pacman() {
   emulate -L zsh
 
-  local output rc line header rest name version desc=''
+  local output diagnostic rc line header rest name version desc=''
   local -a rows
 
   _upkg_search_progress pacman ''
-  output=$(command pacman -Ss -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query pacman --color never -Ss -- "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
-    if (( rc == 1 )) && [ -z "$output" ]; then
+    if (( rc == 1 )) && [[ -z $output && -z $diagnostic ]]; then
       _upkg_finish_search_results pacman
       return 0
     fi
@@ -131,6 +139,8 @@ _upkg_run_search_pacman() {
     header=${line%% *}
     rest=${line#"$header"}
     rest=${rest# }
+    [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
+    [[ -n $rest && $rest != "$line" ]] || continue
     name=${header#*/}
     version=${rest%% *}
     rows+=("${name}"$'\t'"${version}"$'\t')
@@ -142,17 +152,20 @@ _upkg_run_search_pacman() {
 _upkg_run_search_paru() {
   emulate -L zsh
 
-  local output rc line header rest name version desc=''
+  local output diagnostic rc line header rest name version desc=''
   local -a rows
 
   _upkg_search_progress paru ''
-  output=$(command paru -Ss -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query paru --color never -Ss -- "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
-    if (( rc == 1 )) && [ -z "$output" ]; then
+    if (( rc == 1 )) && [[ -z $output && -z $diagnostic ]]; then
       _upkg_finish_search_results paru
       return 0
     fi
@@ -175,6 +188,8 @@ _upkg_run_search_paru() {
     header=${line%% *}
     rest=${line#"$header"}
     rest=${rest# }
+    [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
+    [[ -n $rest && $rest != "$line" ]] || continue
     name=${header#*/}
     version=${rest%% *}
     rows+=("${name}"$'\t'"${version}"$'\t')
@@ -186,18 +201,22 @@ _upkg_run_search_paru() {
 _upkg_run_search_brew() {
   emulate -L zsh
 
-  local output rc line candidate meta version
+  local output diagnostic combined rc line candidate meta version
   local info_limit=50 formula_total=0 cask_total=0
   local -a formulae casks formulae_for_info casks_for_info rows tokens
   local -A formula_wanted cask_wanted
 
   _upkg_search_progress brew 'formulae'
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula -- "$@" 2>&1)
+  LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew search --formula -- "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
   if (( rc != 0 )); then
-    if [[ $output != *'No formulae found'* && $output != *'No formulae or casks found'* ]]; then
+    if (( rc != 1 )) || [[ $combined != *'No formulae found'* && $combined != *'No formulae or casks found'* ]]; then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew search --formula failed'
       return 1
@@ -207,17 +226,23 @@ _upkg_run_search_brew() {
       [ -n "$line" ] || continue
       [[ $line == '==>'* ]] && continue
       tokens=( ${(z)line} )
-      formulae+=( "${tokens[@]}" )
+      for candidate in "${tokens[@]}"; do
+        [[ $candidate =~ '^[[:alnum:]_+.@/-]+$' ]] && formulae+=("$candidate")
+      done
     done
   fi
 
   _upkg_search_progress brew 'casks'
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask -- "$@" 2>&1)
+  LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew search --cask -- "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
   if (( rc != 0 )); then
-    if [[ $output != *'No casks found'* && $output != *'No formulae or casks found'* ]]; then
+    if (( rc != 1 )) || [[ $combined != *'No casks found'* && $combined != *'No formulae or casks found'* ]]; then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew search --cask failed'
       return 1
@@ -227,7 +252,9 @@ _upkg_run_search_brew() {
       [ -n "$line" ] || continue
       [[ $line == '==>'* ]] && continue
       tokens=( ${(z)line} )
-      casks+=( "${tokens[@]}" )
+      for candidate in "${tokens[@]}"; do
+        [[ $candidate =~ '^[[:alnum:]_+.@/-]+$' ]] && casks+=("$candidate")
+      done
     done
   fi
 
@@ -259,8 +286,11 @@ _upkg_run_search_brew() {
 
   if (( ${#formulae_for_info[@]} > 0 )); then
     _upkg_search_progress brew 'formula info'
-    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --formula "${formulae_for_info[@]}" 2>&1)
+    LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew info --formula "${formulae_for_info[@]}"
     rc=$?
+    output=$_UPKG_QUERY_STDOUT
+    diagnostic=$_UPKG_QUERY_STDERR
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_check_interrupt "$rc" || return $?
     _upkg_search_progress_clear
     if (( rc != 0 )); then
@@ -284,8 +314,11 @@ _upkg_run_search_brew() {
 
   if (( ${#casks_for_info[@]} > 0 )); then
     _upkg_search_progress brew 'cask info'
-    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --cask "${casks_for_info[@]}" 2>&1)
+    LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew info --cask "${casks_for_info[@]}"
     rc=$?
+    output=$_UPKG_QUERY_STDOUT
+    diagnostic=$_UPKG_QUERY_STDERR
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_check_interrupt "$rc" || return $?
     _upkg_search_progress_clear
     if (( rc != 0 )); then
@@ -313,17 +346,21 @@ _upkg_run_search_brew() {
 _upkg_run_search_flatpak() {
   emulate -L zsh
 
-  local output rc app version name description display_name
-  local -a rows
+  local output diagnostic combined rc line app version name description display_name
+  local -a rows fields
 
   _upkg_search_progress flatpak ''
-  output=$(command flatpak search --columns=application,version,name,description -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query flatpak search --columns=application,version,name,description -- "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
-    if [[ $output == *'No matches found'* ]]; then
+    if (( rc == 1 )) && [[ $combined == *'No matches found'* ]]; then
       _upkg_finish_search_results flatpak
       return 0
     fi
@@ -332,9 +369,11 @@ _upkg_run_search_flatpak() {
     return 1
   fi
 
-  while IFS=$'\t' read -r app version name description _; do
-    [ -n "$app" ] || continue
-    [ "$app" = 'Application' ] && continue
+  for line in ${(f)output}; do
+    fields=("${(@ps:\t:)line}")
+    (( ${#fields} >= 4 )) || continue
+    app=$fields[1]; version=$fields[2]; name=$fields[3]; description=$fields[4]
+    [[ $app =~ '^[[:alnum:]_-]+(\.[[:alnum:]_-]+){2,}$' ]] || continue
     display_name=$(_upkg_search_trim "$name")
     description=$(_upkg_search_trim "$description")
     if [ -n "$display_name" ] && [ "$display_name" != "$app" ]; then
@@ -345,7 +384,7 @@ _upkg_run_search_flatpak() {
       fi
     fi
     rows+=("${app}"$'\t'"${version}"$'\t'"${description}")
-  done <<< "$output"
+  done
 
   _upkg_finish_search_results flatpak "${rows[@]}"
 }
@@ -353,23 +392,28 @@ _upkg_run_search_flatpak() {
 _upkg_run_search_nix() {
   emulate -L zsh
 
-  local output output_lower rc line trimmed name version description=''
+  local output diagnostic combined output_lower rc line trimmed name version description=''
   local -a rows
 
-  # Search calls the private Nix adapter directly rather than the npkg loader.
+  # Use the same fixed experimental flags as _npkg_nix, through native
+  # capture so diagnostics cannot become search descriptions.
   _zsh_functions_load_domain nix || {
     _upkg_set_last_result 'failed' 'could not load the Nix domain'
     return 1
   }
   _upkg_search_progress nix ''
-  output=$(_npkg_nix search nixpkgs "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query nix --extra-experimental-features "nix-command flakes" search nixpkgs "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
   if (( rc != 0 )); then
-    output_lower=${(L)output}
-    if [[ $output_lower == *'no packages matched'* || $output_lower == *'no results for'* ]]; then
+    output_lower=${(L)combined}
+    if (( rc == 1 )) && [[ $output_lower == *'no packages matched'* || $output_lower == *'no results for'* ]]; then
       _upkg_finish_search_results nix
       return 0
     fi
@@ -389,6 +433,7 @@ _upkg_run_search_nix() {
       continue
     fi
 
+    [[ $line == '* '* && $line == *' ('*')' ]] || continue
     trimmed=$line
     trimmed=${trimmed#\* }
     name=${trimmed%% \(*}
@@ -406,12 +451,15 @@ _upkg_run_search_nix() {
 _upkg_run_search_npm() {
   emulate -L zsh
 
-  local output rc name description author date version
-  local -a rows
+  local output diagnostic rc line name description author date version
+  local -a rows fields
 
   _upkg_search_progress npm ''
-  output=$(command npm search --parseable -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query npm search --parseable --json=false --color=false -- "$@"
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
   _upkg_search_progress_clear
 
@@ -421,10 +469,13 @@ _upkg_run_search_npm() {
     return 1
   fi
 
-  while IFS=$'\t' read -r name description author date version _; do
-    [ -n "$name" ] || continue
+  for line in ${(f)output}; do
+    fields=("${(@ps:\t:)line}")
+    (( ${#fields} >= 5 )) || continue
+    name=$fields[1]; description=$fields[2]; version=$fields[5]
+    [[ $name =~ '^(@[[:alnum:]_.~-]+/)?[[:alnum:]_.~-]+$' && -n $version ]] || continue
     rows+=("${name}"$'\t'"${version}"$'\t'"$(_upkg_search_trim "$description")")
-  done <<< "$output"
+  done
 
   _upkg_finish_search_results npm "${rows[@]}"
 }

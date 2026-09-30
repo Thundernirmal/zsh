@@ -353,3 +353,96 @@ exit 1' > "$refresh_dir/pacman"
   assert test "${_UPKG_LAST_DETAIL#*cached repository metadata}" != "$_UPKG_LAST_DETAIL"
 ) || exit 1
 print 'ok: Arch refresh uses a private database, handles native statuses, and cleans up'
+
+(
+  _zsh_functions_load_domain nix || exit 1
+  export AUDIT_LOG="$scratch/search-info.log"
+  query_tmp="$scratch/query-captures"
+  command mkdir "$query_tmp"
+  export TMPDIR=$query_tmp
+  for audit_manager in apt pacman paru brew flatpak nix npm; do
+    write_fake "$audit_manager" '
+printf "%s\n" "warning: optional configuration is deprecated" >&2
+case "$*" in
+  "info --formula sample")
+    printf "%s\n" "$*" >> "$AUDIT_LOG"
+    printf "%s\n" "==> sample: stable 999.0 (diagnostic only)" >&2
+    printf "%s\n" "==> sample: stable 1.2.0 (bottled)"
+    exit "${AUDIT_INFO_RC:-0}" ;;
+  info*) printf "%s\n" "$*" >> "$AUDIT_LOG"; exit 99 ;;
+  "search --cask -- example") exit "$AUDIT_SEARCH_RC" ;;
+esac
+if [ "$AUDIT_SEARCH_MODE" = valid ]; then
+  printf "%s\n" "$AUDIT_SEARCH_BODY"
+elif [ "$AUDIT_SEARCH_MODE" = malformed ]; then
+  printf "%s\n" "unstructured output with no package fields"
+fi
+exit "$AUDIT_SEARCH_RC"'
+  done
+  PATH="$scratch:$original_path"
+  for audit_manager in apt pacman paru brew flatpak nix npm; do
+    case $audit_manager in
+      apt) AUDIT_SEARCH_BODY=$'sample/stable 1.2.0 amd64\n  package description'; expected_row=$'apt\tsample\t1.2.0\tpackage description' ;;
+      pacman|paru) AUDIT_SEARCH_BODY=$'extra/sample 1.2.0\n    package description'; expected_row="${audit_manager}"$'\tsample\t1.2.0\tpackage description' ;;
+      brew) AUDIT_SEARCH_BODY=sample; expected_row=$'brew\tsample\t1.2.0\tformula' ;;
+      flatpak) AUDIT_SEARCH_BODY=$'org.example.Sample\t\tSample App\tpackage description'; expected_row=$'flatpak\torg.example.Sample\t\tSample App - package description' ;;
+      nix) AUDIT_SEARCH_BODY=$'* legacyPackages.test.sample (1.2.0)\n    package description'; expected_row=$'nix\tlegacyPackages.test.sample\t1.2.0\tpackage description' ;;
+      npm) AUDIT_SEARCH_BODY=$'@example/sample\t\tmaintainer\t2026-09-30\t1.2.0\tkeyword'; expected_row=$'npm\t@example/sample\t1.2.0\t' ;;
+    esac
+    export AUDIT_SEARCH_BODY npm_config_json=true npm_config_color=true
+    for AUDIT_SEARCH_MODE in empty valid malformed; do
+      # Brew's token output cannot distinguish arbitrary words from real
+      # package names; stderr isolation and metadata headers provide its schema.
+      [[ $audit_manager == brew && $AUDIT_SEARCH_MODE == malformed ]] && continue
+      for AUDIT_SEARCH_RC in 0 2 130; do
+        export AUDIT_SEARCH_MODE AUDIT_SEARCH_RC
+        : > "$AUDIT_LOG"
+        _UPKG_SEARCH_ROWS=()
+        "_upkg_run_search_${audit_manager}" example >"$scratch/search-out" 2>"$scratch/search-err"
+        result=$?
+        case $AUDIT_SEARCH_RC in
+          0)
+            assert test "$result" -eq 0
+            if [[ $AUDIT_SEARCH_MODE == valid ]]; then
+              assert test "${#_UPKG_SEARCH_ROWS}" -eq 1
+              assert test "${_UPKG_SEARCH_ROWS[1]}" = "$expected_row"
+              if [[ $audit_manager == flatpak ]]; then
+                rendered=$(_upkg_format_search_rows "${_UPKG_SEARCH_ROWS[@]}")
+                assert test "${rendered#*'?'}" != "$rendered"
+                assert test "${rendered#*'Sample App - package description'}" != "$rendered"
+              fi
+              assert test "$_UPKG_LAST_STATE" = 'matches found'
+            else
+              assert test "${#_UPKG_SEARCH_ROWS}" -eq 0
+              assert test "$_UPKG_LAST_STATE" = 'no matches'
+            fi ;;
+          2) assert test "$result" -eq 1; assert test "$_UPKG_LAST_STATE" = failed; assert test "${#_UPKG_SEARCH_ROWS}" -eq 0 ;;
+          130) assert test "$result" -eq 130; assert test "$_UPKG_LAST_STATE" = cancelled; assert test "${#_UPKG_SEARCH_ROWS}" -eq 0 ;;
+        esac
+        diagnostics=$(<"$scratch/search-err")
+        assert test "${diagnostics#*warning: optional configuration}" != "$diagnostics"
+        output=$(<"$scratch/search-out")
+        assert test "${output#*warning: optional configuration}" = "$output"
+        assert test -z "$(command ls -A "$query_tmp")"
+        if [[ $audit_manager == brew ]]; then
+          if [[ $AUDIT_SEARCH_MODE == valid && $AUDIT_SEARCH_RC == 0 ]]; then
+            assert test "$(<"$AUDIT_LOG")" = 'info --formula sample'
+          else
+            assert test ! -s "$AUDIT_LOG"
+          fi
+        fi
+      done
+    done
+    print -r -- "ok: $audit_manager search separates warning/data/error streams and cleans captures"
+  done
+  export AUDIT_SEARCH_MODE=valid AUDIT_SEARCH_BODY=sample AUDIT_SEARCH_RC=0
+  for AUDIT_INFO_RC in 1 130; do
+    export AUDIT_INFO_RC
+    _UPKG_SEARCH_ROWS=()
+    _upkg_run_search_brew example >/dev/null 2>"$scratch/search-err"
+    result=$?
+    assert test "$result" -eq "$AUDIT_INFO_RC"
+    assert test "${#_UPKG_SEARCH_ROWS}" -eq 0
+  done
+  print 'ok: Homebrew metadata failures and interrupts retain their status'
+) || exit 1

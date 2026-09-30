@@ -704,11 +704,11 @@ upkg search ripgrep --only=nix
 upkg search ripgrep viewer --only=brew,npm
 ```
 
-Results are normalized into one table with manager, package, available version, and a cheap native description when available. DNF search runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. A no-match result is summarized once. Backend failures name the affected managers, and other managers continue.
+Results are normalized into one table with manager, package, available version, and a cheap native description when available. Search parsers use stdout records only; native warnings and errors stay on stderr and never become package rows or descriptions. Flatpak/npm empty tab-separated fields keep their position. Arch search disables color, and npm search explicitly selects uncolored parseable output regardless of inherited JSON settings. DNF search runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. A no-match result is summarized once. Backend failures name the affected managers, and other managers continue.
 
 Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
 
-Homebrew formulae and casks are queried separately. Broad searches cap follow-up metadata calls at 50 formulae and 50 casks; refine the query when the cap warning appears.
+Homebrew formulae and casks are queried separately; only stdout candidates are sent to metadata lookup, whose diagnostics also stay separate. Broad searches cap follow-up metadata calls at 50 formulae and 50 casks; refine the query when the cap warning appears.
 
 ### Cleanup policy
 

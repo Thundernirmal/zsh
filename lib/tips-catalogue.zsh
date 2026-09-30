@@ -115,7 +115,7 @@ fi
 if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] || $+commands[brew] || $+commands[flatpak] || ($+commands[nix] && $+functions[npkg]) || $+commands[npm] )); then
   _zsh_tip_pool+=(
     "Run upkg to check detected package managers; review warnings on stderr"
-    "Run upkg search ripgrep to search detected package managers"
+    "Run upkg search ripgrep; native warnings stay separate from package results"
     "Run upkg search ripgrep --only=dnf to search RPM package names"
     "Run upkg managers to show active and alternate backends"
     'Use upkg --only dnf to select DNF even when another distro backend is active'

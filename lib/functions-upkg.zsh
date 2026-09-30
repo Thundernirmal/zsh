@@ -691,14 +691,15 @@ _upkg_search_add_rows() {
   local manager=$1 row
   local name version description
   shift
-  local -a rows=( "$@" )
+  local -a rows=( "$@" ) fields
 
   typeset -g -a _UPKG_SEARCH_ROWS
 
   (( ${#rows[@]} > 0 )) || return 0
 
   for row in "${rows[@]}"; do
-    IFS=$'\t' read -r name version description <<< "$row"
+    fields=("${(@ps:\t:)row}")
+    name=${fields[1]:-}; version=${fields[2]:-}; description=${fields[3]:-}
     _UPKG_SEARCH_ROWS+=("${manager}"$'\t'"${name}"$'\t'"${version}"$'\t'"${description}")
   done
 }
@@ -726,7 +727,7 @@ _upkg_format_search_rows() {
   local width manager_width name_width version_width desc_width
   local failed_count=0
   local failed_managers=''
-  local -a rows=( "$@" )
+  local -a rows=( "$@" ) fields
 
   if (( ${#rows[@]} == 0 )); then
     for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
@@ -751,7 +752,8 @@ _upkg_format_search_rows() {
     printf '%-8s %-36s %-18s %s\n' '-------' '-------' '---------' '-----------'
 
     for row in "${rows[@]}"; do
-      IFS=$'\t' read -r manager name version description <<< "$row"
+      fields=("${(@ps:\t:)row}")
+      manager=${fields[1]:-}; name=${fields[2]:-}; version=${fields[3]:-}; description=${fields[4]:-}
       [ -n "$version" ] || version='?'
       printf '%-8s %-36s %-18s %s\n' "$manager" "$name" "$version" "$description"
     done
@@ -781,7 +783,8 @@ _upkg_format_search_rows() {
     _ui_section_break
 
     for row in "${rows[@]}"; do
-      IFS=$'\t' read -r manager name version description <<< "$row"
+      fields=("${(@ps:\t:)row}")
+      manager=${fields[1]:-}; name=${fields[2]:-}; version=${fields[3]:-}; description=${fields[4]:-}
       [ -n "$version" ] || version='?'
       description=$(_upkg_search_trim "$description")
 

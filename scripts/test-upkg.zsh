@@ -454,7 +454,7 @@ esac
   write_fake pacman '
 case "$*" in
   "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories" ; printf "%s\n" "    for a regex pattern" ;;
+  "--color never -Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories" ; printf "%s\n" "    for a regex pattern" ;;
   "-Syu") printf "%s\n" "pacman upgrade" ;;
   *) exit 2 ;;
 esac
@@ -463,7 +463,7 @@ esac
   write_fake paru '
 case "$*" in
   "-Qu") printf "%s\n" "ripgrep 14.1.0-1 -> 14.1.1-1" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
+  "--color never -Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
   *) exit 2 ;;
 esac
@@ -484,15 +484,15 @@ write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
   "outdated -g --depth=0 --json=false --parseable=false --color=false") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
-  "search --parseable -- help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
-  "search --parseable -- managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
-  "search --parseable -- ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
-  "search --parseable -- ripgrep viewer")
-    [ "$#" -eq 5 ] || exit 3
+  "search --parseable --json=false --color=false -- help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
+  "search --parseable --json=false --color=false -- managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
+  "search --parseable --json=false --color=false -- ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
+  "search --parseable --json=false --color=false -- ripgrep viewer")
+    [ "$#" -eq 7 ] || exit 3
     printf "ripgrep-viewer\tMulti-term search result\tnpm-user\t2024-01-01\t5.6.7\tripgrep viewer\n"
     ;;
-  "search --parseable -- upgrade") printf "upgrade-helper\tSearches packages named after commands\tnpm-user\t2024-01-01\t1.2.3\tupgrade\n" ;;
-  "search --parseable -- -leading") printf "leading-safe\tLeading-dash query\tnpm-user\t2024-01-01\t1.0.0\tleading\n" ;;
+  "search --parseable --json=false --color=false -- upgrade") printf "upgrade-helper\tSearches packages named after commands\tnpm-user\t2024-01-01\t1.2.3\tupgrade\n" ;;
+  "search --parseable --json=false --color=false -- -leading") printf "leading-safe\tLeading-dash query\tnpm-user\t2024-01-01\t1.0.0\tleading\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -1218,7 +1218,7 @@ esac
   write_fake npm '
 printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
 case "$*" in
-  "search --parseable -- clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
+  "search --parseable --json=false --color=false -- clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
   "cache npx ls") printf "%s\n" "npx-cache-key-one: test-package" "npx-cache-key-two: another-package" ;;
   "cache npx rm npx-cache-key-one npx-cache-key-two") printf "%s\n" "MUTATING npm npx cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm npx cache removed" ;;
   "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
@@ -1237,7 +1237,7 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'search accepts clean as a literal query' || return 1
   assert_contains "$output" 'clean-package' 'clean keyword searches still reach npm' || return 1
-  assert_contains "$(<"$clean_log")" 'npm search --parseable -- clean' 'search passes clean to the npm backend' || return 1
+  assert_contains "$(<"$clean_log")" 'npm search --parseable --json=false --color=false -- clean' 'search passes clean to the npm backend' || return 1
 
   : > "$clean_log"
   output=$(run_upkg_with_managers 'apt dnf pacman paru brew flatpak nix npm' clean --dry-run --only=apt,dnf,pacman,paru,brew,flatpak,nix,npm)
