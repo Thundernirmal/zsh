@@ -1,6 +1,12 @@
 emulate -L zsh
 
 local branch=$1 relative=$2 subject=$3 worktree_path=$4
+local identity=${9:-}
+REPLY=''
+if [[ $identity != refs/heads/?* && $identity != refs/remotes/?* ]] || [[ $identity == *[[:space:][:cntrl:]]* ]]; then
+  print -u2 -r -- 'fbr: row requires an explicit canonical branch reference'
+  return 1
+fi
 local badge_color=$5 badge_reset=$6
 integer branch_width=${7:-32} relative_width=${8:-14}
 local branch_display branch_field relative_field safe_worktree
@@ -28,4 +34,4 @@ subject=$REPLY
 _ui_safe_text_reply "$worktree_path"
 safe_worktree=$REPLY
 
-REPLY="$branch_field"$'\t'"$relative_field"$'\t'"$subject"$'\t'"$safe_worktree"$'\t'"$branch"
+REPLY="$branch_field"$'\t'"$relative_field"$'\t'"$subject"$'\t'"$safe_worktree"$'\t'"$identity"

@@ -310,3 +310,137 @@ if ! (( $+functions[_ui_visible_count] )); then
   }
 fi
 
+# Liveness means this shell's recorded worker, not merely an occupied PID.
+_zsh_owned_job_is_running() {
+  emulate -L zsh
+  zmodload zsh/system || return 1
+  local pid=$1 stat_text expected
+  local -a fields
+  [[ $pid == <-> && -r /proc/$pid/stat ]] || return 1
+  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  [[ ${fields[2]-} == "$sysparams[pid]" && ${fields[1]-} != Z ]] || return 1
+  expected=${job_identities[$pid]-}
+  [[ -z $expected || ${fields[20]-} == "$expected" ]]
+}
+
+# Workers own their native query sessions and perform their own shutdown.
+_zsh_stop_owned_jobs() {
+  emulate -L zsh
+  local pid
+  for pid in "$@"; do
+    _zsh_owned_job_is_running "$pid" || continue
+    builtin kill -TERM "$pid" 2>/dev/null
+  done
+  return 0
+}
+
+# A live supervisor pins the process-group identity through TERM and KILL.
+_zsh_stop_owned_group() {
+  emulate -L zsh
+  local pid=$1 identity=$2 stat_text
+  local -a fields
+  [[ $pid == <-> && -r /proc/$pid/stat ]] || return 0
+  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  [[ ${fields[3]-} == "$pid" && ${fields[4]-} == "$pid" && ${fields[20]-} == "$identity" ]] || return 0
+  builtin kill -TERM -- "-$pid" 2>/dev/null
+  (( $3 )) && zselect -t 10
+  builtin kill -KILL -- "-$pid" 2>/dev/null
+  return 0
+}
+
+# Before the handshake, own the launch process and its direct setsid child.
+_zsh_stop_unidentified_launcher() {
+  emulate -L zsh
+  local pid=$1 identity=$2 parent=$3 stat_text child_file child
+  local -a fields children
+  [[ -n $identity && -r /proc/$pid/stat ]] || return 0
+  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  [[ ${fields[2]-} == "$parent" && ${fields[20]-} == "$identity" ]] || return 0
+  # Freeze the launcher so setsid cannot fork after its child list is read.
+  builtin kill -STOP "$pid" 2>/dev/null || return 0
+  for child_file in /proc/$pid/task/*/children(N); do
+    children=( ${=$(<"$child_file")} )
+    for child in "${children[@]}"; do
+      [[ -r /proc/$child/stat ]] || continue
+      stat_text=$(</proc/$child/stat); fields=( ${=${stat_text##*\) }} )
+      [[ ${fields[2]-} == "$pid" && ${fields[1]-} != Z ]] || continue
+      if [[ ${fields[3]-} == "$child" && ${fields[4]-} == "$child" ]]; then
+        _zsh_stop_owned_group "$child" "${fields[20]}" 1
+      else
+        builtin kill -KILL "$child" 2>/dev/null
+      fi
+    done
+  done
+  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  if [[ ${fields[3]-} == "$pid" && ${fields[4]-} == "$pid" ]]; then
+    _zsh_stop_owned_group "$pid" "$identity" 1
+  else
+    builtin kill -KILL "$pid" 2>/dev/null
+  fi
+  return 0
+}
+
+# Captured queries have a private session, including children forked during TERM.
+_zsh_run_owned_query() {
+  emulate -L zsh
+  setopt localtraps NO_MONITOR
+  local control_dir='' launcher_pid='' owner_pid='' identity='' command_status=1 signal_status=0
+  local shell_executable caller_pid caller_identity root_pid root_identity launcher_identity='' stat_text
+  local -a record fields cleanup_dirs
+  if (( ${funcstack[(Ie)_upkg_capture_query]} || ${funcstack[(Ie)_npkg_outdated]} )); then
+    cleanup_dirs=( "${_ZSH_QUERY_ROOT_CLEANUP_DIRS[@]-}" )
+  fi
+  integer ticks=0
+  if ! zmodload zsh/system || ! zmodload zsh/zselect || ! zmodload zsh/stat || [[ ! -r /proc/$sysparams[pid]/stat ]] || ! command -v setsid >/dev/null 2>&1; then
+    print -u2 -r -- 'Captured package queries require Linux /proc, Zsh system/stat/zselect, and setsid (util-linux).'
+    return 1
+  fi
+  caller_pid=$sysparams[pid]
+  stat_text=$(</proc/$caller_pid/stat); fields=( ${=${stat_text##*\) }} )
+  caller_identity=${fields[20]}
+  root_pid=$caller_pid; root_identity=$caller_identity
+  if (( ${funcstack[(Ie)_npkg_outdated]} )); then
+    root_pid=${_ZSH_QUERY_ROOT_PID:-$caller_pid}
+    root_identity=${_ZSH_QUERY_ROOT_IDENTITY:-$caller_identity}
+  fi
+  shell_executable="/proc/$caller_pid/exe"
+  control_dir=$(command mktemp -d "${TMPDIR:-/tmp}/zsh-query-owner.XXXXXXXX") || return 1
+  trap '(( signal_status )) || signal_status=130' INT
+  trap '(( signal_status )) || signal_status=143' TERM
+  trap '(( signal_status )) || signal_status=129' HUP
+  {
+    command setsid --wait "$shell_executable" -df "$_ZSH_FUNCTIONS_MODULE_DIR/lib/query-supervisor.zsh" "$control_dir" "$caller_pid" "$caller_identity" "$root_pid" "$root_identity" "${#cleanup_dirs}" "${cleanup_dirs[@]}" "$@" &
+    launcher_pid=$!
+    if [[ -r /proc/$launcher_pid/stat ]]; then
+      stat_text=$(</proc/$launcher_pid/stat); fields=( ${=${stat_text##*\) }} )
+      [[ ${fields[2]-} != "$caller_pid" ]] || launcher_identity=${fields[20]-}
+    fi
+    while [[ ! -f $control_dir/identity || ! -s $control_dir/identity ]] && (( ! signal_status && ticks++ < 300 )); do
+      builtin kill -0 "$launcher_pid" 2>/dev/null || break
+      zselect -t 1
+    done
+    if [[ ! -f $control_dir/identity || ! -s $control_dir/identity ]] && (( ! signal_status )); then
+      print -u2 -r -- 'Captured package query supervisor did not establish its identity.'
+    fi
+    if [[ -f $control_dir/identity && -s $control_dir/identity ]]; then
+      record=( ${=$(<"$control_dir/identity")} )
+      owner_pid=${record[1]-}; identity=${record[2]-}
+      while [[ ! -f $control_dir/status || ! -s $control_dir/status ]] && (( ! signal_status )); do
+        builtin kill -0 "$launcher_pid" 2>/dev/null || break
+        zselect -t 1
+      done
+      [[ ! -f $control_dir/status || ! -s $control_dir/status ]] || command_status=$(<"$control_dir/status")
+      [[ $command_status == <-> && $command_status -le 255 ]] || command_status=1
+    fi
+  } always {
+    if [[ -n $owner_pid ]]; then
+      _zsh_stop_owned_group "$owner_pid" "$identity" "$signal_status"
+    elif [[ -n $launcher_pid ]]; then
+      _zsh_stop_unidentified_launcher "$launcher_pid" "$launcher_identity" "$caller_pid"
+    fi
+    [[ -z $launcher_pid ]] || wait "$launcher_pid" 2>/dev/null
+    command rm -rf -- "$control_dir"
+  }
+  (( ! signal_status )) || command_status=$signal_status
+  return "$command_status"
+}

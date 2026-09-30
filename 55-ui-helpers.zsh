@@ -155,6 +155,7 @@ _ui_status_metadata() {
     planned)               print -r -- $'info\tplanned\tcleanup\t󰋼\t>' ;;
     partial)               print -r -- $'danger\tpartial\tcleanup\t󰀦\t!' ;;
     blocked)               print -r -- $'warning\tblocked\tneutral\t󰍛\t-' ;;
+    cancelled)            print -r -- $'warning\tcancelled\tneutral\t󰀦\t!' ;;
     failed)                print -r -- $'danger\tfailed\tneutral\t󰅚\tx' ;;
     skipped)               print -r -- $'muted\tskipped\tneutral\t󰒭\t~' ;;
     *)                     print -r -- $'accent\tother\tneutral\t󰘥\t>' ;;

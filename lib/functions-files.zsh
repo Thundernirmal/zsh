@@ -62,6 +62,11 @@ extract() {
             return 1
           fi
           destination=$1
+          [[ -n $destination ]] || {
+            print -u2 -r -- 'extract: --destination requires a directory'
+            _extract_usage >&2
+            return 1
+          }
           shift
           continue
           ;;
@@ -103,7 +108,8 @@ extract() {
     return 1
   fi
 
-  archive=${archive_arg:A}
+  # Normalize the operand without replacing a symlink with its target.
+  archive=${archive_arg:a}
   [[ -n $destination ]] && destination=${destination:A}
 
   case $archive in
@@ -315,7 +321,7 @@ ff() {
       # directories and exclude hidden files while retaining the requested root.
       find_args+=( \( -name '.*' ! -path "$search_root" -prune \) -o \( ! -name '.*' -iname "*$pattern*" -print \) )
     fi
-    command find "${find_args[@]}" 2>/dev/null
+    command find "${find_args[@]}"
   fi
 }
 
@@ -398,7 +404,7 @@ ft() {
     fi
     (( fixed_strings )) && search_args+=(-F)
     search_args+=(--color=auto -- "$pattern" "$search_root")
-    command grep "${search_args[@]}" 2>/dev/null
+    command grep "${search_args[@]}"
   fi
 }
 

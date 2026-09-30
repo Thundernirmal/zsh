@@ -72,7 +72,7 @@ _fbr_worktree_entries() {
         if [[ -n $excluded_path && ${worktree_path:A} == $excluded_path ]]; then
           continue
         fi
-        print -rn -- "${field#branch refs/heads/}"$'\0'"$worktree_path"$'\0'
+        print -rn -- "${field#branch }"$'\0'"$worktree_path"$'\0'
         ;;
     esac
   done < <(command git worktree list --porcelain -z)
@@ -89,18 +89,20 @@ _fbr_activate() {
     return
   fi
 
-  if command git show-ref --verify --quiet "refs/heads/$branch"; then
-    command git switch -- "$branch"
+  if [[ $branch == refs/heads/* ]] && command git show-ref --verify --quiet "$branch"; then
+    local_branch=${branch#refs/heads/}
+    command git switch -- "$local_branch"
     return
   fi
 
-  if command git show-ref --verify --quiet "refs/remotes/$branch"; then
-    local_branch=${branch#*/}
+  if [[ $branch == refs/remotes/* ]] && command git show-ref --verify --quiet "$branch"; then
+    local_branch=${branch#refs/remotes/}
+    local_branch=${local_branch#*/}
     if ! command git show-ref --verify --quiet "refs/heads/$local_branch"; then
       command git switch --track -- "$branch"
       return
     fi
-    upstream=$(command git for-each-ref --format='%(upstream:short)' "refs/heads/$local_branch" 2>/dev/null) || upstream=''
+    upstream=$(command git for-each-ref --format='%(upstream)' "refs/heads/$local_branch" 2>/dev/null) || upstream=''
     if [[ $upstream == "$branch" ]]; then
       command git switch -- "$local_branch"
       return
@@ -118,6 +120,39 @@ _fbr_activate() {
 
   print -u2 -r -- "Branch '$branch' was not found"
   return 1
+}
+
+# Display labels are separate from canonical refs used by selection/preview.
+_fbr_ref_rows() {
+  emulate -L zsh
+
+  local badge_color=$1 badge_reset=$2
+  shift 2
+  local -A worktree_paths=( "$@" )
+  local ref_line ref details symbolic relative subject display_branch worktree_path
+  while IFS= read -r ref_line; do
+    ref=${ref_line%%$'\t'*}
+    details=${ref_line#*$'\t'}
+    symbolic=${details%%$'\t'*}
+    # Exclude remote symbolic aliases, without hiding branches named */HEAD.
+    [[ $ref == refs/remotes/* && -n $symbolic ]] && continue
+    details=${details#*$'\t'}
+    relative=${details%%$'\t'*}
+    subject=${details#*$'\t'}
+    case $ref in
+      refs/heads/*) display_branch=${ref#refs/heads/} ;;
+      refs/remotes/*) display_branch=${ref#refs/remotes/} ;;
+      *) continue ;;
+    esac
+    worktree_path=${worktree_paths[$ref]-}
+    _fbr_format_entry "$display_branch" "$relative" "$subject" "$worktree_path" \
+      "$badge_color" "$badge_reset" 32 14 "$ref" || return $?
+    print -r -- "$REPLY"
+  done < <(
+    command git for-each-ref --sort=-committerdate \
+      --format=$'%(refname)\t%(symref)\t%(committerdate:relative)\t%(subject)' \
+      refs/heads refs/remotes
+  )
 }
 
 # Fuzzy-pick a Git branch, entering its worktree or checking it out.
@@ -149,7 +184,7 @@ fbr() {
     return 1
   }
 
-  local selection branch current_worktree ref_details ref_line relative subject worktree_branch worktree_path
+  local selection branch current_worktree worktree_branch worktree_path
   local worktree_badge_color='' worktree_badge_reset='' preview_command short_name upstream
   local -A worktree_paths
   local -a fzf_args context_args preview_args
@@ -189,32 +224,18 @@ fbr() {
   done < <(_fbr_worktree_entries "$current_worktree")
 
   selection=$(
-    while IFS= read -r ref_line; do
-      branch=${ref_line%%$'\t'*}
-      [[ $branch == */HEAD ]] && continue
-
-      ref_details=${ref_line#*$'\t'}
-      relative=${ref_details%%$'\t'*}
-      subject=${ref_details#*$'\t'}
-      worktree_path=${worktree_paths[$branch]-}
-      _fbr_format_entry "$branch" "$relative" "$subject" "$worktree_path" \
-        "$worktree_badge_color" "$worktree_badge_reset" 32 14
-      print -r -- "$REPLY"
-    done < <(
-      command git for-each-ref --sort=-committerdate \
-        --format=$'%(refname:short)\t%(committerdate:relative)\t%(subject)' \
-        refs/heads refs/remotes
-    ) |
+    _fbr_ref_rows "$worktree_badge_color" "$worktree_badge_reset" "${(@kv)worktree_paths}" |
       command fzf "${fzf_args[@]}"
   ) || return 0
 
   branch=$selection
 
   worktree_path=${worktree_paths[$branch]-}
-  if [[ -z $worktree_path ]] && command git show-ref --verify --quiet "refs/remotes/$branch"; then
-    short_name=${branch#*/}
+  if [[ -z $worktree_path && $branch == refs/remotes/* ]] && command git show-ref --verify --quiet "$branch"; then
+    short_name=${branch#refs/remotes/}
+    short_name="refs/heads/${short_name#*/}"
     if [[ -n ${worktree_paths[$short_name]-} ]]; then
-      upstream=$(command git for-each-ref --format='%(upstream:short)' "refs/heads/$short_name" 2>/dev/null) || upstream=''
+      upstream=$(command git for-each-ref --format='%(upstream)' "$short_name" 2>/dev/null) || upstream=''
       if [[ $upstream == "$branch" ]]; then
         worktree_path=${worktree_paths[$short_name]}
       fi

@@ -261,7 +261,7 @@ case "$1" in
         exit 0
         ;;
       runtime-fail)
-        printf "%s\n" "false"
+        printf "%s\n" "fzf-file-widget() { :; }" "zle -N fzf-file-widget" "bindkey -M emacs ^T fzf-file-widget" "false"
         exit 0
         ;;
       *)
@@ -872,6 +872,25 @@ run_dependency_case() {
   typeset -g FZF_DEP_DIR=$case_dir
 }
 
+test_checkupdates_dependency_checker() {
+  local case_dir output tool
+  case_dir=$(mktemp -d "$tmp_home/arch-deps.XXXXXX") || return 1
+  prepare_dependency_fakebin "$case_dir/bin" 0.74.0 0 1 || return 1
+  for tool in pacman checkupdates; do
+    print -r -- '#!/bin/sh
+exit 99' > "$case_dir/bin/$tool"
+    command chmod +x "$case_dir/bin/$tool"
+  done
+  output=$(PATH="$case_dir/bin" /bin/sh "$repo_dir/scripts/check-deps.sh")
+  assert_status "$?" 0 'missing fakeroot remains optional' || return 1
+  assert_contains "$output" 'missing optional: fakeroot' 'checker names the checkupdates prerequisite' || return 1
+  assert_contains "$output" 'pacman-contrib fakeroot' 'checker gives complete Arch setup guidance' || return 1
+  command rm "$case_dir/bin/checkupdates"
+  output=$(PATH="$case_dir/bin" /bin/sh "$repo_dir/scripts/check-deps.sh")
+  assert_not_contains "$output" 'missing optional: fakeroot' 'fakeroot check is conditional on checkupdates' || return 1
+  command rm -rf -- "$case_dir"
+}
+
 test_fzf_dependency_checker() {
   local case_spec label version version_status include_fzf expected
   local -a fields blocked_cases supported_cases
@@ -1054,6 +1073,106 @@ printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }
   assert_equals "${#cache_files[@]}" 1 'cold startup creates one validated zoxide cache file' || return 1
 }
 
+test_fzf_partial_integration_rollback() {
+  local root="$tmp_home/fzf-partial" output
+  command mkdir -p -- "$root"
+  print -r -- 'fzf-file-widget() { print replaced; }
+fzf-cd-widget() { :; }
+__fzf_comprun() { :; }
+zle -N fzf-file-widget
+zle -N fzf-cd-widget
+bindkey -M emacs "^T" fzf-file-widget
+bindkey -M viins "^X" fzf-cd-widget
+bindkey -N fixture_new_map
+unfunction _fzf_saved_fixture
+zle -D fzf-completion
+fzf_default_completion=changed
+export FZF_DEFAULT_OPTS=changed
+false' > "$root/partial.zsh"
+  output=$("$zsh_bin" -dfi -c '
+    source "$1/40-fzf.zsh"
+    fzf-file-widget() { print original; }
+    zle -N fzf-file-widget
+    _fzf_saved_fixture() { :; }
+    zle -A expand-or-complete fzf-completion
+    bindkey -M emacs "^Y" fzf-phantom-widget
+    before_emacs=$(bindkey -M emacs "^T")
+    before_viins=$(bindkey -M viins "^X")
+    before_alias=$(bindkey -lL)
+    export FZF_DEFAULT_OPTS=original-options
+    _fzf_activate_integration_file "$2" /fixture/fzf 0.70.0
+    rc=$?
+    [[ $(bindkey -M emacs "^T") == "$before_emacs" && $(bindkey -M viins "^X") == "$before_viins" ]] || exit 10
+    [[ $(bindkey -lL) == "$before_alias" ]] || exit 11
+    [[ $widgets[fzf-file-widget] == user:fzf-file-widget && ! ${+widgets[fzf-cd-widget]} -eq 1 ]] || exit 12
+    [[ $+functions[_fzf_saved_fixture] == 1 && $widgets[fzf-completion] == builtin ]] || exit 13
+    print -r -- "rc=$rc original=$(fzf-file-widget) cd=$+functions[fzf-cd-widget] completion=$+functions[__fzf_comprun] opts=$FZF_DEFAULT_OPTS default=${+fzf_default_completion}"
+  ' zsh "$repo_dir" "$root/partial.zsh" 2>/dev/null)
+  assert_status "$?" 0 'partial fzf rollback restores widgets, keymaps and aliases' || return 1
+  assert_equals "$output" 'rc=1 original=original cd=0 completion=0 opts=original-options default=0' 'partial fzf rollback restores functions and option presence' || return 1
+}
+
+test_fzf_phantom_widget_activation() {
+  local root="$tmp_home/fzf-phantom" output
+  command mkdir -p -- "$root"
+  print -r -- '_FZF_CACHE_LOADED_SCHEMA=$_FZF_CACHE_SCHEMA
+_FZF_CACHE_LOADED_VERSION=0.70.0
+_FZF_CACHE_LOADED_STATUS=0
+fzf-file-widget() { :; }
+zle -N fzf-file-widget' > "$root/success.zsh"
+  output=$("$zsh_bin" -dfi -c '
+    source "$1/40-fzf.zsh"
+    bindkey -M emacs "^T" fzf-file-widget
+    zle -D fzf-file-widget 2>/dev/null
+    _fzf_wrap_generated_entry_points() { :; }
+    _fzf_export_config() { return 0; }
+    _fzf_activate_integration_file "$2" /fixture/fzf 0.70.0 || exit 10
+    [[ $widgets[fzf-file-widget] == user:fzf-file-widget ]] || exit 11
+    print -r -- "state=$_FZF_STATE binding=$(bindkey -M emacs "^T")"
+  ' zsh "$repo_dir" "$root/success.zsh" 2>"$root/stderr")
+  assert_status "$?" 0 'phantom fzf widget does not abort successful activation' || return 1
+  assert_contains "$output" 'state=ready' 'phantom activation reaches ready state' || return 1
+  assert_equals "$(file_contents "$root/stderr")" '' 'phantom activation emits no widget errors' || return 1
+}
+
+test_zoxide_rejected_cache_directory() {
+  local case_dir="$tmp_home/zoxide-rejected-cache"
+  local fakebin="$case_dir/bin" cache_root="$case_dir/cache" shared="$case_dir/shared"
+  local fallback="$case_dir/fallback" output mode
+  local -a leftovers
+  command mkdir -p -- "$fakebin" "$cache_root/zsh" "$shared" "$fallback"
+  command ln -s -- "$shared" "$cache_root/zsh/zoxide"
+  print -r -- '#!/bin/sh
+printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }"
+[ "$ZOXIDE_TEST_MODE" = runtime ] && printf "%s\n" "return 1"
+exit 0' > "$fakebin/zoxide"
+  command chmod +x -- "$fakebin/zoxide"
+  for mode in success runtime; do
+    output=$(ZOXIDE_TEST_MODE=$mode XDG_CACHE_HOME="$cache_root" TMPDIR="$fallback" \
+      PATH="$fakebin:${zsh_bin:h}" "$zsh_bin" -fc '
+        source "$1/30-zoxide.zsh"
+        _zsh_zoxide_cache_file_for_path "${commands[zoxide]:A}"
+        [[ -e $REPLY ]] || print missing
+        print -r -- "z=$+functions[z]"
+        # A rejected directory must never be used for failure cleanup either.
+        print -r -- sentinel >| "$REPLY"
+        source "$1/30-zoxide.zsh"
+        print -r -- "sentinel=$(<$REPLY)"
+      ' zsh "$repo_dir" 2>/dev/null)
+    assert_status "$?" 0 "$mode rejected cache fixture completes" || return 1
+    assert_contains "$output" missing "$mode does not publish in rejected directory" || return 1
+    if [[ $mode == success ]]; then
+      assert_contains "$output" 'z=1' 'private fallback initializes valid integration' || return 1
+    else
+      assert_contains "$output" 'z=0' 'failed private fallback rolls back integration' || return 1
+    fi
+    assert_contains "$output" 'sentinel=sentinel' "$mode leaves rejected cache files untouched" || return 1
+    leftovers=( "$fallback"/*(N) )
+    assert_equals "${#leftovers}" 0 "$mode removes fallback files" || return 1
+    command rm -f -- "$shared"/*(N)
+  done
+}
+
 main() {
   local -a high_risk_aliases
   local high_risk_alias_setup
@@ -1077,15 +1196,19 @@ main() {
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
   test_zoxide_persistent_startup_cache || return 1
+  test_zoxide_rejected_cache_directory || return 1
   test_glob_policy || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1
   test_fzf_quiet_startup_modes || return 1
   test_fzf_runtime_guards || return 1
+  test_fzf_partial_integration_rollback || return 1
+  test_fzf_phantom_widget_activation || return 1
   test_fzf_path_cache || return 1
   test_fzf_generated_guards || return 1
   test_fzf_theme_option_refresh || return 1
   test_fzf_dependency_checker || return 1
+  test_checkupdates_dependency_checker || return 1
 }
 
 main "$@"

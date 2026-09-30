@@ -92,7 +92,9 @@ Unreadable module files are skipped. The optional credential module is skipped e
 
 The numbered filenames define load order. `50-completion.zsh` assumes an earlier layer already ran `compinit`; `66-compdefs.zsh` becomes a silent no-op when `compdef` is unavailable.
 
-The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/functions-*.zsh`, `lib/command-registry.zsh`, `lib/ui-width-data.zsh`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` files are lazy implementation helpers rather than startup modules. Their numbered modules register fixed loaders, while general command implementations, package workflows, command-only swatch/export logic, catalogues, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. `lib/upkg-registry.zsh` is instead a lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available. A configured custom or colored non-default startup loads the theme pieces it needs before composing finder options.
+The repo-local `functions/ztheme`, `functions/_fbr_format_entry`, `lib/functions-*.zsh`, `lib/command-registry.zsh`, `lib/ui-width-data.zsh`, `lib/theme-*.zsh`, `lib/help-catalogue.zsh`, and `lib/tips-catalogue.zsh` files are lazy implementation helpers rather than startup modules. The fbr row formatter requires an explicit canonical branch reference and rejects malformed identities. Their numbered modules register fixed loaders, while general command implementations, package workflows, command-only swatch/export logic, catalogues, fbr row formatting, palette data, validation, and color conversion code are parsed on first use. `lib/upkg-registry.zsh` is instead a lightweight registry sourced during startup by `60-functions.zsh` and reused by `66-compdefs.zsh` when `compdef` is available. A configured custom or colored non-default startup loads the theme pieces it needs before composing finder options.
+
+Captured package queries execute the fixed trusted `lib/query-supervisor.zsh` entrypoint; its allowed callbacks and helper sources stay inside the repository.
 
 General helpers load their fixed domain on first use: files/search, system diagnostics/network, Git, package orchestration/backend adapters, or Nix. Shared presentation fallbacks load once. Calling `mkcd` or `path` leaves package implementations unloaded; later calls use installed implementations directly. All paths remain fixed beneath the repository. Disk scanners collect records plus explicit state, diagnostics, and exit status before choosing a rich or plain renderer; both preserve partial-scan failures. `lib/command-registry.zsh` is data-only and shared by help and command-name completion; it records canonical names and descriptive mutation categories without authorizing any operation.
 
@@ -128,12 +130,16 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 | `tree` | `lt` and directory previews when `lsd` is absent | Preview uses `ls`; `lt` is unavailable without `lsd` or `tree` |
 | `fd` / `fdfind` | Faster `ff` search | GNU `find` |
 | `rg` | Faster `ft` content search | Recursive `grep` |
+| `checkupdates` (pacman-contrib) and `fakeroot` | Fresh Pacman inventory in a private database | Absent helper uses labelled cached `pacman -Qu`; a present helper that cannot refresh fails with its native diagnostic |
+| `setsid` (util-linux) | Isolated captured package queries | Queries report a missing prerequisite; other commands remain available |
 | `jq` | `npkg refresh`, `npkg outdated`, and Nix pickers | Those workflows are unavailable; basic Nix commands still work |
 | `secret-tool` | Defines `cgm` | The entire module is skipped |
 | `gdbus` | Explicit `cgm check` backend health probe | Health check explains the missing GLib tool; storage and loading still work |
 | `nix` | Defines `npkg` and the `upkg` Nix backend | Nix commands are absent |
 | `nix-collect-garbage` | `upkg clean --only nix` | Nix cleanup reports a failure |
 | `unzip`, `unrar`, `7z`, and related tools | Format-specific extraction | `extract` reports the missing tool when used |
+
+`checkupdates` requires `fakeroot`; on Arch, install both with `sudo pacman -S pacman-contrib fakeroot`. The dependency checker reports missing `fakeroot` when Pacman and checkupdates are present. A failed fresh query remains a failure rather than silently switching to cached data.
 
 Package managers are detected at runtime; they are not setup dependencies. The checker reports the primary optional integrations, while format-specific unpackers and ordinary GNU userland tools are checked only by the workflows that need them.
 
@@ -255,7 +261,7 @@ ztheme reset                # restore the terminal theme now
 ztheme export nord          # print settings to copy into ~/.zshrc
 ```
 
-`use` and `reset` affect only the current shell session and refresh future fzf and zoxide picker launches; a picker that is already open is unchanged. `use` switches the dashboard palette and preserves an explicit `ZSH_FZF_THEME` fzf-only override, so a deliberate finder choice survives unrelated dashboard switches. `reset` restores the default `terminal` theme and clears any such override so fzf inherits the UI theme again. Invalid names and invalid custom palettes return nonzero without changing the active theme or finder exports.
+`use` and `reset` affect only the current shell session and refresh future fzf and zoxide picker launches; a picker that is already open is unchanged. `use` switches the dashboard palette and preserves an explicit `ZSH_FZF_THEME` fzf-only override, so a deliberate finder choice survives unrelated dashboard switches. `reset` restores the default `terminal` theme and clears any such override so fzf inherits the UI theme again. Inspection with `show` or `export` does not change the active custom palette. Invalid names, invalid custom palettes, and failed finder refreshes return nonzero while preserving the committed palette, selectors, finder exports, and signatures. Edited `ZSH_UI_CUSTOM_COLORS` remain a proposal until a switch succeeds.
 
 To persist a built-in choice, copy the output of `ztheme export <name>` above the `source init.zsh` line in the machine-local `~/.zshrc`. The command prints text only and never edits that file. Exporting a validated `custom` theme also prints its complete role array in stable order.
 
@@ -360,7 +366,7 @@ zhelp --help
 
 The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. A plain listing that hides entries says how many are unavailable and points at `zhelp --all`. Exact names show usage, an example, and live availability.
 
-The catalogue also carries action entries for multi-step workflows: `upkg-plan` (preview upgrades), `npkg-remove` (remove a Nix package), and `cgm-env` (load credentials) resolve through their parent command, so they disappear together when the parent is unavailable.
+The catalogue also carries action entries for multi-step workflows: `upkg-plan` (inventory updates), `npkg-remove` (remove a Nix package), and `cgm-env` (load credentials) resolve through their parent command, so they disappear together when the parent is unavailable.
 
 In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. A CLI query only seeds the picker's search text; the whole eligible catalogue stays browsable, so clearing the query broadens results instead of trapping the selection in the pre-filtered rows. Piped or redirected search keeps the deterministic substring filter. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
@@ -374,7 +380,7 @@ Sourcing `65-help.zsh` registers only a fixed repository-local loader. The catal
 tip: Run mkcd <dir> to create and enter a directory
 ```
 
-It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Run it again for another hint.
+It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Manager-specific reminders require that manager; the checkupdates reminder also requires Pacman and fakeroot. Credential reminders require the optional `cgm` function. Run it again for another hint.
 
 ### zdoctor
 
@@ -474,7 +480,7 @@ Zoxide initialization supports `NO_UNSET` even before `precmd_functions` or `chp
 
 The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets without replacing zoxide's scoring or candidate generation.
 
-Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata and Zsh version, so warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead.
+Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata and Zsh version, so warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead. A rejected cache directory is never used for publication or failure cleanup; private fallback files are removed after activation.
 
 ### fzf requirement and startup
 
@@ -488,7 +494,7 @@ Every fuzzy workflow requires stable `fzf` 0.68.0 or newer. At the first normal 
 
 The cache is stored below `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` and is keyed by the fzf file identity, Zsh version, and cache schema. A matching cache is reused without launching fzf or a validation shell. Cache files and their directory must be regular, user-owned, non-symlink paths that are not group- or world-writable. A changed executable or PATH selection is validated before use. Removing the `zsh/fzf` directory below the active cache home forces a rebuild.
 
-Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows and print an actionable diagnostic. Non-interactive sourcing and `zsh -i -c ...` remain silent and do not initialize ZLE bindings.
+Failed integration activation restores prior fzf functions, widgets, keymaps, aliases, and finder options, leaving no partial entry points. Restart the shell after fixing a blocked build. Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows and print an actionable diagnostic. Non-interactive sourcing and `zsh -i -c ...` remain silent and do not initialize ZLE bindings.
 
 Finder presentation is compiled separately from the trusted integration cache. Changing theme, layout, glyph mode, terminal width class, or `NO_COLOR` refreshes future launches without rerunning `fzf --version` or regenerating `fzf --zsh`. Existing `FZF_DEFAULT_OPTS`, widget options, completion options, and `_ZO_FZF_OPTS` are captured once and appended after managed presentation. `ZSH_FZF_EXTRA_OPTS` follows the inherited global layer; `--no-color` is always final when requested.
 
@@ -504,7 +510,9 @@ Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
-The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths. Every picker uses the same list/search/footer hierarchy and contextual ghost hint. At 100 columns and wider, textual previews sit beside the list; below 100 columns they move underneath. `fkill` and the Nix multi-select pickers show a live selected-item count in the footer. Git and Nix table pickers keep the visible identity column frozen, while `--accept-nth` returns undecorated branch, PID, example, or profile-target fields to the calling workflow; `fbr` also previews that undecorated branch rather than its optional `[WT]` display badge.
+Stale fzf widget-name bindings do not block activation; failed activation restores the original bindings.
+
+The shared gate also covers `fkill`, `fbr`, `zi`, the `zhelp` palette, and interactive `npkg` install, find, and remove paths. Every picker uses the same list/search/footer hierarchy and contextual ghost hint. At 100 columns and wider, textual previews sit beside the list; below 100 columns they move underneath. `fkill` and the Nix multi-select pickers show a live selected-item count in the footer. Git and Nix table pickers keep the visible identity column frozen, while `--accept-nth` returns undecorated branch, PID, example, or profile-target fields to the calling workflow; `fbr` returns and previews the canonical full Git ref, separate from its shortened display label and optional `[WT]` badge.
 
 Picker-specific actions are unchanged: Escape and interruption remain non-destructive, `zhelp` only queues text, `fkill` confirms SIGKILL and multi-selections naming targets and signal before sending, `fbr` enters an existing worktree or checks out the branch, and Nix mutations run only after their picker returns selected targets. Under `NO_COLOR`, repository previews avoid forced colour while retaining labels, glyph-independent cues, and interaction.
 
@@ -534,13 +542,13 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 
 #### extract
 
-Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression and refuse existing paths. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Use `--` before a leading-dash filename.
+Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. Empty or missing destination values are rejected before extraction. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression and refuse existing paths. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Input symlinks are passed to the native unpacker without resolving their targets; gzip refuses them for default in-place or `--keep` extraction. Destination streaming can read a compressed input link, retains its target, and names the output from the supplied link filename. Use `--` before a leading-dash filename.
 
 #### ff and ft
 
 `ff` prefers `fd`, then `fdfind`, then `find`. It matches a case-insensitive substring glob, includes hidden entries, and follows symlinks by default on every backend. `--no-hidden` and `--no-follow` disable those behaviors; `--hidden` and `--follow` make the defaults explicit. `--no-ignore` includes fd-ignored files. The find fallback has no ignore-file filtering and explains that difference when `--no-ignore` is requested.
 
-`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, and `--fixed-strings` (`-F`) explicitly. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches.
+`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, and `--fixed-strings` (`-F`) explicitly. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches. Both helpers preserve backend error messages on stderr and the native exit status, so inaccessible paths or invalid patterns cannot silently look like an empty result.
 
 ```zsh
 ff --no-ignore config .
@@ -587,7 +595,7 @@ fkill 9
 fkill --all 15
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and Unicode nonspacing and format marks as zero. Committed Unicode 16.0 intervals load on first non-ASCII measurement and use pure-Zsh binary search. Emoji grapheme shaping and ambiguous-width characters remain terminal-dependent. Long values are visibly truncated without changing the hidden raw branch returned by Enter. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
+`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and Unicode nonspacing and format marks as zero. Committed Unicode 16.0 intervals load on first non-ASCII measurement and use pure-Zsh binary search. Emoji grapheme shaping and ambiguous-width characters remain terminal-dependent. Long values are visibly truncated without changing the hidden canonical ref returned by Enter. Branch/tag name collisions and local/remote namespace collisions do not affect selection, preview, upstream comparison, or worktree lookup. Symbolic remote HEAD aliases are omitted; actual branches ending in `/HEAD` remain selectable. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
 
 ## Credential manager: cgm
 
@@ -607,7 +615,7 @@ fkill --all 15
 | `cgm delete <name ...>` | Delete stored values and unset local copies |
 | `cgm help` | Show concise command help |
 
-Names must match `[A-Z_][A-Z0-9_]*`. CGM rejects Zsh special, read-only, and non-scalar parameters, so values such as `PATH` cannot be replaced accidentally.
+Names must match `[A-Z_][A-Z0-9_]*`. For credential assignment/export, CGM accepts ordinary scalar parameters, optionally local or exported, and rejects special, read-only, non-scalar, or other attributed parameters (including width, padding, and case conversion), so values such as `PATH` cannot be replaced accidentally. Removal accepts attributed scalars because it does not assign or transform a value; special, read-only, and non-scalar parameters remain protected.
 
 ### Storage and secrecy
 
@@ -629,7 +637,7 @@ Deleting a credential cannot recall copies already inherited by child processes.
 
 ## Package manager: upkg
 
-`upkg` detects supported managers each time it runs and provides one interface for read-only checks, search, upgrades, and conservative cleanup.
+`upkg` detects supported managers each time it runs and provides one interface for package inventories, search, upgrades, and manager-owned cleanup. Checks, searches, plans, and cleanup previews do not install or remove packages, but native queries may contact the network, update metadata, or write caches; they are not filesystem-read-only or guaranteed offline.
 
 ### Detection
 
@@ -641,18 +649,18 @@ The active order is:
 4. Nix through `npkg`;
 5. global `npm`.
 
-When both `paru` and `pacman` exist, `paru` is active and `pacman` remains available through `--only pacman`.
+All other installed distro backends remain available through `--only <id>`. For example, `--only dnf` works even when APT is also installed. Defaults still run only the first available distro backend; `upkg managers` lists the alternatives.
 
 ### Commands
 
 | Command | Behavior |
 |---|---|
-| `upkg` | Read-only outdated check |
-| `upkg outdated` / `check` / `list` | Same read-only check |
+| `upkg` | Package update inventory |
+| `upkg outdated` / `check` / `list` | Same package update inventory |
 | `upkg search <query>` | Search selected managers |
-| `upkg plan` | Preview available upgrades |
+| `upkg plan` | Inventory available updates without resolving a transaction |
 | `upkg upgrade` / `up` / `update` | Run selected upgrades |
-| `upkg clean` | Remove manager-classified unused or stale data |
+| `upkg clean` | Remove unused packages and manager-owned caches |
 | `upkg managers` | Show active managers and alternates |
 | `upkg help` | Show command help |
 
@@ -663,26 +671,36 @@ When both `paru` and `pacman` exist, `paru` is active and `pacman` remains avail
 | `--only <ids>` / `--only=<ids>` | Run only comma-separated manager IDs |
 | `--skip <ids>` / `--skip=<ids>` | Exclude comma-separated manager IDs |
 | `--sudo` | Authorize privileged distro upgrade or cleanup paths |
-| `--dry-run` | Preview upgrades or cleanup |
+| `--dry-run` | Inventory updates for upgrade, or preview cleanup |
 
-Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user.
+Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user. Empty or whitespace-only values and empty IDs between, before, or after commas in `--only` and `--skip` are rejected before any backend runs; an empty variable never expands the operation to every manager.
+
+`plan` and `upgrade --dry-run` run outdated queries. Their output explicitly identifies an update inventory: dependencies, replacements, removals, and conflicts are resolved later by the native upgrade command. Review the native transaction before confirming, especially APT `full-upgrade`, which may remove packages. Inventory and upgrade can also use different metadata snapshots.
 
 ### Check and upgrade backends
 
 | Manager | Outdated check | Upgrade |
 |---|---|---|
-| `apt` | `apt list --upgradable` | `apt update`, then `apt full-upgrade` |
+| `apt` | `apt list --upgradable` | `apt -o APT::Update::Error-Mode=any update`, then `apt full-upgrade` |
 | `dnf` | `dnf check-update` | `dnf upgrade --refresh` |
-| `pacman` | `pacman -Qu` | `pacman -Syu` |
-| `paru` | repo check plus `paru -Qua` | `paru -Syu` |
+| `pacman` | `checkupdates --nocolor` when available; otherwise cached `pacman -Qu` | `pacman -Syu` |
+| `paru` | `paru -Qu` (configured scope) | `paru -Syu` |
 | `brew` | `brew outdated` | `brew upgrade` |
-| `flatpak` | `flatpak remote-ls --updates` | `flatpak update` |
+| `flatpak` | `flatpak remote-ls --updates --all` | `flatpak update` |
 | `nix` | `npkg outdated` | `npkg upgrade` |
-| `npm` | `npm outdated -g --depth=0` | `npm update -g` |
+| `npm` | `npm outdated -g --depth=0 --json=false --parseable=false --color=false` | `npm update -g` |
+
+DNF `check-update` supports both DNF4 and DNF5 and returns native status `100` for available updates, which the wrapper treats as a successful inventory. It may refresh expired metadata; the upgrade explicitly forces fresh metadata with `--refresh`. Unprivileged checks and privileged upgrades may use different caches.
+
+APT refresh treats every repository error, including transient fetch errors, as a failure and stops before `full-upgrade`; correct the repository/network issue and rerun the command.
 
 `apt`, `dnf`, and `pacman` upgrade paths require root or explicit `--sudo`. Paru also requires the explicit flag, but runs unprefixed so Paru controls privilege escalation. Homebrew and npm always remain unprefixed; an unwritable npm global prefix blocks the upgrade with a user-space setup hint.
 
-The Nix outdated and plan paths require `jq`; Nix upgrade does not. Nix cleanup depends on `nix-collect-garbage`, not `jq`.
+npm inventories explicitly select an uncolored table, overriding inherited JSON and parseable output preferences. Registry, authentication, and global-prefix settings remain native npm configuration. Empty successful output means up to date; unrecognized nonempty output fails the inventory. Native diagnostics remain on stderr. npm status 1 with a recognized table and only `npm warn`/`npm WARN` or `npm notice` diagnostics means updates available; error or unrecognized diagnostics keep that result failed.
+
+Flatpak inventories include hidden update refs through `--all`, including installed locale/debug extensions and supported secondary architectures. The native default user/system installation scope is retained; a remote-change inventory does not resolve the eventual update transaction.
+
+The Nix bridge retains partial-check state and keeps evaluation diagnostics on stderr. The Nix outdated and plan paths require `jq`; Nix upgrade does not. Nix cleanup depends on `nix-collect-garbage`, not `jq`.
 
 `upkg` never auto-confirms native prompts. It does not inject `-y`, `--assumeyes`, `--noconfirm`, or `sudo` without the explicit authorization flag.
 
@@ -696,11 +714,11 @@ upkg search ripgrep --only=nix
 upkg search ripgrep viewer --only=brew,npm
 ```
 
-Results are normalized into one table with manager, package, available version, and a cheap native description when available. A no-match result is summarized once. Backend failures name the affected managers, and other managers continue.
+Results are normalized into one table with manager, package, available version, and a cheap native description when available. Search parsers use stdout records only; native warnings and errors stay on stderr and never become package rows or descriptions. Flatpak empty tab-separated fields keep their position. npm search recognizes publication dates and versions across layouts with omitted descriptions/authors or empty keywords. Arch search disables color, and npm search explicitly selects uncolored parseable output regardless of inherited JSON settings. DNF search keeps the native no-match diagnostic enabled (no `-q`) and runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. A no-match result is summarized once. Search summaries count attempted managers, including failures and cancellations, and retain earlier results when interrupted. Managers not started after cancellation are not counted. Backend failures name the affected managers, and other managers continue.
 
-Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
+Nix search uses native `--quiet` to suppress evaluation progress while preserving warnings and errors. See the [Nix logging options](https://nix.dev/manual/nix/2.34/command-ref/new-cli/nix3-search.html#logging-related-options). Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
 
-Homebrew formulae and casks are queried separately. Broad searches cap follow-up metadata calls at 50 formulae and 50 casks; refine the query when the cap warning appears.
+Homebrew formulae and casks are queried separately; only stdout candidates are sent to metadata lookup, whose diagnostics also stay separate. Broad searches cap follow-up metadata calls at 50 formulae and 50 casks; refine the query when the cap warning appears.
 
 ### Cleanup policy
 
@@ -717,7 +735,9 @@ Homebrew formulae and casks are queried separately. Broad searches cap follow-up
 | `nix` | none | `nix-collect-garbage` |
 | `npm` | remove explicit keys from `npm cache npx ls` | `npm cache verify` |
 
-Cleanup uses manager-owned commands. It does not directly delete cache directories, application data, project files, lockfiles, virtual environments, build output, user configuration, or Nix profile generations. It does not claim a portable reclaimed-byte total.
+DNF `clean all` removes all repository cache data, including metadata and cached RPMs that are still valid. Later commands may need to download that data again; cached RPMs will no longer be available for offline reuse. This is broader than removing stale cache entries.
+
+Pacman orphan-query status 1 counts as empty only with empty stdout and no diagnostics other than native warnings in the C locale. Database errors or unrecognized diagnostics fail that phase; successful cache cleanup still reports a partial result. Cleanup uses manager-owned commands. It does not directly delete cache directories, application data, project files, lockfiles, virtual environments, build output, user configuration, or Nix profile generations. It does not claim a portable reclaimed-byte total.
 
 Dry-run uses native probes where safe. Steps without a safe unprivileged simulation are printed as `would run` and are not invoked. A preview never calls `sudo` or requires `--sudo`.
 
@@ -727,7 +747,13 @@ Flatpak updates and system cleanup may request authorization through polkit. Use
 
 ### Results and exit status
 
-Multi-manager runs continue after a backend fails:
+Cancelled cleanup summaries retain completed and failed phase counts, earlier failure details, and the interrupted phase. The interrupted phase is counted as cancelled rather than failed.
+
+Tab completion describes `--dry-run` as an update inventory or cleanup preview, matching the shared flag reference.
+
+Search progress is cleared when each query finishes, before diagnostics, cancellation returns, or the final summary.
+
+Multi-manager runs continue after an ordinary backend failure. Cancellation stops the remaining managers and cleanup phases, preserving status `130` (INT), `143` (TERM), or `129` (HUP):
 
 | State | Meaning |
 |---|---|
@@ -736,13 +762,24 @@ Multi-manager runs continue after a backend fails:
 | `cleaned` | Every requested cleanup phase succeeded |
 | `planned` | A cleanup preview completed successfully |
 | `partial` | Some phases succeeded and others failed |
+| `cancelled` | A backend was interrupted; subsequent operations were stopped |
 | `failed` | Required work or a preview probe failed |
 | `blocked` | Authorization or a required capability was missing |
 | `skipped` | A filter intentionally omitted the manager |
 
+Query diagnostics stay on stderr and are kept separate from package rows; a warning alone never counts as an available update. Arch status-1 checks with diagnostics remain failures rather than being treated as an empty successful check.
+
+Rich summaries count cancelled backends separately from failed backends and retain the cleanup operation layout.
+
 A partial, failed, or blocked selected backend makes the aggregate command return nonzero.
 
-Distribution outdated checks use existing local metadata; `upkg` does not refresh it automatically. On Arch-family systems, an empty status-1 repo or AUR check is treated as no updates. A failed Paru repo check can still show AUR results but leaves the backend failed.
+APT checks use existing local metadata.
+
+Pacman checks prefer optional `checkupdates` from `pacman-contrib`, refreshing a private, per-call database that is removed afterward. Refresh failures remain failures; there is no silent fallback to cached success. Without that helper, the output and summary explicitly identify cached repository data. Paru keeps its native configured query and labels repository versions as cached. For a separate fresh repository inventory, run `checkupdates` directly; never run `pacman -Sy` alone just to preview updates. Repository version queries do not resolve replacements; review the native `-Syu` transaction. Cached `pacman -Qu` and native `paru -Qu` accept status `1` as an empty inventory only when both stdout and stderr are empty; `checkupdates` status `1` remains an error.
+
+Paru queries and upgrades honor its configured package scope (`Mode`, `AurOnly`, `RepoOnly`, and PKGBUILD repositories) and configured pacman command. The wrapper does not force AUR or repo mode. Development-package commit checks follow Paru’s `Devel` setting; enable it in `paru.conf` when wanted.
+
+The native contracts are documented in the [DNF4 command reference](https://dnf.readthedocs.io/en/latest/command_ref.html), [DNF5 manual](https://dnf5.readthedocs.io/en/latest/dnf5.8.html), [Paru manual](https://github.com/Morganamilo/paru/blob/master/man/paru.8), and [checkupdates manual](https://man.archlinux.org/man/checkupdates.8.en).
 
 ### Examples
 
@@ -761,7 +798,7 @@ upkg clean --sudo --only=apt
 
 ## Nix profile manager: npkg
 
-`npkg` is defined only when `nix` is available. It wraps the current `nix profile` with shorter commands and optional pickers while enabling the required `nix-command flakes` features.
+`npkg` is defined only when `nix` is available. It requires the modern experimental CLI with `nix profile add` and `nix profile upgrade --all`; older CLIs using only `profile install` or wildcard upgrade selectors are unsupported. Check those subcommands with `--help` when installing Nix. It wraps the current `nix profile` with shorter commands and optional pickers while enabling the required `nix-command flakes` features.
 
 ### Commands
 
@@ -769,7 +806,7 @@ upkg clean --sudo --only=apt
 |---|---|
 | `npkg add <pkg ...>` / `install` / `i` | Add packages |
 | `npkg add` | Open the install picker |
-| `npkg find [query]` / `pick` / `fzf` | Open a seeded install picker |
+| `npkg find [--] [query ...]` / `pick` / `fzf` | Open a seeded install picker |
 | `npkg search <query>` / `s` | Plain nixpkgs search |
 | `npkg list` / `ls` | List the current profile |
 | `npkg remove <pkg ...>` / `rm` / `uninstall` / `delete` | Remove profile elements |
@@ -781,6 +818,10 @@ upkg clean --sudo --only=apt
 
 Bare install names become `nixpkgs#<name>`. Flake references, paths, and arguments beginning with `-` pass through without that expansion. Use `nix` directly for advanced flags not represented by the wrapper.
 
+`refresh`, `outdated`/`check`/`diff`, and `find`/`pick`/`fzf` handle `-h` or `--help` before any Nix query, cache access, or picker launch. Help returns zero. Refresh and outdated aliases accept no operands or profile flags; unsupported arguments fail before work. Picker aliases preserve query words, including leading dashes; `--` ends help recognition and is removed from the query, so `npkg find -- --help` searches for the literal word `--help`. A help word before `--` shows usage, even after other query words.
+
+Native `add`/`install`/`i`, `remove` aliases, `list`/`ls`, `search`/`s`, and `upgrade` aliases retain their argument forwarding. Their help flags go to native Nix and can have its normal initialization behavior.
+
 ### Picker cache and dependencies
 
 `npkg refresh` and `npkg outdated` require `jq`. Interactive add, find, and remove also require a real terminal and supported fzf.
@@ -789,7 +830,9 @@ The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refr
 
 ### Outdated semantics
 
-`npkg outdated` compares the complete installed store-path set for each active nixpkgs profile element with the output set selected by the currently evaluated installable:
+Explicitly inactive profile elements are excluded from outdated checks and the removal picker; a missing or null activity field retains the default active behavior.
+
+`npkg outdated` compares the complete installed store-path set for each active profile element, including flakes outside nixpkgs with the output set selected by the currently evaluated installable:
 
 | State | Meaning |
 |---|---|
@@ -799,9 +842,9 @@ The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refr
 
 A change is not necessarily an upgrade. It can be a downgrade, rebuild, changed input, output-selection change, or packaging change. Display versions are informational and never determine state.
 
-A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active nixpkgs elements is a complete zero-count result.
+A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active elements is a complete zero-count result. Active store-path-only entries or entries without an evaluable flake source/attribute are reported as unknown instead of being silently excluded. Pinned flake references remain pinned: `npkg upgrade` cannot advance their revision, and their evaluated identity can correctly remain current. Reinstall from an unlocked reference only when changing that pin is intentional.
 
-Ctrl+C stops and reaps only the command's recorded evaluation workers, removes its temporary files, preserves unrelated background jobs, and returns `130`. The `upkg` Nix bridge consumes the stable internal `current`, `changed`, or `partial` state rather than matching display text.
+For `npkg outdated`, INT, TERM, and HUP stop owned evaluation workers and their descendants, remove temporary files, preserve unrelated background jobs, and return `130`, `143`, and `129` respectively. Captured package queries run in private sessions using `setsid` (util-linux). A trusted supervisor remains alive through group termination and escalation, including children forked during shutdown. It monitors its owner and the original Nix inventory process while queries run and after they finish. Abnormal owner death stops the private group and removes its verified private capture directories; loss of only one Nix worker retains shared batch storage. A missing startup identity fails with status `1` after an approximately three-second handshake budget and shuts down the verified launcher/session. Linux `/proc` verifies the supervisor identity; signals sent only to the wrapper are forwarded to its owned session. Shared Nix daemon processes and children that deliberately detach into another session or process group are outside this ownership boundary. The `upkg` Nix bridge consumes the stable internal `current`, `changed`, or `partial` state rather than matching display text.
 
 ## Gotchas and safety boundaries
 
@@ -822,9 +865,9 @@ These are the cross-cutting rules most likely to surprise a new user:
 13. **`fkill` defaults to SIGTERM.** `fkill 9` is a force-kill and should be the exception.
 14. **CGM is startup-optional.** Installing `secret-tool` mid-session does not define `cgm` until the module is sourced again or the shell restarts.
 15. **CGM changes only the current shell.** Run `env`, `unset`, and `delete` directly, not through a pipe, command substitution, or subshell. Deletion cannot revoke values inherited by existing processes.
-16. **`upkg` is not entirely read-only.** The default, `outdated`, `search`, and `plan` are read-only; `upgrade` and `clean` mutate manager state. Preview cleanup with `clean --dry-run`.
+16. **Package previews can write caches.** Default checks, search, plan, and cleanup previews avoid package installation/removal but may use network access or write manager metadata. Upgrade and cleanup mutate package or cache state; preview cleanup with `clean --dry-run`.
 17. **`--sudo` authorizes but does not auto-confirm.** Native package-manager and polkit prompts remain authoritative.
-18. **Outdated data can be stale.** Distro checks use local metadata, and `npkg` reports output identity—not version ordering.
+18. **Inventories have limits.** APT and Paru repository queries use cached metadata; Pacman refreshes a separate database when `checkupdates` is available, and DNF may refresh expired metadata. Native upgrades resolve transactions. `npkg` reports output identity rather than version ordering.
 19. **Partial package results fail.** `upkg` continues other managers but returns nonzero for partial, failed, or blocked selected backends. `npkg` returns nonzero when any row is unknown.
 20. **Rich output is presentation.** Use a pipe, redirect, `NO_COLOR`, or an explicit plain option for stable machine-readable text.
 21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows are Linux-oriented.

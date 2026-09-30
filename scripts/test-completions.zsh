@@ -158,14 +158,14 @@ test_static_values() {
   values=( "${reply[@]}" )
   assert_equals "${(j: :)values}" 'outdated check list search upgrade up update plan clean managers help' 'upkg commands match the public interface' || return 1
   assert_unique 'upkg command values are unique' "${values[@]}" || return 1
-  assert_equals "${_ZSH_UPKG_COMMAND_SPECS[9]}" 'clean:Remove unused packages and stale caches' 'upkg completion describes cleanup explicitly' || return 1
+  assert_equals "${_ZSH_UPKG_COMMAND_SPECS[9]}" 'clean:Remove unused packages and manager-owned caches' 'upkg completion describes cleanup explicitly' || return 1
 
   spec_values "${_ZSH_UPKG_FLAGS[@]}"
   values=( "${reply[@]}" )
   assert_equals "${(j: :)values}" '--only --skip --sudo --dry-run --help' 'upkg flags match the public interface' || return 1
   assert_unique 'upkg flag values are unique' "${values[@]}" || return 1
   assert_equals "${_ZSH_UPKG_FLAGS[3]}" '--sudo:Authorize privileged upgrade and cleanup backends' 'upkg sudo completion describes cleanup authorization' || return 1
-  assert_equals "${_ZSH_UPKG_FLAGS[4]}" '--dry-run:Preview upgrades or cleanup without changing packages' 'upkg dry-run completion covers cleanup previews' || return 1
+  assert_equals "${_ZSH_UPKG_FLAGS[4]}" '--dry-run:Inventory updates or preview cleanup without changing packages' 'upkg dry-run completion covers cleanup previews' || return 1
 
   assert_equals "${(j: :)_ZSH_UPKG_MANAGERS}" 'apt dnf pacman paru brew flatpak nix npm' 'upkg manager IDs match the supported backends' || return 1
   assert_unique 'upkg manager IDs are unique' "${_ZSH_UPKG_MANAGERS[@]}" || return 1
@@ -336,11 +336,47 @@ printf "%s\n" "$0" >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/$tool"
   assert_equals "$(file_contents "$invocation_log")" '' 'completion module sourcing invokes no external tools' || return 1
 }
 
+test_upkg_live_dry_run_description() (
+  local -a captured_specs words=(upkg upgrade '')
+  _arguments() { captured_specs=( "$@" ); return 0; }
+  _zsh_upkg || return 1
+  assert_equals "${captured_specs[(r)--dry-run*]}" "--dry-run[${_ZSH_UPKG_FLAGS[(r)--dry-run:*]#*:}]" 'live dry-run completion uses the shared inventory/cleanup contract' || return 1
+)
+
+test_npkg_helper_completion() (
+  local -a captured_specs words
+  local completion_command message
+  local cache_calls=0
+  _arguments() {
+    captured_specs=( "$@" )
+    state=argument
+    line=( "$completion_command" )
+    return 1
+  }
+  _message() { message=$1; }
+  _zsh_npkg_cached_packages() { (( cache_calls++ )); return 0; }
+  for completion_command in refresh outdated check diff; do
+    words=(npkg "$completion_command" '')
+    message=''
+    _zsh_npkg || return 1
+    assert_equals "$message" 'no operands; use -h or --help for usage' "npkg $completion_command completion explains helper arguments" || return 1
+    assert_equals "$cache_calls" 0 'no-operand completion does not read package cache' || return 1
+  done
+  for completion_command in find pick fzf; do
+    words=(npkg "$completion_command" '')
+    _zsh_npkg || return 1
+    [[ ${(j: :)captured_specs} == *'--[treat following words as literal picker query]'* ]] || return 1
+    print -r -- "ok: npkg $completion_command completion offers literal query separator"
+  done
+)
+
 main() {
   test_without_compinit || return 1
   test_registration || return 1
   test_zhelp_values || return 1
   test_static_values || return 1
+  test_upkg_live_dry_run_description || return 1
+  test_npkg_helper_completion || return 1
   test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1
   test_cached_cgm_names || return 1

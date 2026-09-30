@@ -239,6 +239,7 @@ run_npkg_interrupt_capture() {
     functions[_ui_is_rich_terminal]='return 1'
     functions[_ui_plain_mode]='return 0'
 
+    _zsh_run_owned_query() { "$@"; }
     _npkg_nix() {
       if [[ "$*" == 'profile list --json' ]]; then
         print -r -- '{"elements":{"interrupt":{"active":true,"originalUrl":"nixpkgs","uri":"github:NixOS/nixpkgs/locked-interrupt","attrPath":"packages.test.interrupt","storePaths":["/nix/store/interrupt-installed"],"outputs":null}}}'
@@ -454,7 +455,7 @@ esac
   write_fake pacman '
 case "$*" in
   "-Qu") printf "%s\n" "coreutils 9.5-1 -> 9.6-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories" ; printf "%s\n" "    for a regex pattern" ;;
+  "--color never -Ss -- ripgrep") printf "%s\n" "extra/ripgrep 14.1.1-1" ; printf "%s\n" "    recursively search directories" ; printf "%s\n" "    for a regex pattern" ;;
   "-Syu") printf "%s\n" "pacman upgrade" ;;
   *) exit 2 ;;
 esac
@@ -462,8 +463,8 @@ esac
 
   write_fake paru '
 case "$*" in
-  "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
-  "-Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
+  "-Qu") printf "%s\n" "ripgrep 14.1.0-1 -> 14.1.1-1" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
+  "--color never -Ss -- ripgrep") printf "%s\n" "aur/ripgrep-all 0.9.1-2 [installed]" ; printf "%s\n" "    search multiple ripgrep backends" ; printf "%s\n" "    together" ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
   *) exit 2 ;;
 esac
@@ -473,7 +474,7 @@ esac
 
   write_fake flatpak '
 case "$*" in
-  "remote-ls --updates") printf "%s\n" "org.example.App stable" ;;
+  "remote-ls --updates --all") printf "%s\n" "org.example.App stable" ;;
   "search --columns=application,version,name,description -- ripgrep") printf "org.example.Ripgrep\t14.1.1\tRipgrep Viewer\tRemote ripgrep browser\n" ;;
   "update") printf "%s\n" "flatpak upgrade" ;;
   *) exit 2 ;;
@@ -483,16 +484,16 @@ esac
 write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
-  "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
-  "search --parseable -- help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
-  "search --parseable -- managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
-  "search --parseable -- ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
-  "search --parseable -- ripgrep viewer")
-    [ "$#" -eq 5 ] || exit 3
+  "outdated -g --depth=0 --json=false --parseable=false --color=false") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+  "search --parseable --json=false --color=false -- help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
+  "search --parseable --json=false --color=false -- managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
+  "search --parseable --json=false --color=false -- ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
+  "search --parseable --json=false --color=false -- ripgrep viewer")
+    [ "$#" -eq 7 ] || exit 3
     printf "ripgrep-viewer\tMulti-term search result\tnpm-user\t2024-01-01\t5.6.7\tripgrep viewer\n"
     ;;
-  "search --parseable -- upgrade") printf "upgrade-helper\tSearches packages named after commands\tnpm-user\t2024-01-01\t1.2.3\tupgrade\n" ;;
-  "search --parseable -- -leading") printf "leading-safe\tLeading-dash query\tnpm-user\t2024-01-01\t1.0.0\tleading\n" ;;
+  "search --parseable --json=false --color=false -- upgrade") printf "upgrade-helper\tSearches packages named after commands\tnpm-user\t2024-01-01\t1.2.3\tupgrade\n" ;;
+  "search --parseable --json=false --color=false -- -leading") printf "leading-safe\tLeading-dash query\tnpm-user\t2024-01-01\t1.0.0\tleading\n" ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -520,6 +521,7 @@ write_fake nix '
 while [ "$1" = "--extra-experimental-features" ]; do
   shift 2
 done
+[ "${1-}" != --quiet ] || shift
 
   if [ "$*" = "profile list --json" ]; then
     if [ "$(sed -n "1p" "$NPKG_TEST_PROFILE_FILE")" = "__FAIL__" ]; then
@@ -558,7 +560,15 @@ done
   esac
  '
 
-  export PATH=$fakebin:$original_path
+  # Keep host package managers out of capability detection (Ubuntu has apt).
+  # Expose only fixture binaries and explicitly allowed support utilities.
+  local utility utility_path
+  for utility in cat sed awk grep sort head tail cut tr wc mkdir chmod mv sleep date uname stat cmp ln find jq zsh env touch du ls id ps readlink kill setsid; do
+    [[ -e $fakebin/$utility ]] && continue
+    utility_path=$(PATH=$original_path whence -p "$utility") || continue
+    write_fake "$utility" "exec \"$utility_path\" \"\$@\"" || return 1
+  done
+  export PATH=$fakebin
   rehash
   export UPKG_TEST_NPM_PREFIX=$tmp_prefix
 
@@ -796,14 +806,14 @@ esac
   assert_status "$cmd_status" 1 'search returns nonzero when one backend fails' || return 1
   assert_contains "$output" 'Error: simulated brew search failure' 'partial search keeps backend error text' || return 1
   assert_contains "$output" 'npm      ripgrep-js' 'partial search still prints successful rows' || return 1
-  assert_contains "$output" 'Search summary: 1 result(s) across 1 manager(s), 1 failed (brew).' 'partial search summary names failed managers' || return 1
+  assert_contains "$output" 'Search summary: 1 result(s) across 2 manager(s), 1 failed (brew).' 'partial search summary names failed managers' || return 1
 
   output=$(upkg search ripgrep --only=brew 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'all-failed search returns nonzero' || return 1
   assert_contains "$output" 'Search results unavailable; failed manager(s): brew.' 'all-failed search names failed managers' || return 1
   assert_not_contains "$output" 'No matches found across selected managers.' 'all-failed search does not report no matches' || return 1
-  assert_contains "$output" 'Search summary: 0 result(s) across 0 manager(s), 1 failed (brew).' 'all-failed search summary names failed managers' || return 1
+  assert_contains "$output" 'Search summary: 0 result(s) across 1 manager(s), 1 failed (brew).' 'all-failed search summary names failed managers' || return 1
 
   write_fake brew "$default_brew_script"
 
@@ -940,8 +950,8 @@ esac
   output=$(upkg plan --only=paru)
   cmd_status=$?
   assert_status "$cmd_status" 0 'paru plan succeeds when repo and AUR checks succeed' || return 1
-  assert_contains "$output" 'Repo updates:' 'paru plan includes repo updates' || return 1
-  assert_contains "$output" 'AUR updates:' 'paru plan includes AUR updates' || return 1
+  assert_contains "$output" 'ripgrep 14.1.0-1 -> 14.1.1-1' 'paru plan includes native repo results' || return 1
+  assert_contains "$output" 'yay-bin 12.4.2-1 -> 12.5.0-1' 'paru plan includes native AUR results' || return 1
 
   output=$(upkg upgrade --dry-run --only=npm)
   assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'dry-run previews npm instead of upgrading' || return 1
@@ -999,7 +1009,7 @@ esac
   write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
-  "outdated -g --depth=0") printf "%s\n" "npm notice using cached metadata"; printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+  "outdated -g --depth=0 --json=false --parseable=false --color=false") printf "%s\n" "npm notice using cached metadata"; printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -1009,6 +1019,84 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'npm outdated accepts header after a notice line' || return 1
   assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'npm outdated still prints package rows after a notice line' || return 1
+
+  # Formatting preferences must not change the inventory contract. Exact argv
+  # matching also leaves registry/prefix preferences untouched.
+  write_fake npm '
+case "$*" in
+  "outdated -g --depth=0 --json=false --parseable=false --color=false")
+    case "$UPKG_TEST_NPM_FORMAT_RESULT" in
+      empty) exit 0 ;;
+      updates) printf "%s\n" "Package Current Wanted Latest Location" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+      malformed) printf "%s\n" "{}"; exit 0 ;;
+      error) printf "%s\n" "npm error registry unavailable" >&2; exit 2 ;;
+    esac ;;
+  *) exit 3 ;;
+esac
+'
+  local preference result expected_state expected_status
+  for preference in json parseable color; do
+    for result in empty updates malformed error; do
+      case $result in
+        empty) expected_state='up to date'; expected_status=0 ;;
+        updates) expected_state='updates available'; expected_status=0 ;;
+        *) expected_state=failed; expected_status=1 ;;
+      esac
+      output=$(export "npm_config_${preference}=true" UPKG_TEST_NPM_FORMAT_RESULT=$result
+        upkg outdated --only=npm 2>&1)
+      cmd_status=$?
+      assert_status "$cmd_status" "$expected_status" "npm $result ignores inherited $preference format" || return 1
+      assert_contains "$output" "npm: $expected_state" "npm $result has stable state under $preference" || return 1
+    done
+  done
+
+  write_fake npm '
+case "$*" in
+  "outdated -g --depth=0 --json=false --parseable=false --color=false")
+    [ "$UPKG_TEST_NPM_STDOUT" = empty ] || printf "%s\n" "Package Current Wanted Latest Location" "eslint 8.0.0 8.1.0 9.0.0 global"
+    [ -z "$UPKG_TEST_NPM_DIAGNOSTIC" ] || printf "%s\n" "$UPKG_TEST_NPM_DIAGNOSTIC" >&2
+    exit "$UPKG_TEST_NPM_RC" ;;
+  *) exit 2 ;;
+esac
+'
+  local diagnostic native_rc inventory npm_case_dir="$tmp_prefix/npm-query"
+  local npm_case_stdout="$tmp_prefix/npm-query.stdout" npm_case_stderr="$tmp_prefix/npm-query.stderr"
+  command mkdir -p "$npm_case_dir"
+  for diagnostic in 'npm warn Unknown user config "example"' 'npm WARN deprecated config' $'npm notice Update available\nnpm notice Run npm install -g npm' 'npm error registry unavailable' 'unexpected query diagnostic'; do
+    for native_rc in 0 1 2 130; do
+      for inventory in empty updates; do
+        expected_status=1; expected_state=failed
+        if (( native_rc == 130 )); then
+          expected_status=130
+        elif (( native_rc == 0 )); then
+          expected_status=0
+          [[ $inventory == empty ]] && expected_state='up to date' || expected_state='updates available'
+        elif (( native_rc == 1 )) && [[ $inventory == updates && $diagnostic == 'npm '(warn|WARN|notice)* ]]; then
+          expected_status=0; expected_state='updates available'
+        fi
+        (
+          export TMPDIR=$npm_case_dir UPKG_TEST_NPM_STDOUT=$inventory UPKG_TEST_NPM_RC=$native_rc UPKG_TEST_NPM_DIAGNOSTIC=$diagnostic
+          _upkg_run_outdated_npm
+          local backend_status=$?
+          print -r -- "backend-state=$_UPKG_LAST_STATE"
+          exit $backend_status
+        ) >"$npm_case_stdout" 2>"$npm_case_stderr"
+        cmd_status=$?
+        assert_status "$cmd_status" "$expected_status" "npm diagnostic case $native_rc/$inventory preserves status" || return 1
+        assert_equals "$(<"$npm_case_stderr")" "$diagnostic" "npm diagnostic case $native_rc/$inventory preserves stderr" || return 1
+        if (( native_rc != 130 )); then
+          assert_contains "$(<"$npm_case_stdout")" "backend-state=$expected_state" "npm diagnostic case $native_rc/$inventory has correct state" || return 1
+        fi
+        assert_not_contains "$(<"$npm_case_stdout")" "$diagnostic" "npm diagnostics remain separate from package rows" || return 1
+        assert_equals "$(command ls -A "$npm_case_dir")" '' 'npm query capture is cleaned on every result' || return 1
+      done
+    done
+  done
+  output=$(export UPKG_TEST_NPM_STDOUT=empty UPKG_TEST_NPM_RC=130 UPKG_TEST_NPM_DIAGNOSTIC='npm warn interrupted'
+    run_upkg_with_managers 'npm brew' outdated --only=npm,brew 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 130 'npm cancellation propagates through manager loop' || return 1
+  assert_not_contains "$output" '==> Homebrew' 'npm cancellation stops subsequent managers' || return 1
 
   output=$(upkg --dry-run --only=flatpak)
   assert_contains "$output" 'org.example.App stable' 'bare dry-run previews selected managers' || return 1
@@ -1037,7 +1125,7 @@ exit 1
 
   write_fake paru '
 case "$*" in
-  "-Qua") printf "%s\n" "yay-bin 12.4.2-1 -> 12.5.0-1" ;;
+  "-Qu") printf "%s\n" "repo database is locked" >&2; exit 1 ;;
   "-Syu") printf "%s\n" "paru upgrade" ;;
   *) exit 2 ;;
 esac
@@ -1046,8 +1134,8 @@ esac
   output=$(upkg plan --only=paru 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'paru plan returns nonzero on repo check failure' || return 1
-  assert_contains "$output" 'Repo update check failed; continuing with AUR preview.' 'paru plan warns when repo preview fails' || return 1
-  assert_contains "$output" 'AUR updates:' 'paru plan still shows AUR updates when repo preview fails' || return 1
+  assert_contains "$output" 'repo database is locked' 'paru plan preserves native query failure' || return 1
+  assert_contains "$output" 'paru -Qu failed' 'paru plan summarizes native query failure' || return 1
 
   output=$(upkg upgrade --only=paru 2>&1)
   cmd_status=$?
@@ -1140,7 +1228,7 @@ esac
   write_fake npm '
 printf "%s\n" "npm $*" >> "$UPKG_TEST_CLEAN_LOG"
 case "$*" in
-  "search --parseable -- clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
+  "search --parseable --json=false --color=false -- clean") printf "clean-package\tCleanup helper\tnpm-user\t2024-01-01\t1.0.0\tclean\n" ;;
   "cache npx ls") printf "%s\n" "npx-cache-key-one: test-package" "npx-cache-key-two: another-package" ;;
   "cache npx rm npx-cache-key-one npx-cache-key-two") printf "%s\n" "MUTATING npm npx cache" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm npx cache removed" ;;
   "cache verify") printf "%s\n" "MUTATING npm cache verify" >> "$UPKG_TEST_CLEAN_LOG" ; printf "%s\n" "npm cache verified" ;;
@@ -1159,7 +1247,7 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'search accepts clean as a literal query' || return 1
   assert_contains "$output" 'clean-package' 'clean keyword searches still reach npm' || return 1
-  assert_contains "$(<"$clean_log")" 'npm search --parseable -- clean' 'search passes clean to the npm backend' || return 1
+  assert_contains "$(<"$clean_log")" 'npm search --parseable --json=false --color=false -- clean' 'search passes clean to the npm backend' || return 1
 
   : > "$clean_log"
   output=$(run_upkg_with_managers 'apt dnf pacman paru brew flatpak nix npm' clean --dry-run --only=apt,dnf,pacman,paru,brew,flatpak,nix,npm)
@@ -1358,6 +1446,25 @@ esac
   assert_contains "$output" 'warning: no optional sync database' 'empty pacman query preserves stderr without treating it as output' || return 1
   assert_contains "$output" 'No orphaned packages found.' 'empty pacman orphan query is explained' || return 1
   assert_contains "$(<"$clean_log")" 'sudo pacman -Sc' 'pacman still cleans its cache after an empty orphan query' || return 1
+
+  write_fake pacman '
+printf "%s\n" "pacman $*" >> "$UPKG_TEST_CLEAN_LOG"
+case "$*" in
+  "-Qtdq") printf "%s\n" "error: failed to read local package database" >&2 ; exit 1 ;;
+  "-Sc") printf "%s\n" "MUTATING pacman cache" >> "$UPKG_TEST_CLEAN_LOG" ;;
+  *) exit 2 ;;
+esac
+'
+  : > "$clean_log"
+  output=$(run_upkg_with_managers 'pacman' clean --sudo --only=pacman 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'Pacman orphan database errors fail aggregate cleanup' || return 1
+  assert_contains "$output" 'error: failed to read local package database' 'orphan query error stays visible' || return 1
+  assert_contains "$output" 'pacman: partial - pacman orphan query failed' 'successful cache phase cannot hide failed query' || return 1
+  assert_not_contains "$output" 'No orphaned packages found.' 'database error is not an empty orphan result' || return 1
+  assert_contains "$(<"$clean_log")" 'sudo pacman -Sc' 'independent cache phase still runs after ordinary query failure' || return 1
+  assert_not_contains "$(<"$clean_log")" 'pacman -Rs' 'failed orphan query never removes packages' || return 1
+
 
   write_fake brew '
 printf "%s\n" "brew $*" >> "$UPKG_TEST_CLEAN_LOG"
@@ -1592,15 +1699,15 @@ esac
     assert_not_contains "$output" 'Everything is up to date.' 'missing-data report never prints success' || return 1
 
     set_npkg_fixture \
-      '{"elements":[{"active":true,"originalUrl":"github:example/tools","uri":"github:example/tools/locked","attrPath":"packages.test.tool","storePaths":["/nix/store/tool"]}]}' \
+      '{"elements":[{"active":false,"originalUrl":"github:example/tools","uri":"github:example/tools/locked","attrPath":"packages.test.tool","storePaths":["/nix/store/tool"]}]}' \
       '{}'
     run_npkg_outdated_capture
     cmd_status=$?
     output=$NPKG_TEST_OUTPUT
-    assert_status "$cmd_status" 0 'profile without active nixpkgs elements is complete' || return 1
-    assert_equals "$_NPKG_OUTDATED_STATE" current 'zero-count nixpkgs profile exposes current state' || return 1
-    assert_equals "$_NPKG_OUTDATED_TOTAL" 0 'zero-count nixpkgs profile checks no elements' || return 1
-    assert_contains "$output" 'No nixpkgs packages found in the current profile.' 'zero-count profile keeps its dedicated message' || return 1
+    assert_status "$cmd_status" 0 'profile without active elements is complete' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" current 'zero-count profile exposes current state' || return 1
+    assert_equals "$_NPKG_OUTDATED_TOTAL" 0 'zero-count profile checks no elements' || return 1
+    assert_contains "$output" 'No active packages found in the current profile.' 'zero-count profile keeps its dedicated message' || return 1
     assert_equals "$(<"$NPKG_TEST_EVAL_LOG")" '' 'zero-count profile performs no evaluation' || return 1
 
     set_npkg_fixture '__FAIL__' '{}'
@@ -1757,7 +1864,7 @@ esac
   command rm -f "$fakebin/apt"
   write_fake dnf '
 case "$*" in
-  "list --available *ripgrep*")
+  "--color=never list --available *ripgrep*")
     printf "%s\n" "Available Packages"
     printf "%s\n" "ripgrep.x86_64 14.1.1-1.fc40 updates"
     ;;

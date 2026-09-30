@@ -32,24 +32,63 @@ _ztheme_refresh_integrations() {
 
 _ztheme_apply() {
   emulate -L zsh
-  local name=$1 mode=${2:-use} old_ui=${ZSH_UI_THEME:-terminal} old_fzf=${ZSH_FZF_THEME-}
-
-  _ztheme_validate_name "$name" || {
-    print -u2 -r -- "ztheme: unknown or invalid theme: $name"
-    return 1
-  }
-
-  typeset -g ZSH_UI_THEME=$name
-  [[ $mode == reset ]] && typeset -g ZSH_FZF_THEME=''
-  _zsh_theme_resolve_settings
-  if ! _ztheme_refresh_integrations; then
-    typeset -g ZSH_UI_THEME=$old_ui
-    typeset -g ZSH_FZF_THEME=$old_fzf
+  local name=$1 mode=${2:-use} variable
+  integer committed=0 had_signatures=${+parameters[_FZF_CONFIG_SIGNATURE_BY_PATH]}
+  local -A old_values old_types old_colors=( "${(@kv)_ZSH_THEME_CUSTOM_COLORS}" )
+  local -A old_signatures
+  local -a old_issues=( "${_ZSH_THEME_RESOLUTION_ISSUES[@]}" )
+  local -a state_names=(
+    ZSH_UI_THEME ZSH_FZF_THEME ZSH_FZF_LAYOUT ZSH_UI_GLYPHS
+    _ZSH_UI_ACTIVE_THEME _ZSH_FZF_ACTIVE_THEME _ZSH_UI_GLYPH_TIER _ZSH_UI_COLOR_DEPTH
+    _ZSH_THEME_FZF_CHROME_SIGNATURE _ZSH_THEME_FZF_CHROME_OPTS
+    _ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE _ZSH_THEME_STARTUP_DIAGNOSTIC_SHOWN
+    FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_ALT_C_OPTS FZF_CTRL_R_OPTS
+    FZF_COMPLETION_OPTS FZF_COMPLETION_PATH_OPTS FZF_COMPLETION_DIR_OPTS _ZO_FZF_OPTS
+  )
+  for variable in "${state_names[@]}"; do
+    (( ${+parameters[$variable]} )) || continue
+    old_values[$variable]=${(P)variable}
+    old_types[$variable]=${parameters[$variable]}
+  done
+  (( had_signatures )) && old_signatures=( "${(@kv)_FZF_CONFIG_SIGNATURE_BY_PATH}" )
+  {
+    _ztheme_validate_name "$name" || {
+      print -u2 -r -- "ztheme: unknown or invalid theme: $name"
+      return 1
+    }
+    typeset -g ZSH_UI_THEME=$name
+    [[ $mode == reset ]] && typeset -g ZSH_FZF_THEME=''
     _zsh_theme_resolve_settings
-    _ztheme_refresh_integrations >/dev/null 2>&1 || true
-    print -u2 -r -- 'ztheme: could not refresh finder presentation; theme unchanged'
-    return 1
-  fi
+    if ! _ztheme_refresh_integrations; then
+      print -u2 -r -- 'ztheme: could not refresh finder presentation; theme unchanged'
+      return 1
+    fi
+    committed=1
+  } always {
+    if (( ! committed )); then
+      # Restore committed state directly; re-resolving would recapture the
+      # caller's edited proposal instead of the previously active palette.
+      _ZSH_THEME_CUSTOM_COLORS=( "${(@kv)old_colors}" )
+      _ZSH_THEME_RESOLUTION_ISSUES=( "${old_issues[@]}" )
+      for variable in "${state_names[@]}"; do
+        if (( ${+old_types[$variable]} )); then
+          typeset -g -- "$variable=${old_values[$variable]}"
+          if [[ ${old_types[$variable]} == *export* ]]; then
+            typeset -gx -- "$variable"
+          else
+            typeset -g +x -- "$variable"
+          fi
+        else
+          unset "$variable"
+        fi
+      done
+      if (( had_signatures )); then
+        _FZF_CONFIG_SIGNATURE_BY_PATH=( "${(@kv)old_signatures}" )
+      else
+        unset _FZF_CONFIG_SIGNATURE_BY_PATH
+      fi
+    fi
+  }
   print -r -- "Theme: $name (current session)"
 }
 
@@ -175,6 +214,7 @@ ztheme() {
       _ztheme_current
       ;;
     show)
+      local -A _ZSH_THEME_CUSTOM_COLORS=( "${(@kv)_ZSH_THEME_CUSTOM_COLORS}" )
       (( $# <= 2 )) || { _ztheme_usage >&2; return 1; }
       theme=${2:-${_ZSH_UI_ACTIVE_THEME:-terminal}}
       _ztheme_validate_name "$theme" || { print -u2 -r -- "ztheme: unknown or invalid theme: $theme"; return 1; }
@@ -189,6 +229,7 @@ ztheme() {
       _ztheme_apply terminal reset
       ;;
     export)
+      local -A _ZSH_THEME_CUSTOM_COLORS=( "${(@kv)_ZSH_THEME_CUSTOM_COLORS}" )
       (( $# == 2 )) || { _ztheme_usage >&2; return 1; }
       _ztheme_validate_name "$2" || { print -u2 -r -- "ztheme: unknown or invalid theme: $2"; return 1; }
       _ztheme_export "$2"

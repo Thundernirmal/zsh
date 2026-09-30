@@ -166,6 +166,7 @@ print_hints() {
       ;;
     pacman)
       printf '  sudo pacman -S zsh git curl iproute2 lsd zoxide bat tree fd jq libsecret\n'
+      printf '  Optional for fresh repo inventories: sudo pacman -S pacman-contrib fakeroot\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     brew)
@@ -178,6 +179,10 @@ print_hints() {
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
   esac
+
+  if ! have_cmd setsid; then
+    printf '  Optional for captured package queries: install setsid from util-linux (Linux).\n'
+  fi
 
   if ! have_cmd gdbus; then
     printf '  Optional for cgm check: install gdbus (GLib tools; libglib2.0-bin on Debian/Ubuntu).\n'
@@ -200,9 +205,16 @@ check_fzf
 check_cmd bat optional
 check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
+check_cmd setsid optional
 check_cmd jq optional
 check_cmd secret-tool optional
 check_cmd gdbus optional
+if have_cmd pacman; then
+  check_cmd checkupdates optional
+  if have_cmd checkupdates; then
+    check_cmd fakeroot optional
+  fi
+fi
 check_cmd nix optional
 if have_cmd nix; then
   check_cmd nix-collect-garbage optional

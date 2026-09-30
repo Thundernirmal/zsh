@@ -10,15 +10,15 @@ _upkg_usage() {
     _ui_panel_kv 'outdated / check / list' 'Show outdated packages across detected managers' accent text
     _ui_panel_kv 'search <query>' 'Search package names across detected managers' accent text
     _ui_panel_kv 'upgrade / up / update' 'Run upgrades across selected managers' accent text
-    _ui_panel_kv 'plan' 'Preview available upgrades without changing packages' accent text
-    _ui_panel_kv 'clean' 'Remove unused packages and stale manager-owned caches' accent text
+    _ui_panel_kv 'plan' 'Inventory available updates without resolving transactions' accent text
+    _ui_panel_kv 'clean' 'Remove unused packages and manager-owned caches' accent text
     _ui_panel_kv 'managers' 'Show detected managers and alternates' accent text
     _ui_panel_kv 'help' 'Show this help text' accent text
     _ui_section_break
     _ui_panel_kv '--only <list>' 'Include comma-separated manager IDs' muted text
     _ui_panel_kv '--skip <list>' 'Exclude comma-separated manager IDs' muted text
     _ui_panel_kv '--sudo' 'Authorize privileged upgrade and cleanup backends' muted text
-    _ui_panel_kv '--dry-run' 'Preview upgrades or cleanup without changing packages' muted text
+    _ui_panel_kv '--dry-run' 'Inventory updates or preview cleanup without changing packages' muted text
     _ui_section_break
     _ui_panel_kv 'Managers' 'apt, dnf, pacman, paru, brew, flatpak, nix, npm' muted text
     _ui_panel_kv 'Preview' 'upkg plan --only brew,npm' muted text
@@ -37,8 +37,8 @@ _upkg_usage() {
   print '  upgrade             Run upgrades across selected managers'
   print '  up                  Alias for upgrade'
   print '  update              Alias for upgrade'
-  print '  plan                Preview available upgrades without changing packages'
-  print '  clean               Remove unused packages and stale manager-owned caches'
+  print '  plan                Inventory available updates without resolving transactions'
+  print '  clean               Remove unused packages and manager-owned caches'
   print '  managers            Show detected managers and alternates'
   print '  help                Show this help text'
   print ''
@@ -46,7 +46,7 @@ _upkg_usage() {
   print '  --only <list>       Comma-separated manager IDs to include'
   print '  --skip <list>       Comma-separated manager IDs to exclude'
   print '  --sudo              Authorize privileged upgrade and cleanup backends'
-  print '  --dry-run           Preview upgrades or cleanup without changing packages'
+  print '  --dry-run           Inventory updates or preview cleanup without changing packages'
   print ''
   print 'Supported manager IDs:'
   print '  apt, dnf, pacman, paru, brew, flatpak, nix, npm'
@@ -55,7 +55,7 @@ _upkg_usage() {
   print '  upkg                                  # check for outdated packages'
   print '  upkg search ripgrep                  # compare package search matches'
   print '  upkg --only brew,npm                 # check selected managers'
-  print '  upkg plan                            # preview upgrades'
+  print '  upkg plan                            # inventory updates'
   print '  upkg upgrade --dry-run --only npm    # preview selected upgrades'
   print '  upkg upgrade --sudo --only apt       # run a privileged backend'
   print '  upkg clean --dry-run --only brew,npm # preview manager-owned cleanup'
@@ -65,9 +65,9 @@ _upkg_usage() {
   print 'Notes:'
   print '  - upkg with no command defaults to outdated'
   print '  - search prints one compact table with a manager column'
-  print '  - plan and upgrade --dry-run use the read-only outdated checks'
-  print '  - clean is mutating; use clean --dry-run for a read-only preview'
-  print '  - cleanup uses conservative manager commands and never deletes app data or user config directly'
+  print '  - plan and upgrade --dry-run inventory updates without installing packages'
+  print '  - queries and previews may contact the network and write caches'
+  print '  - clean mutates manager state; clean --dry-run previews without removing packages or caches'
   print '  - upgrades never inject sudo automatically'
   print '  - paru upgrades require explicit --sudo opt-in but still run unprefixed'
   print '  - brew upgrades run unprefixed and stay in Homebrew user space'
@@ -98,7 +98,7 @@ _upkg_parse_manager_list() {
 
   [ -n "$raw" ] || return 0
 
-  for item in ${(s:,:)raw}; do
+  for item in "${(@s:,:)raw}"; do
     item=${item//[[:space:]]/}
 
     if [ -z "$item" ]; then
@@ -124,18 +124,16 @@ _upkg_detect_managers() {
   _UPKG_ACTIVE_MANAGERS=()
   _UPKG_ALTERNATE_MANAGERS=()
 
-  if command -v paru >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(paru)
-    if command -v pacman >/dev/null 2>&1; then
-      _UPKG_ALTERNATE_MANAGERS+=(pacman)
+  local distro_manager
+  for distro_manager in paru pacman apt dnf; do
+    if command -v "$distro_manager" >/dev/null 2>&1; then
+      if (( ${#_UPKG_ACTIVE_MANAGERS} == 0 )); then
+        _UPKG_ACTIVE_MANAGERS+=("$distro_manager")
+      else
+        _UPKG_ALTERNATE_MANAGERS+=("$distro_manager")
+      fi
     fi
-  elif command -v pacman >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(pacman)
-  elif command -v apt >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(apt)
-  elif command -v dnf >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(dnf)
-  fi
+  done
 
   if command -v brew >/dev/null 2>&1; then
     _UPKG_ACTIVE_MANAGERS+=(brew)
@@ -324,6 +322,7 @@ _upkg_print_summary() {
     partial 0
     blocked 0
     failed 0
+    cancelled 0
     skipped 0
     other 0
   )
@@ -374,6 +373,10 @@ _upkg_print_summary() {
     if (( status_counts[blocked] > 0 )); then
       print -nr -- ' '
       _ui_badge "${status_counts[blocked]} blocked" warning
+    fi
+    if (( status_counts[cancelled] > 0 )); then
+      print -nr -- ' '
+      _ui_badge "${status_counts[cancelled]} cancelled" warning
     fi
     if (( status_counts[failed] > 0 )); then
       print -nr -- ' '
@@ -426,12 +429,57 @@ _upkg_print_summary() {
   fi
 }
 
+# Capture query data separately from diagnostics; never use this for prompts.
+_upkg_capture_query() {
+  emulate -L zsh
+  setopt localtraps
+  typeset -g _UPKG_QUERY_STDOUT='' _UPKG_QUERY_STDERR=''
+  local capture_dir rc
+  local -a inherited_cleanup_dirs
+  if (( ${funcstack[(Ie)_upkg_run_outdated_pacman]} )); then
+    inherited_cleanup_dirs=( "${_ZSH_QUERY_ROOT_CLEANUP_DIRS[@]-}" )
+  fi
+  local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=( "${inherited_cleanup_dirs[@]}" )
+  capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-query.XXXXXX") || {
+    _UPKG_QUERY_STDERR='Could not create temporary storage for package query.'
+    return 1
+  }
+  _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$capture_dir" )
+  {
+    _zsh_run_owned_query command "$@" >"$capture_dir/stdout" 2>"$capture_dir/stderr"
+    rc=$?
+    _UPKG_QUERY_STDOUT=$(<"$capture_dir/stdout")
+    _UPKG_QUERY_STDERR=$(<"$capture_dir/stderr")
+  } always {
+    command rm -rf -- "$capture_dir"
+  }
+  return "$rc"
+}
+
+# Ordinary backend failures may continue; cancellation must stop orchestration.
+_upkg_check_interrupt() {
+  case $1 in
+    129|130|143)
+      _UPKG_INTERRUPTED_STATUS=$1
+      local cancellation_detail="interrupted (status $1)"
+      if [[ ${_UPKG_OPERATION:-} == clean ]] && (( ${+succeeded} && ${+failed} )); then
+        cancellation_detail="$succeeded completed, $failed failed; ${_UPKG_CLEANUP_PHASE:-cleanup phase} cancelled (status $1)"
+        (( ${#failures} == 0 )) || cancellation_detail+="; ${(j:; :)failures}"
+      fi
+      _upkg_set_last_result 'cancelled' "$cancellation_detail"
+      return "$1"
+      ;;
+  esac
+  return 0
+}
+
 _upkg_finish_upgrade_result() {
   emulate -L zsh
 
   local rc=$1
   local detail=$2
 
+  _upkg_check_interrupt "$rc" || return $?
   if (( rc == 0 )); then
     _upkg_set_last_result 'upgraded' ''
     return 0
@@ -442,6 +490,7 @@ _upkg_finish_upgrade_result() {
 }
 
 _upkg_print_cleanup_phase() {
+  typeset -g _UPKG_CLEANUP_PHASE=$1
   print ''
   print "$1:"
 }
@@ -452,6 +501,7 @@ _upkg_record_cleanup_result() {
   local rc=$1
   local failure_detail=$2
 
+  _upkg_check_interrupt "$rc" || return $?
   # Cleanup handlers provide these caller-local counters and failure details.
   if (( rc == 0 )); then
     (( succeeded++ ))
@@ -560,6 +610,19 @@ _upkg_require_sudo_command() {
   return 1
 }
 
+_upkg_npm_diagnostics_are_benign() {
+  emulate -L zsh
+
+  local line
+  for line in ${(f)1}; do
+    [[ -z $line ]] && continue
+    # npm's logger prefixes every line, including multi-line notices. Unknown
+    # diagnostics remain failures when exit 1 accompanies a partial table.
+    [[ $line == 'npm '(warn|WARN|notice|NOTICE)([[:space:]]*|) ]] || return 1
+  done
+  return 0
+}
+
 _upkg_npm_outdated_looks_valid() {
   emulate -L zsh
 
@@ -642,14 +705,15 @@ _upkg_search_add_rows() {
   local manager=$1 row
   local name version description
   shift
-  local -a rows=( "$@" )
+  local -a rows=( "$@" ) fields
 
   typeset -g -a _UPKG_SEARCH_ROWS
 
   (( ${#rows[@]} > 0 )) || return 0
 
   for row in "${rows[@]}"; do
-    IFS=$'\t' read -r name version description <<< "$row"
+    fields=("${(@ps:\t:)row}")
+    name=${fields[1]:-}; version=${fields[2]:-}; description=${fields[3]:-}
     _UPKG_SEARCH_ROWS+=("${manager}"$'\t'"${name}"$'\t'"${version}"$'\t'"${description}")
   done
 }
@@ -675,16 +739,21 @@ _upkg_format_search_rows() {
 
   local row manager name version description
   local width manager_width name_width version_width desc_width
-  local failed_count=0
+  local failed_count=0 cancelled_count=0
   local failed_managers=''
-  local -a rows=( "$@" )
+  local -a rows=( "$@" ) fields
 
   if (( ${#rows[@]} == 0 )); then
     for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-      [ "${_UPKG_SUMMARY_STATE[$manager]}" = 'failed' ] && (( failed_count++ ))
+      case ${_UPKG_SUMMARY_STATE[$manager]} in
+        failed) (( failed_count++ )) ;;
+        cancelled) (( cancelled_count++ )) ;;
+      esac
     done
 
-    if (( failed_count > 0 )); then
+    if (( cancelled_count > 0 )); then
+      print 'Search cancelled; results are incomplete.'
+    elif (( failed_count > 0 )); then
       failed_managers=$(_upkg_summary_managers_by_state failed)
       if [ -n "$failed_managers" ]; then
         print "Search results unavailable; failed manager(s): $failed_managers."
@@ -702,7 +771,8 @@ _upkg_format_search_rows() {
     printf '%-8s %-36s %-18s %s\n' '-------' '-------' '---------' '-----------'
 
     for row in "${rows[@]}"; do
-      IFS=$'\t' read -r manager name version description <<< "$row"
+      fields=("${(@ps:\t:)row}")
+      manager=${fields[1]:-}; name=${fields[2]:-}; version=${fields[3]:-}; description=${fields[4]:-}
       [ -n "$version" ] || version='?'
       printf '%-8s %-36s %-18s %s\n' "$manager" "$name" "$version" "$description"
     done
@@ -732,7 +802,8 @@ _upkg_format_search_rows() {
     _ui_section_break
 
     for row in "${rows[@]}"; do
-      IFS=$'\t' read -r manager name version description <<< "$row"
+      fields=("${(@ps:\t:)row}")
+      manager=${fields[1]:-}; name=${fields[2]:-}; version=${fields[3]:-}; description=${fields[4]:-}
       [ -n "$version" ] || version='?'
       description=$(_upkg_search_trim "$description")
 
@@ -762,30 +833,38 @@ _upkg_format_search_rows() {
 _upkg_print_search_summary() {
   emulate -L zsh
 
-  local manager state suffix failed_managers
+  local manager state suffix failed_managers cancelled_managers
   local result_count=${#_UPKG_SEARCH_ROWS[@]}
   local manager_count=0
-  local failed_count=0
+  local failed_count=0 cancelled_count=0
 
   for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
     state=${_UPKG_SUMMARY_STATE[$manager]}
+    [[ $state == skipped ]] && continue
+    (( manager_count++ ))
     case $state in
-      'matches found'|'no matches') (( manager_count++ )) ;;
       failed) (( failed_count++ )) ;;
+      cancelled) (( cancelled_count++ )) ;;
     esac
   done
 
   failed_managers=$(_upkg_summary_managers_by_state failed)
+  cancelled_managers=$(_upkg_summary_managers_by_state cancelled)
 
   if (( failed_count > 0 )); then
     if [ -n "$failed_managers" ]; then
-      suffix=", $failed_count failed ($failed_managers)."
+      suffix=", $failed_count failed ($failed_managers)"
     else
-      suffix=", $failed_count failed."
+      suffix=", $failed_count failed"
     fi
   else
-    suffix='.'
+    suffix=''
   fi
+
+  if (( cancelled_count > 0 )); then
+    suffix+=", $cancelled_count cancelled ($cancelled_managers)"
+  fi
+  suffix+='.'
 
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
     _ui_section_break
@@ -804,7 +883,14 @@ _upkg_print_search_summary() {
       print -nr -- ' '
       _ui_badge "$failed_count failed" danger
     fi
+    if (( cancelled_count > 0 )); then
+      print -nr -- ' '
+      _ui_badge "$cancelled_count cancelled" warning
+    fi
     print ''
+    if (( cancelled_count > 0 )); then
+      print -r -- "  Cancelled managers: $cancelled_managers"
+    fi
     if (( failed_count > 0 )) && [ -n "$failed_managers" ]; then
       print -nr -- '  '
       _ui_color danger
@@ -906,12 +992,13 @@ upkg() {
   local -A selected_map skipped_map alternate_map display_seen
 
   local _UPKG_THEME_MODE=''
+  local -i _UPKG_INTERRUPTED_STATUS=0
 
   while (( $# > 0 )); do
     case $1 in
       --only)
         shift
-        if (( $# == 0 )); then
+        if (( $# == 0 )) || [[ -z ${1//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --only'
           _upkg_usage >&2
           return 1
@@ -920,7 +1007,7 @@ upkg() {
         ;;
       --only=*)
         only_raw=${1#--only=}
-        if [ -z "$only_raw" ]; then
+        if [[ -z ${only_raw//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --only'
           _upkg_usage >&2
           return 1
@@ -928,7 +1015,7 @@ upkg() {
         ;;
       --skip)
         shift
-        if (( $# == 0 )); then
+        if (( $# == 0 )) || [[ -z ${1//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --skip'
           _upkg_usage >&2
           return 1
@@ -937,7 +1024,7 @@ upkg() {
         ;;
       --skip=*)
         skip_raw=${1#--skip=}
-        if [ -z "$skip_raw" ]; then
+        if [[ -z ${skip_raw//[[:space:]]/} ]]; then
           print -u2 -- 'Missing value for --skip'
           _upkg_usage >&2
           return 1
@@ -1183,6 +1270,10 @@ upkg() {
     _UPKG_SEARCH_ROWS=()
   fi
 
+  if [[ $cmd == plan ]]; then
+    print 'Update inventory: dependency changes, replacements, removals, and conflicts are resolved by the native upgrade command.'
+  fi
+
   run_order=( "${_UPKG_SELECTED_MANAGERS[@]}" )
 
   for manager in "${run_order[@]}"; do
@@ -1235,6 +1326,10 @@ upkg() {
     esac
 
     _upkg_record_summary "$manager" "$_UPKG_LAST_STATE" "$_UPKG_LAST_DETAIL"
+    if (( _UPKG_INTERRUPTED_STATUS )); then
+      exit_code=$_UPKG_INTERRUPTED_STATUS
+      break
+    fi
 
     case $_UPKG_LAST_STATE in
       partial|blocked|failed)

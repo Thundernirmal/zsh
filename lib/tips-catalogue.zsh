@@ -9,14 +9,16 @@ _zsh_tip_pool=(
   "Use *(D) when a glob should include hidden entries"
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
-  "Run zdoctor after changing startup settings to check integrations"
-  "Run ztheme use nord to switch dashboard and finder colors for this session"
+  "Run zdoctor after startup changes; restart after repairing a blocked fzf"
+  "Use ztheme show custom to inspect; ztheme use custom applies the palette"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"
+  "Use ff or ft stderr to diagnose failed searches on fallback backends"
   "Run ft <pattern> [path] to search file contents"
   "Run extract --keep file.gz to preserve the compressed input"
-  "Run extract --destination existing-dir archive.tar.gz to choose where to unpack"
+  "Use extract --destination DIR link.gz to retain a compressed link target"
+  "Use a nonempty existing directory with extract --destination DIR archive.tar.gz"
   "Use ff --no-ignore or ft --hidden --no-ignore to broaden a search"
   "Use ft --fixed-strings to search literal text"
   "Use --help with a general helper to see usage before doing any work"
@@ -63,7 +65,7 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Press Ctrl+P in preview pickers to toggle the preview; use Ctrl+/ to wrap"
     "Run fkill TERM to stop selected processes; use fkill 9 only to force"
     "Run fkill --all to include processes from all users"
-    "Run fbr to scan aligned branch details and enter or check out the result"
+    "Run fbr to select exact branches even when branch and tag names collide"
     "Use [WT] in fbr to spot branches checked out in another worktree"
   )
 
@@ -78,6 +80,7 @@ fi
 
 if (( $+functions[cgm] )); then
   _zsh_tip_pool+=(
+    "Use plain scalars with cgm env; padding and case conversion are rejected"
     "Run cgm set OPENAI_KEY to store a credential securely"
     "Run cgm env OPENAI_KEY to load a credential into this shell"
     "Run cgm list to show saved names without retrieving values"
@@ -96,26 +99,27 @@ fi
 
 if (( $+commands[nix] && $+commands[jq] )); then
   _zsh_tip_pool+=(
-    "Run npkg refresh to rebuild the nixpkgs attribute cache"
+    "Run npkg refresh --help for usage without rebuilding the attribute cache"
     "Run npkg outdated to check for Nix output changes"
   )
 fi
 
 if (( $+commands[nix] && $+commands[jq] )) && [[ ${_FZF_STATE:-blocked} == ready ]]; then
   _zsh_tip_pool+=(
-    "Run npkg find nvim to open a seeded package picker"
-    "Run npkg remove with no arguments to select installed packages"
+    "Use npkg find -- --help to search for the literal --help query"
+    "Run npkg outdated to check every active profile entry for output changes"
+    "Run npkg remove with no arguments to select active installed packages"
   )
 fi
 
 if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] || $+commands[brew] || $+commands[flatpak] || ($+commands[nix] && $+functions[npkg]) || $+commands[npm] )); then
   _zsh_tip_pool+=(
-    "Run upkg to check detected package managers for updates"
-    "Run upkg search ripgrep to search detected package managers"
+    "Run upkg to check detected package managers; review warnings on stderr"
+    "Run upkg search ripgrep; native warnings stay separate from package results"
     "Run upkg managers to show active and alternate backends"
-    "Use upkg --only=brew,npm to select specific backends"
-    "Run upkg plan to preview package upgrades"
+    "Run upkg plan to inventory updates; review the native upgrade transaction"
     "Run upkg clean --dry-run before package cleanup"
+    "Use Ctrl+C during upkg to stop remaining managers and cleanup phases"
   )
 fi
 
@@ -123,6 +127,44 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
   _zsh_tip_pool+=(
     "Run upkg upgrade --sudo to authorize system package upgrades"
     "Run upkg clean --sudo to authorize system package cleanup"
+  )
+fi
+
+if (( $+commands[dnf] )); then
+  _zsh_tip_pool+=(
+    "Run upkg search ripgrep --only=dnf to search RPM package names"
+    'Use upkg --only dnf to select DNF even when another distro backend is active'
+    "Run upkg clean --dry-run --only dnf to preview cache removal; check failures"
+  )
+fi
+
+if (( $+commands[npm] )); then
+  _zsh_tip_pool+=(
+    "Run upkg outdated --only npm for a stable table and visible native warnings"
+  )
+fi
+
+if (( $+commands[flatpak] )); then
+  _zsh_tip_pool+=(
+    "Run upkg outdated --only flatpak to include hidden extension update refs"
+  )
+fi
+
+if (( $+commands[apt] )); then
+  _zsh_tip_pool+=(
+    "Run upkg upgrade --sudo --only=apt after resolving APT refresh errors"
+  )
+fi
+
+if (( $+commands[paru] )); then
+  _zsh_tip_pool+=(
+    "Use Devel in paru.conf to enable development-package commit update checks"
+  )
+fi
+
+if (( $+commands[pacman] && $+commands[checkupdates] && $+commands[fakeroot] )); then
+  _zsh_tip_pool+=(
+    "Run checkupdates for a fresh Arch repo inventory without changing the live DB"
   )
 fi
 

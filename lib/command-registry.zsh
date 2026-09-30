@@ -103,8 +103,8 @@ _zsh_help_register cgm-check Security 'Check Secret Service health without value
 
 # Packages and meta helpers
 _zsh_help_register upkg Packages 'Check, search, upgrade, and clean detected managers' 'upkg [command] [args] [flags]' 'upkg search ripgrep --only=apt,nix' 'a supported package manager' function package-manager
-_zsh_help_register upkg-plan Packages 'Preview upgrades' 'upkg plan [--only <list>]' 'upkg plan' 'a supported package manager' action package-manager
-_zsh_help_register npkg Packages 'Manage the current Nix profile' 'npkg <command> [args]' 'npkg search ripgrep' 'nix; jq and fzf 0.68.0+ for optional workflows' function nix
+_zsh_help_register upkg-plan Packages 'Inventory available updates' 'upkg plan [--only <list>]' 'upkg plan' 'a supported package manager' action package-manager
+_zsh_help_register npkg Packages 'Manage Nix profiles; helper commands support --help' 'npkg <command> [args]' 'npkg search ripgrep' 'nix; jq and fzf 0.68.0+ for optional workflows' function nix
 _zsh_help_register npkg-remove Packages 'Remove packages from the Nix profile' 'npkg remove [package ...]' 'npkg remove' 'nix; jq and fzf 0.68.0+ for optional workflows' action nix
 _zsh_help_register G Meta 'Pipe command output to grep' '<command> G <pattern>' 'git log --oneline G fix' grep alias grep
 _zsh_help_register L Meta 'Pipe command output to less' '<command> L' 'git diff L' less alias less

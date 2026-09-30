@@ -39,18 +39,21 @@ tips
 ztheme list
 ```
 
-`zdoctor` diagnoses install location, missing modules, completion readiness, tool availability, glyph settings, and integration status without touching the network or Secret Service unless asked (`zdoctor --network`, `zdoctor --secrets`). `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example. Helpers load by domain so small commands leave package code unloaded. Package searches work on first use; see [package search](GUIDE.md#search-behavior). General helpers support `--help`; see the [guide](GUIDE.md#function-reference) for search controls, extraction destinations, bounded network requests, and credential status.
+`zdoctor` diagnoses install location, missing modules, completion readiness, tool availability, glyph settings, and integration status without touching the network or Secret Service unless asked (`zdoctor --network`, `zdoctor --secrets`). `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example. Helpers load by domain so small commands leave package code unloaded. Package searches work on first use, including native DNF4 and DNF5 no-match handling, and Nix searches suppress evaluation progress, and update checks keep warnings separate from package results; see [package search](GUIDE.md#search-behavior). General helpers support `--help`; see the [guide](GUIDE.md#function-reference) for search controls, validated extraction destinations, native input-link handling, bounded network requests, and credential status.
 
 Fuzzy pickers share one rounded frame with unfilled input and footer rows, restrained section dividers, concise key hints, responsive previews, and theme-aware focus and selection cues. Tabular pickers align their display columns by terminal cells while returning undecorated values. Glyphs default to Nerd Font icons in UTF-8 locales; use `NO_NERD_FONT=1` or `ZSH_UI_GLYPHS=unicode` for ordinary Unicode instead (see [theme settings](GUIDE.md#terminal-output-modes)). Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
 
 ## What it provides
 
 - Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning.
-- Guarded `zoxide` and `fzf` integration with Ctrl+R, Ctrl+T, and Alt+C bindings.
-- File, search, Git branch navigation with undecorated branch selection and labeled alternate worktrees, network, disk-usage, and process helpers with pipe-friendly output and normalized numeric or named signals. Native `mkdir`, `cp`, `mv`, and `rm` behavior is left unchanged.
-- `upkg` for detected package managers and optional `npkg` helpers for Nix profiles.
-- Optional `cgm` credential storage through Linux Secret Service.
-- Shared themes for rich dashboards and every fzf entry point, with safe session switching through `ztheme` and deterministic plain-text fallbacks.
+- Guarded `zoxide` and `fzf` integration with private validated cache fallbacks, failed-load rollback and stale-widget tolerance, and Ctrl+R, Ctrl+T, and Alt+C bindings.
+- File, search, Git branch navigation with validated canonical selection identities and labeled alternate worktrees, network, disk-usage, and process helpers with pipe-friendly output and normalized numeric or named signals. Search fallbacks preserve diagnostics and exit status; native `mkdir`, `cp`, `mv`, and `rm` behavior is left unchanged.
+- `upkg` update inventories, native upgrades, package search and stable npm inventories and search versions with visible diagnostics, complete Flatpak update refs, and cleanup that retains completed and failed phase counts on cancellation, with explicit backend selection and support for Paru configuration. Optional modern-CLI `npkg` helpers cover active Nix profile entries with separate diagnostic streams, with help before work and explicit argument validation.
+- Optional `cgm` credential storage through Linux Secret Service with exact-value scalar exports and safe attributed-scalar removal.
+- On-demand tips include manager-specific reminders only when their tools are available.
+- Shared themes for rich dashboards and every fzf entry point, with atomic session switching and read-only inspection through `ztheme` and deterministic plain-text fallbacks.
+
+Upgrade previews inventory available updates; cleanup previews describe cleanup work. Both avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, cleared search progress and distinct cancellation summaries and owned query-process cleanup after cancellation or abnormal owner death, and cleanup effects.
 
 ## Requirements
 
@@ -60,7 +63,7 @@ The dependency checker treats these as required for the intended setup:
 - `lsd` and `zoxide`
 - stable `fzf` 0.68.0 or newer
 
-Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
+Captured package queries require Linux `/proc` and `setsid` from util-linux. Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. Optional `checkupdates` (`pacman-contrib`, requiring `fakeroot`) enables fresh Pacman inventories using a separate database. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
 
 If the packaged fzf is older than 0.68.0, upgrade it through a current package source or follow the upstream installation link printed by `scripts/check-deps.sh`.
 
@@ -73,6 +76,7 @@ This repository does not manage Oh My Zsh, Starship, PATH setup, `compinit`, or 
 ## Documentation
 
 - [`GUIDE.md`](./GUIDE.md) — setup, full command reference, dependencies, workflows, and gotchas
+- [`docs/issues/README.md`](./docs/issues/README.md) — unresolved issue tracker and consistent report template
 - [`AGENTS.md`](./AGENTS.md) — repository maintenance rules and required verification
 
 For changes, follow the documentation ownership rules and run `zsh scripts/run-tests.zsh`; the maintenance contract is in [`GUIDE.md`](./GUIDE.md#maintenance-and-verification).

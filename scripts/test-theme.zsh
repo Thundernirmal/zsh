@@ -2,6 +2,10 @@
 
 set -u
 
+# Native-fzf cases also bypass run_theme_case; isolate the entire suite.
+unset FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_ALT_C_OPTS FZF_CTRL_R_OPTS \
+  FZF_COMPLETION_OPTS FZF_COMPLETION_PATH_OPTS FZF_COMPLETION_DIR_OPTS
+
 typeset -r repo_dir=${0:A:h:h}
 typeset -r zsh_bin=${commands[zsh]}
 typeset test_tmp
@@ -27,7 +31,8 @@ assert_status() {
 run_theme_case() {
   local setup=$1 body=$2
   local command_text
-  command_text=$setup$'\n'
+  command_text='unset FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_ALT_C_OPTS FZF_CTRL_R_OPTS FZF_COMPLETION_OPTS FZF_COMPLETION_PATH_OPTS FZF_COMPLETION_DIR_OPTS'$'\n'
+  command_text+=$setup$'\n'
   command_text+="source ${(q)repo_dir}/25-theme.zsh"$'\n'
   command_text+=$body
   NO_COLOR= TERM=xterm-256color COLORTERM=truecolor LANG=en_US.UTF-8 \
@@ -340,6 +345,44 @@ print -r -- "$custom_lines[1]|$custom_lines[2]|$custom_lines[16]|$custom_lines[1
   assert_equals "${${(f)output}[10]}" "typeset -gA ZSH_UI_CUSTOM_COLORS=(|  base 101010|  danger 101010|)|typeset -g ZSH_UI_THEME=custom|typeset -g ZSH_FZF_THEME=''" 'ztheme export serializes a validated custom palette in stable role order' || return 1
 }
 
+test_custom_theme_atomicity() {
+  local output
+  output=$(run_theme_case '' '
+source '"${repo_dir}"'/60-functions.zsh
+typeset -gA ZSH_UI_CUSTOM_COLORS
+for role in "${_ZSH_UI_THEME_ROLES[@]}"; do ZSH_UI_CUSTOM_COLORS[$role]=111111; done
+ztheme use custom >/dev/null || exit 40
+ZSH_UI_CUSTOM_COLORS[accent]=222222
+ztheme show custom >/dev/null || exit 41
+ztheme export custom >/dev/null || exit 42
+print -r -- "inspection=$_ZSH_THEME_CUSTOM_COLORS[accent] proposal=$ZSH_UI_CUSTOM_COLORS[accent]"
+_FZF_STATE=ready
+export FZF_DEFAULT_OPTS=original
+typeset -gA _FZF_CONFIG_SIGNATURE_BY_PATH=(sentinel old)
+_fzf_export_config() {
+  export FZF_DEFAULT_OPTS=partial
+  export FZF_CTRL_T_OPTS=partial
+  _FZF_CONFIG_SIGNATURE_BY_PATH[sentinel]=new
+  _FZF_CONFIG_SIGNATURE_BY_PATH[added]=new
+  return 1
+}
+ztheme use custom >/dev/null 2>&1
+rc=$?
+print -r -- "failure=$rc active=$_ZSH_THEME_CUSTOM_COLORS[accent] opts=$FZF_DEFAULT_OPTS ctrl-t=${+FZF_CTRL_T_OPTS} signature=$_FZF_CONFIG_SIGNATURE_BY_PATH[sentinel] count=${#_FZF_CONFIG_SIGNATURE_BY_PATH} ui=$_ZSH_UI_ACTIVE_THEME"
+export FZF_CTRL_T_OPTS=inherited
+ztheme use custom >/dev/null 2>&1
+rc=$?
+print -r -- "inherited-status=$rc ctrl-t=$FZF_CTRL_T_OPTS"
+_fzf_export_config() { export FZF_DEFAULT_OPTS=success; return 0; }
+ztheme use custom >/dev/null || exit 43
+print -r -- "success=$_ZSH_THEME_CUSTOM_COLORS[accent] opts=$FZF_DEFAULT_OPTS"')
+  assert_status "$?" 0 'custom theme transaction fixture completes' || return 1
+  assert_equals "${${(f)output}[1]}" 'inspection=111111 proposal=222222' 'show and export preserve committed custom palette' || return 1
+  assert_equals "${${(f)output}[2]}" 'failure=1 active=111111 opts=original ctrl-t=0 signature=old count=1 ui=custom' 'failed custom switch restores palette, options, presence, and signatures' || return 1
+  assert_equals "${${(f)output}[3]}" 'inherited-status=1 ctrl-t=inherited' 'failed refresh preserves initially present options' || return 1
+  assert_equals "${${(f)output}[4]}" 'success=222222 opts=success' 'successful custom switch commits proposed colors and options' || return 1
+}
+
 test_lazy_loading() {
   local output
   output=$(run_theme_case '' '
@@ -414,6 +457,7 @@ main() {
   test_fzf_compiler || return 1
   test_picker_presentation || return 1
   test_ztheme_command || return 1
+  test_custom_theme_atomicity || return 1
   test_lazy_loading || return 1
   test_idempotence_and_safety || return 1
 }

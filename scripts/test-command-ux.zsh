@@ -161,6 +161,32 @@ test_extract_destination() {
   print -- 'ok: archive input remains after destination extraction'
 }
 
+test_extract_empty_destination() {
+  local root="$tmp_dir/empty-destination" fakebin="$tmp_dir/empty-destination/bin"
+  local option output rc suffix
+  command mkdir -p -- "$fakebin"
+  print -r -- '#!/bin/sh
+printf invoked >> "$EXTRACT_EMPTY_LOG"
+exit 99' > "$fakebin/gunzip"
+  command cp -- "$fakebin/gunzip" "$fakebin/bunzip2"
+  command cp -- "$fakebin/gunzip" "$fakebin/uncompress"
+  command chmod +x -- "$fakebin"/*
+  local old_path=$PATH
+  export EXTRACT_EMPTY_LOG="$root/calls"
+  for suffix in gz bz2 Z; do
+    print -r -- retained > "$root/input.$suffix"
+    for option in -C --destination --dest; do
+      output=$(PATH="$fakebin:$old_path" extract "$option" '' "$root/input.$suffix" 2>&1); rc=$?
+      assert_status "$rc" 1 "$option empty destination rejects .$suffix" || return 1
+      assert_contains "$output" 'requires a directory' 'empty destination explains invalid value' || return 1
+      assert_file_contains "$root/input.$suffix" retained 'invalid destination retains input' || return 1
+    done
+  done
+  [[ ! -e $EXTRACT_EMPTY_LOG ]] || return 1
+  print -- 'ok: empty destinations invoke no decompressor'
+  unset EXTRACT_EMPTY_LOG
+}
+
 test_extract_stream_safety() {
   local root="$tmp_dir/stream" fakebin="$tmp_dir/stream-bin" old_path=$PATH rc
   command mkdir -p -- "$root/dest" "$fakebin"
@@ -189,6 +215,111 @@ exit 7' > "$fakebin/gunzip"
   assert_status "${#leftovers}" 0 'failed decompression publishes no partial output and cleans staging files' || return 1
 }
 
+test_extract_input_symlinks() {
+  local root="$tmp_dir/input-links" rc
+  command mkdir -p -- "$root/links" "$root/dest" "$root/tar-source"
+  print -r -- linked-payload > "$root/payload"
+  command gzip -c -- "$root/payload" > "$root/target.gz"
+  command ln -s -- "$root/target.gz" "$root/links/alias.gz"
+  extract "$root/links/alias.gz" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 1 'native gunzip refuses default symlink extraction' || return 1
+  [[ -f $root/target.gz && -L $root/links/alias.gz && ! -e $root/links/alias ]] || return 1
+  print -- 'ok: default symlink extraction leaves target and link untouched'
+  extract --destination "$root/dest" "$root/links/alias.gz" || return 1
+  assert_file_contains "$root/dest/alias" linked-payload 'destination uses link filename and retains target' || return 1
+  [[ -f $root/target.gz && -L $root/links/alias.gz ]] || return 1
+  extract --keep "$root/links/alias.gz" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 1 'keep preserves native gzip symlink refusal' || return 1
+  [[ -f $root/target.gz && ! -e $root/links/alias ]] || return 1
+  print -r -- tar-payload > "$root/tar-source/member"
+  command tar -czf "$root/archive.data" -C "$root/tar-source" member
+  command ln -s -- "$root/archive.data" "$root/links/alias.tar.gz"
+  extract --destination "$root/dest" "$root/links/alias.tar.gz" || return 1
+  assert_file_contains "$root/dest/member" tar-payload 'archive link dispatch uses supplied suffix' || return 1
+  [[ -f $root/archive.data && -L $root/links/alias.tar.gz ]] || return 1
+}
+
+test_npkg_helper_arguments() (
+  _zsh_functions_load nix || return 1
+  local log_file="$tmp_dir/npkg-argument-calls" marker="$tmp_dir/npkg-cache-marker"
+  local output rc command_name flag expected
+  print -r -- untouched > "$marker"
+  _npkg_cache_dir() { print -r -- cache >> "$log_file"; print -r -- changed > "$marker"; }
+  _npkg_refresh_index() { print -r -- refresh >> "$log_file"; print -r -- changed > "$marker"; }
+  _npkg_outdated() { print -r -- outdated >> "$log_file"; print -r -- changed > "$marker"; }
+  _npkg_pick_installables() { print -r -- "picker:${(j:|:)@}" >> "$log_file"; }
+  _npkg_remove_picker() { print -r -- remove-picker >> "$log_file"; }
+  _npkg_nix() { print -r -- "native:${(j:|:)@}" >> "$log_file"; }
+  # Help/validation must work even when all external dependencies are absent.
+  local PATH=''
+  for command_name in refresh outdated check diff find pick fzf; do
+    for flag in -h --help; do
+      : > "$log_file"
+      output=$(npkg "$command_name" "$flag" 2>&1); rc=$?
+      assert_status "$rc" 0 "npkg $command_name honors $flag without dependencies" || return 1
+      assert_contains "$output" "Usage: npkg $command_name" 'helper help names its selected subcommand' || return 1
+      [[ ! -s $log_file && $(<"$marker") == untouched ]] || return 1
+      print -r -- "ok: npkg $command_name $flag does no Nix/cache/picker work"
+    done
+  done
+  for command_name in refresh outdated check diff; do
+    for flag in operand --unknown '--profile /fixture/other'; do
+      : > "$log_file"
+      output=$(npkg "$command_name" ${=flag} 2>&1); rc=$?
+      assert_status "$rc" 1 "npkg $command_name rejects unsupported arguments" || return 1
+      assert_contains "$output" 'accepts no operands' 'npkg rejects unsupported profile/operand input clearly' || return 1
+      [[ ! -s $log_file && $(<"$marker") == untouched ]] || return 1
+    done
+    : > "$log_file"
+    npkg "$command_name" >/dev/null || return 1
+    [[ $command_name == refresh ]] && expected=refresh || expected=outdated
+    [[ $(<"$log_file") == $expected ]] || return 1
+    print -r -- "ok: npkg $command_name invokes work only for valid no-operand input"
+    print -r -- untouched > "$marker"
+  done
+  for command_name in find pick fzf; do
+    : > "$log_file"
+    npkg "$command_name" alpha 'two words' -leading || return 1
+    [[ $(<"$log_file") == 'picker:alpha|two words|-leading' ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" -- --help -h 'two words' || return 1
+    [[ $(<"$log_file") == 'picker:--help|-h|two words' ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" alpha -- -- --help || return 1
+    [[ $(<"$log_file") == 'picker:alpha|--|--help' ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" alpha --help >/dev/null || return 1
+    [[ ! -s $log_file ]] || return 1
+    : > "$log_file"
+    npkg "$command_name" || return 1
+    [[ $(<"$log_file") == 'picker:' ]] || return 1
+    print -r -- "ok: npkg $command_name preserves multiword/literal/leading-dash queries"
+  done
+  for command_name in add install i remove rm uninstall delete list ls search s upgrade up update; do
+    case $command_name in
+      add|install|i) expected='native:profile|add|--help' ;;
+      remove|rm|uninstall|delete) expected='native:profile|remove|--help' ;;
+      list|ls) expected='native:profile|list|--help' ;;
+      search|s) expected='native:search|--help' ;;
+      upgrade|up|update) expected='native:profile|upgrade|--help' ;;
+    esac
+    : > "$log_file"
+    npkg "$command_name" --help || return 1
+    [[ $(<"$log_file") == $expected ]] || return 1
+    print -r -- "ok: npkg $command_name preserves native help forwarding"
+  done
+  : > "$log_file"
+  npkg add bat 'github:example/flake#pkg' || return 1
+  [[ $(<"$log_file") == 'native:profile|add|nixpkgs#bat|github:example/flake#pkg' ]] || return 1
+  : > "$log_file"
+  npkg list --profile '/fixture/two words' || return 1
+  [[ $(<"$log_file") == 'native:profile|list|--profile|/fixture/two words' ]] || return 1
+  : > "$log_file"
+  npkg search 'two words' || return 1
+  [[ $(<"$log_file") == 'native:search|nixpkgs|two words' ]] || return 1
+  print 'ok: npkg native operands retain expansion, quoting, and profile forwarding'
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -196,10 +327,13 @@ main() {
   functions[_ui_plain_mode]='return 0'
 
   test_help || return 1
+  test_npkg_helper_arguments || return 1
   test_search_options || return 1
   test_network_timeouts || return 1
   test_extract_destination || return 1
+  test_extract_empty_destination || return 1
   test_extract_stream_safety || return 1
+  test_extract_input_symlinks || return 1
 }
 
 main "$@"

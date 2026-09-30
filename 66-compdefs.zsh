@@ -17,8 +17,8 @@ if (( $+functions[compdef] )); then
     'upgrade:Upgrade selected packages'
     'up:Alias for upgrade'
     'update:Alias for upgrade'
-    'plan:Preview available upgrades'
-    'clean:Remove unused packages and stale caches'
+    'plan:Inventory available updates'
+    'clean:Remove unused packages and manager-owned caches'
     'managers:Show detected managers and alternates'
     'help:Show usage help'
   )
@@ -26,7 +26,7 @@ if (( $+functions[compdef] )); then
     '--only:Include comma-separated manager IDs'
     '--skip:Exclude comma-separated manager IDs'
     '--sudo:Authorize privileged upgrade and cleanup backends'
-    '--dry-run:Preview upgrades or cleanup without changing packages'
+    '--dry-run:Inventory updates or preview cleanup without changing packages'
     '--help:Show usage help'
   )
   typeset -ga _ZSH_EXTRACT_EXTENSIONS=(
@@ -101,7 +101,7 @@ if (( $+functions[compdef] )); then
       '--only=[include comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
       '--skip=[exclude comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
       '--sudo[authorize privileged upgrade and cleanup backends]' \
-      '--dry-run[preview upgrades or cleanup without changing packages]' \
+      "--dry-run[${_ZSH_UPKG_FLAGS[(r)--dry-run:*]#*:}]" \
       '1:upkg command:->command' \
       '*:command argument:->argument' && return 0
 
@@ -195,9 +195,14 @@ if (( $+functions[compdef] )); then
   _zsh_npkg() {
     local context state state_descr line
     typeset -A opt_args
+    local -a picker_options
+    case ${words[2]-} in
+      find|pick|fzf) picker_options=('--[treat following words as literal picker query]') ;;
+    esac
 
     _arguments -C \
-      '(-h --help)'{-h,--help}'[show usage help]' \
+      '(-h --help)'{-h,--help}'[show helper usage or native Nix help]' \
+      "${picker_options[@]}" \
       '1:npkg command:->command' \
       '*:command argument:->argument' && return 0
 
@@ -218,6 +223,9 @@ if (( $+functions[compdef] )); then
             ;;
           upgrade|up|update)
             _message 'package name'
+            ;;
+          refresh|outdated|check|diff)
+            _message 'no operands; use -h or --help for usage'
             ;;
           *)
             _message 'no additional arguments'

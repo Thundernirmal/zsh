@@ -3,14 +3,18 @@
 _upkg_run_search_apt() {
   emulate -L zsh
 
-  local output rc line header rest
+  local output diagnostic rc line header rest
   local current_name='' current_version='' current_desc=''
   local -a rows
 
   _upkg_search_progress apt ''
-  output=$(command apt search --names-only -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query apt search --names-only -- "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
   output=$(print -r -- "$output" | sed '/^WARNING: apt does not have a stable CLI interface\./d;/^Sorting\.\.\.$/d;/^Full Text Search\.\.\.$/d')
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -35,9 +39,11 @@ _upkg_run_search_apt() {
     header=${line%% *}
     rest=${line#"$header"}
     rest=${rest# }
+    current_name=''; current_version=''; current_desc=''
+    [[ $header == */* && $rest != "$line" && -n $rest ]] || continue
+    [[ $header =~ '^[[:alnum:]][[:alnum:]+.:_-]*/[^[:space:]]+$' ]] || continue
     current_name=${header%%/*}
     current_version=${rest%% *}
-    current_desc=''
   done
 
   if [ -n "$current_name" ]; then
@@ -50,56 +56,68 @@ _upkg_run_search_apt() {
 _upkg_run_search_dnf() {
   emulate -L zsh
 
-  local output rc line name version query
+  local output diagnostic rc line name version query combined
   local -a rows fields query_patterns
-
   for query in "$@"; do
     query_patterns+=("*${query}*")
   done
 
   _upkg_search_progress dnf ''
-  output=$(command dnf list --available "${query_patterns[@]}" 2>&1)
+  # Quiet DNF5 suppresses its no-match diagnostic, making status 1 ambiguous.
+  LC_ALL=C _upkg_capture_query dnf --color=never list --available "${query_patterns[@]}"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
-    if [[ $output == *'No matching Packages to list'* ]]; then
-      _upkg_finish_search_results dnf
-      return 0
+    combined="${output}"$'\n'"${diagnostic}"
+    # Both DNF generations use status 1 for a valid empty list.
+    if (( rc == 1 )); then
+      for line in ${(f)combined}; do
+        if [[ $line == 'No matches found.' || $line == 'No matching Packages to list' || $line == 'Error: No matching Packages to list' ]]; then
+          _upkg_finish_search_results dnf
+          return 0
+        fi
+      done
     fi
-    [ -n "$output" ] && print -r -- "$output"
+    [[ -z $output ]] || print -r -- "$output"
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_set_last_result 'failed' 'dnf list --available failed'
     return 1
   fi
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
 
   for line in ${(f)output}; do
-    [ -n "$line" ] || continue
-    [[ $line == 'Available Packages'* ]] && continue
-    [[ $line == 'Last metadata expiration check:'* ]] && continue
-
     fields=( ${(z)line} )
-    (( ${#fields[@]} >= 2 )) || continue
+    (( ${#fields[@]} == 3 )) || continue
     name=${fields[1]}
     version=${fields[2]}
+    # name.arch + EVR + repository: reject headers and progress as package data.
+    [[ $name =~ '^[[:alnum:]_+.-]+\.[[:alnum:]_]+$' ]] || continue
     rows+=("${name}"$'\t'"${version}"$'\t')
   done
-
   _upkg_finish_search_results dnf "${rows[@]}"
 }
 
 _upkg_run_search_pacman() {
   emulate -L zsh
 
-  local output rc line header rest name version desc=''
+  local output diagnostic rc line header rest name version desc=''
   local -a rows
 
   _upkg_search_progress pacman ''
-  output=$(command pacman -Ss -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query pacman --color never -Ss -- "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
-    if (( rc == 1 )) && [ -z "$output" ]; then
+    if (( rc == 1 )) && [[ -z $output && -z $diagnostic ]]; then
       _upkg_finish_search_results pacman
       return 0
     fi
@@ -122,6 +140,8 @@ _upkg_run_search_pacman() {
     header=${line%% *}
     rest=${line#"$header"}
     rest=${rest# }
+    [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
+    [[ -n $rest && $rest != "$line" ]] || continue
     name=${header#*/}
     version=${rest%% *}
     rows+=("${name}"$'\t'"${version}"$'\t')
@@ -133,16 +153,20 @@ _upkg_run_search_pacman() {
 _upkg_run_search_paru() {
   emulate -L zsh
 
-  local output rc line header rest name version desc=''
+  local output diagnostic rc line header rest name version desc=''
   local -a rows
 
   _upkg_search_progress paru ''
-  output=$(command paru -Ss -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query paru --color never -Ss -- "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
-    if (( rc == 1 )) && [ -z "$output" ]; then
+    if (( rc == 1 )) && [[ -z $output && -z $diagnostic ]]; then
       _upkg_finish_search_results paru
       return 0
     fi
@@ -165,6 +189,8 @@ _upkg_run_search_paru() {
     header=${line%% *}
     rest=${line#"$header"}
     rest=${rest# }
+    [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
+    [[ -n $rest && $rest != "$line" ]] || continue
     name=${header#*/}
     version=${rest%% *}
     rows+=("${name}"$'\t'"${version}"$'\t')
@@ -176,17 +202,22 @@ _upkg_run_search_paru() {
 _upkg_run_search_brew() {
   emulate -L zsh
 
-  local output rc line candidate meta version
+  local output diagnostic combined rc line candidate meta version
   local info_limit=50 formula_total=0 cask_total=0
   local -a formulae casks formulae_for_info casks_for_info rows tokens
   local -A formula_wanted cask_wanted
 
   _upkg_search_progress brew 'formulae'
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --formula -- "$@" 2>&1)
+  LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew search --formula -- "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
+  _upkg_check_interrupt "$rc" || return $?
   if (( rc != 0 )); then
-    if [[ $output != *'No formulae found'* && $output != *'No formulae or casks found'* ]]; then
+    if (( rc != 1 )) || [[ $combined != *'No formulae found'* && $combined != *'No formulae or casks found'* ]]; then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew search --formula failed'
       return 1
@@ -196,16 +227,23 @@ _upkg_run_search_brew() {
       [ -n "$line" ] || continue
       [[ $line == '==>'* ]] && continue
       tokens=( ${(z)line} )
-      formulae+=( "${tokens[@]}" )
+      for candidate in "${tokens[@]}"; do
+        [[ $candidate =~ '^[[:alnum:]_+.@/-]+$' ]] && formulae+=("$candidate")
+      done
     done
   fi
 
   _upkg_search_progress brew 'casks'
-  output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew search --cask -- "$@" 2>&1)
+  LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew search --cask -- "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
+  _upkg_check_interrupt "$rc" || return $?
   if (( rc != 0 )); then
-    if [[ $output != *'No casks found'* && $output != *'No formulae or casks found'* ]]; then
+    if (( rc != 1 )) || [[ $combined != *'No casks found'* && $combined != *'No formulae or casks found'* ]]; then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew search --cask failed'
       return 1
@@ -215,7 +253,9 @@ _upkg_run_search_brew() {
       [ -n "$line" ] || continue
       [[ $line == '==>'* ]] && continue
       tokens=( ${(z)line} )
-      casks+=( "${tokens[@]}" )
+      for candidate in "${tokens[@]}"; do
+        [[ $candidate =~ '^[[:alnum:]_+.@/-]+$' ]] && casks+=("$candidate")
+      done
     done
   fi
 
@@ -247,9 +287,13 @@ _upkg_run_search_brew() {
 
   if (( ${#formulae_for_info[@]} > 0 )); then
     _upkg_search_progress brew 'formula info'
-    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --formula "${formulae_for_info[@]}" 2>&1)
+    LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew info --formula "${formulae_for_info[@]}"
     rc=$?
     _upkg_search_progress_clear
+    output=$_UPKG_QUERY_STDOUT
+    diagnostic=$_UPKG_QUERY_STDERR
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+    _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew info failed'
@@ -271,9 +315,13 @@ _upkg_run_search_brew() {
 
   if (( ${#casks_for_info[@]} > 0 )); then
     _upkg_search_progress brew 'cask info'
-    output=$(HOMEBREW_NO_AUTO_UPDATE=1 command brew info --cask "${casks_for_info[@]}" 2>&1)
+    LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew info --cask "${casks_for_info[@]}"
     rc=$?
     _upkg_search_progress_clear
+    output=$_UPKG_QUERY_STDOUT
+    diagnostic=$_UPKG_QUERY_STDERR
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+    _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew info failed'
@@ -299,16 +347,21 @@ _upkg_run_search_brew() {
 _upkg_run_search_flatpak() {
   emulate -L zsh
 
-  local output rc app version name description display_name
-  local -a rows
+  local output diagnostic combined rc line app version name description display_name
+  local -a rows fields
 
   _upkg_search_progress flatpak ''
-  output=$(command flatpak search --columns=application,version,name,description -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query flatpak search --columns=application,version,name,description -- "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
-    if [[ $output == *'No matches found'* ]]; then
+    if (( rc == 1 )) && [[ $combined == *'No matches found'* ]]; then
       _upkg_finish_search_results flatpak
       return 0
     fi
@@ -317,9 +370,11 @@ _upkg_run_search_flatpak() {
     return 1
   fi
 
-  while IFS=$'\t' read -r app version name description _; do
-    [ -n "$app" ] || continue
-    [ "$app" = 'Application' ] && continue
+  for line in ${(f)output}; do
+    fields=("${(@ps:\t:)line}")
+    (( ${#fields} >= 4 )) || continue
+    app=$fields[1]; version=$fields[2]; name=$fields[3]; description=$fields[4]
+    [[ $app =~ '^[[:alnum:]_-]+(\.[[:alnum:]_-]+){2,}$' ]] || continue
     display_name=$(_upkg_search_trim "$name")
     description=$(_upkg_search_trim "$description")
     if [ -n "$display_name" ] && [ "$display_name" != "$app" ]; then
@@ -330,7 +385,7 @@ _upkg_run_search_flatpak() {
       fi
     fi
     rows+=("${app}"$'\t'"${version}"$'\t'"${description}")
-  done <<< "$output"
+  done
 
   _upkg_finish_search_results flatpak "${rows[@]}"
 }
@@ -338,22 +393,28 @@ _upkg_run_search_flatpak() {
 _upkg_run_search_nix() {
   emulate -L zsh
 
-  local output output_lower rc line trimmed name version description=''
+  local output diagnostic combined output_lower rc line trimmed name version description=''
   local -a rows
 
-  # Search calls the private Nix adapter directly rather than the npkg loader.
+  # Use the same fixed experimental flags as _npkg_nix, through native
+  # capture so diagnostics cannot become search descriptions.
   _zsh_functions_load_domain nix || {
     _upkg_set_last_result 'failed' 'could not load the Nix domain'
     return 1
   }
   _upkg_search_progress nix ''
-  output=$(_npkg_nix search nixpkgs "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query nix --extra-experimental-features "nix-command flakes" --quiet search nixpkgs "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  combined="${output}"$'\n'"${diagnostic}"
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
-    output_lower=${(L)output}
-    if [[ $output_lower == *'no packages matched'* || $output_lower == *'no results for'* ]]; then
+    output_lower=${(L)combined}
+    if (( rc == 1 )) && [[ $output_lower == *'no packages matched'* || $output_lower == *'no results for'* ]]; then
       _upkg_finish_search_results nix
       return 0
     fi
@@ -373,6 +434,7 @@ _upkg_run_search_nix() {
       continue
     fi
 
+    [[ $line == '* '* && $line == *' ('*')' ]] || continue
     trimmed=$line
     trimmed=${trimmed#\* }
     name=${trimmed%% \(*}
@@ -390,13 +452,18 @@ _upkg_run_search_nix() {
 _upkg_run_search_npm() {
   emulate -L zsh
 
-  local output rc name description author date version
-  local -a rows
+  local output diagnostic rc line name description author date version
+  local -a rows fields
+  integer date_index
 
   _upkg_search_progress npm ''
-  output=$(command npm search --parseable -- "$@" 2>&1)
+  LC_ALL=C _upkg_capture_query npm search --parseable --json=false --color=false -- "$@"
   rc=$?
   _upkg_search_progress_clear
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -404,10 +471,23 @@ _upkg_run_search_npm() {
     return 1
   fi
 
-  while IFS=$'\t' read -r name description author date version _; do
-    [ -n "$name" ] || continue
+  for line in ${(f)output}; do
+    fields=("${(@ps:\t:)line}")
+    name=${fields[1]-}; description=''; version=''
+    [[ $name =~ '^(@[[:alnum:]_.~-]+/)?[[:alnum:]_.~-]+$' ]] || continue
+    # npm releases omit empty descriptions/authors in parseable output.
+    # Anchor on the publication date followed by a valid package version.
+    for date_index in 2 3 4; do
+      date=${fields[$date_index]-}
+      [[ $date == prehistoric || $date =~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' ]] || continue
+      version=${fields[$((date_index + 1))]-}
+      [[ $version =~ '^[0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:].-]+)?(\+[[:alnum:].-]+)?$' ]] || { version=''; continue; }
+      (( date_index > 2 )) && description=${fields[2]-}
+      break
+    done
+    [[ -n $version ]] || continue
     rows+=("${name}"$'\t'"${version}"$'\t'"$(_upkg_search_trim "$description")")
-  done <<< "$output"
+  done
 
   _upkg_finish_search_results npm "${rows[@]}"
 }
@@ -415,13 +495,17 @@ _upkg_run_search_npm() {
 _upkg_run_outdated_apt() {
   emulate -L zsh
 
-  local output line rc
+  local output diagnostic line rc
   local -a packages
 
   _upkg_print_section apt
 
-  output=$(command apt list --upgradable 2>&1)
+  _upkg_capture_query apt list --upgradable
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
   output=$(print -r -- "$output" | sed '/^Listing\.\.\.$/d')
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -447,12 +531,16 @@ _upkg_run_outdated_apt() {
 _upkg_run_outdated_dnf() {
   emulate -L zsh
 
-  local output rc
+  local output diagnostic rc
 
   _upkg_print_section dnf
 
-  output=$(command dnf check-update 2>&1)
+  _upkg_capture_query dnf check-update
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
   case $rc in
     0)
@@ -473,117 +561,87 @@ _upkg_run_outdated_dnf() {
 
 _upkg_run_outdated_pacman() {
   emulate -L zsh
+  setopt localtraps
 
-  local output rc
-
+  local output diagnostic rc database='' query='pacman -Qu'
+  local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=()
+  local detail='cached repository metadata; replacements are resolved during upgrade'
   _upkg_print_section pacman
 
-  output=$(command pacman -Qu 2>&1)
-  rc=$?
-
-  if _upkg_arch_outdated_has_no_updates "$rc" "$output"; then
-    print 'No updates available.'
-    _upkg_set_last_result 'up to date' ''
-    return 0
+  if command -v checkupdates >/dev/null 2>&1; then
+    query='checkupdates'
+    detail='fresh separate repository database; replacements are resolved during upgrade'
+    print 'Refreshing a separate repository database with checkupdates.'
+    database=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-arch.XXXXXX") || {
+      _upkg_set_last_result 'failed' 'could not create a separate repository database'
+      return 1
+    }
+    {
+      _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$database" )
+      trap '_upkg_check_interrupt 130; return 130' INT
+      trap '_upkg_check_interrupt 143; return 143' TERM
+      trap '_upkg_check_interrupt 129; return 129' HUP
+      CHECKUPDATES_DB=$database _upkg_capture_query checkupdates --nocolor
+      rc=$?
+    } always {
+      command rm -rf -- "$database"
+    }
+    # checkupdates uses 2 for an empty inventory, and 1 for errors.
+    if (( rc == 2 )) && [[ -z $_UPKG_QUERY_STDOUT ]]; then
+      rc=0
+    fi
+  else
+    print 'Cached repository inventory: install pacman-contrib for fresh checkupdates checks.'
+    _upkg_capture_query pacman -Qu
+    rc=$?
   fi
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
+  if [[ $query == 'pacman -Qu' ]] && _upkg_arch_outdated_has_no_updates "$rc" "${output}${diagnostic}"; then
+    rc=0
+  fi
   if (( rc != 0 )); then
-    [ -n "$output" ] && print -r -- "$output"
-    _upkg_set_last_result 'failed' 'pacman -Qu failed'
+    [[ -z $output ]] || print -r -- "$output"
+    _upkg_set_last_result 'failed' "$query failed"
     return 1
   fi
-
-  if [ -n "$output" ]; then
+  if [[ -n $output ]]; then
     print -r -- "$output"
-    _upkg_set_last_result 'updates available' ''
+    _upkg_set_last_result 'updates available' "$detail"
   else
-    print 'No updates available.'
-    _upkg_set_last_result 'up to date' ''
+    print 'No updates available in this inventory.'
+    _upkg_set_last_result 'up to date' "$detail"
   fi
 }
 
 _upkg_run_outdated_paru() {
   emulate -L zsh
 
-  local pacman_output='' paru_output='' repo_error=''
-  local pacman_rc=0 paru_rc=0
-  local had_updates=0 repo_failed=0
-
+  local output diagnostic rc
   _upkg_print_section paru
+  print 'Configured Paru update inventory (repository versions use cached metadata):'
+  _upkg_capture_query paru -Qu
+  rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
-  if command -v pacman >/dev/null 2>&1; then
-    pacman_output=$(command pacman -Qu 2>&1)
-    pacman_rc=$?
-
-    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
-      pacman_output=''
-    elif (( pacman_rc != 0 )); then
-      repo_failed=1
-      repo_error='pacman -Qu failed while checking paru repo updates'
-    fi
-  else
-    pacman_output=$(command paru -Qu 2>&1)
-    pacman_rc=$?
-
-    if _upkg_arch_outdated_has_no_updates "$pacman_rc" "$pacman_output"; then
-      pacman_output=''
-    elif (( pacman_rc != 0 )); then
-      repo_failed=1
-      repo_error='paru -Qu failed'
-    fi
-  fi
-
-  paru_output=$(command paru -Qua 2>&1)
-  paru_rc=$?
-
-  if _upkg_arch_outdated_has_no_updates "$paru_rc" "$paru_output"; then
-    paru_output=''
-    paru_rc=0
-  fi
-
-  if (( repo_failed )); then
-    print 'Repo updates:'
-    if [ -n "$pacman_output" ]; then
-      print -r -- "$pacman_output"
-    else
-      print 'Repo update check failed.'
-    fi
-    print 'Repo update check failed; continuing with AUR preview.'
-  elif [ -n "$pacman_output" ]; then
-    print 'Repo updates:'
-    print -r -- "$pacman_output"
-    had_updates=1
-  fi
-
-  if (( paru_rc != 0 )); then
-    (( repo_failed || had_updates )) && print ''
-    print 'AUR updates:'
-    [ -n "$paru_output" ] && print -r -- "$paru_output"
-    if (( repo_failed )); then
-      _upkg_set_last_result 'failed' "$repo_error; paru -Qua failed"
-    else
-      _upkg_set_last_result 'failed' 'paru -Qua failed'
-    fi
-    return 1
-  fi
-
-  if [ -n "$paru_output" ]; then
-    (( repo_failed || had_updates )) && print ''
-    print 'AUR updates:'
-    print -r -- "$paru_output"
-    had_updates=1
-  elif (( repo_failed )); then
-    print ''
-    print 'AUR updates:'
+  if _upkg_arch_outdated_has_no_updates "$rc" "${output}${diagnostic}"; then
     print 'No updates available.'
+    _upkg_set_last_result 'up to date' ''
+    return 0
   fi
-
-  if (( repo_failed )); then
-    _upkg_set_last_result 'failed' "$repo_error; AUR preview still shown"
+  if (( rc != 0 )); then
+    [[ -z $output ]] || print -r -- "$output"
+    _upkg_set_last_result 'failed' 'paru -Qu failed'
     return 1
   fi
-
-  if (( had_updates )); then
+  if [[ -n $output ]]; then
+    print -r -- "$output"
     _upkg_set_last_result 'updates available' ''
   else
     print 'No updates available.'
@@ -594,12 +652,16 @@ _upkg_run_outdated_paru() {
 _upkg_run_outdated_brew() {
   emulate -L zsh
 
-  local output rc
+  local output diagnostic rc
 
   _upkg_print_section brew
 
-  output=$(command brew outdated 2>&1)
+  _upkg_capture_query brew outdated
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -619,12 +681,16 @@ _upkg_run_outdated_brew() {
 _upkg_run_outdated_flatpak() {
   emulate -L zsh
 
-  local output rc
+  local output diagnostic rc
 
   _upkg_print_section flatpak
 
-  output=$(command flatpak remote-ls --updates 2>&1)
+  _upkg_capture_query flatpak remote-ls --updates --all
   rc=$?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -644,7 +710,8 @@ _upkg_run_outdated_flatpak() {
 _upkg_run_outdated_nix() {
   emulate -L zsh
 
-  local output output_file rc state changed unknown
+  local output diagnostic capture_dir rc state changed unknown
+  local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=()
 
   _upkg_print_section nix
 
@@ -654,15 +721,22 @@ _upkg_run_outdated_nix() {
     return 0
   fi
 
-  output_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-nix-outdated.XXXXXX") || {
-    _upkg_set_last_result 'failed' 'could not create a temp file for npkg outdated'
+  capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-nix-outdated.XXXXXX") || {
+    _upkg_set_last_result 'failed' 'could not create temporary storage for npkg outdated'
     return 1
   }
-
-  npkg outdated >"$output_file" 2>&1
-  rc=$?
-  output=$(<"$output_file")
-  command rm -f -- "$output_file"
+  _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$capture_dir" )
+  # Invoke in this process: result globals survive, streams stay independent.
+  {
+    npkg outdated >"$capture_dir/stdout" 2>"$capture_dir/stderr"
+    rc=$?
+    output=$(<"$capture_dir/stdout")
+    diagnostic=$(<"$capture_dir/stderr")
+  } always {
+    command rm -rf -- "$capture_dir"
+  }
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  _upkg_check_interrupt "$rc" || return $?
 
   [ -n "$output" ] && print -r -- "$output"
 
@@ -696,51 +770,42 @@ _upkg_run_outdated_nix() {
 _upkg_run_outdated_npm() {
   emulate -L zsh
 
-  local stdout_file stderr_file stdout_output stderr_output rc
+  local stdout_output stderr_output rc
 
   _upkg_print_section npm
-
-  stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stdout.XXXXXX") || {
-    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
-    return 1
-  }
-  stderr_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm.stderr.XXXXXX") || {
-    command rm -f -- "$stdout_file"
-    _upkg_set_last_result 'failed' 'could not create a temp file for npm outdated'
-    return 1
-  }
-
-  command npm outdated -g --depth=0 >"$stdout_file" 2>"$stderr_file"
+  LC_ALL=C _upkg_capture_query npm outdated -g --depth=0 --json=false --parseable=false --color=false
   rc=$?
-
-  stdout_output=$(<"$stdout_file")
-  stderr_output=$(<"$stderr_file")
-  command rm -f -- "$stdout_file" "$stderr_file"
+  stdout_output=$_UPKG_QUERY_STDOUT
+  stderr_output=$_UPKG_QUERY_STDERR
+  [[ -z $stderr_output ]] || print -u2 -r -- "$stderr_output"
+  _upkg_check_interrupt "$rc" || return $?
 
   case $rc in
     0)
-      if [ -n "$stdout_output" ]; then
+      if [ -z "$stdout_output" ]; then
+        print 'No updates available.'
+        _upkg_set_last_result 'up to date' ''
+      elif _upkg_npm_outdated_looks_valid "$stdout_output"; then
         print -r -- "$stdout_output"
         _upkg_set_last_result 'updates available' ''
       else
-        print 'No updates available.'
-        _upkg_set_last_result 'up to date' ''
+        print -r -- "$stdout_output"
+        _upkg_set_last_result 'failed' 'npm outdated returned unrecognized output'
+        return 1
       fi
       ;;
     1)
-      if [ -z "$stderr_output" ] && _upkg_npm_outdated_looks_valid "$stdout_output"; then
+      if _upkg_npm_diagnostics_are_benign "$stderr_output" && _upkg_npm_outdated_looks_valid "$stdout_output"; then
         print -r -- "$stdout_output"
         _upkg_set_last_result 'updates available' ''
       else
         [ -n "$stdout_output" ] && print -r -- "$stdout_output"
-        [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
         _upkg_set_last_result 'failed' 'npm outdated -g failed'
         return 1
       fi
       ;;
     *)
       [ -n "$stdout_output" ] && print -r -- "$stdout_output"
-      [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
       _upkg_set_last_result 'failed' 'npm outdated -g failed'
       return 1
       ;;
@@ -763,16 +828,18 @@ _upkg_run_upgrade_apt() {
   _upkg_require_sudo_command || return 0
 
   if _upkg_is_root; then
-    command apt update
+    command apt -o APT::Update::Error-Mode=any update
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then
       _upkg_set_last_result 'failed' 'apt update failed'
       return 1
     fi
     command apt full-upgrade
   else
-    command sudo apt update
+    command sudo apt -o APT::Update::Error-Mode=any update
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     if (( rc != 0 )); then
       _upkg_set_last_result 'failed' 'sudo apt update failed'
       return 1
@@ -780,6 +847,7 @@ _upkg_run_upgrade_apt() {
     command sudo apt full-upgrade
   fi
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'apt full-upgrade failed'
 }
@@ -805,6 +873,7 @@ _upkg_run_upgrade_dnf() {
     command sudo dnf upgrade --refresh
   fi
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'dnf upgrade --refresh failed'
 }
@@ -830,6 +899,7 @@ _upkg_run_upgrade_pacman() {
     command sudo pacman -Syu
   fi
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'pacman -Syu failed'
 }
@@ -849,6 +919,7 @@ _upkg_run_upgrade_paru() {
 
   command paru -Syu
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'paru -Syu failed'
 }
@@ -862,6 +933,7 @@ _upkg_run_upgrade_brew() {
 
   command brew upgrade
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'brew upgrade failed'
 }
@@ -875,6 +947,7 @@ _upkg_run_upgrade_flatpak() {
 
   command flatpak update
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'flatpak update failed'
 }
@@ -888,6 +961,7 @@ _upkg_run_upgrade_nix() {
 
   npkg upgrade
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'npkg upgrade failed'
 }
@@ -914,6 +988,7 @@ _upkg_run_upgrade_npm() {
 
   command npm update -g
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
 
   _upkg_finish_upgrade_result "$rc" 'npm update -g failed'
 }
@@ -931,7 +1006,7 @@ _upkg_run_clean_apt() {
     prefix=$(_upkg_cleanup_privilege_prefix)
     _upkg_print_cleanup_phase 'Unused packages'
     print -r -- "preview: ${prefix}apt --simulate autoremove"
-    _upkg_run_cleanup_step 'apt autoremove preview failed' apt --simulate autoremove
+    _upkg_run_cleanup_step 'apt autoremove preview failed' apt --simulate autoremove || return $?
 
     _upkg_print_cleanup_phase 'Package cache'
     print -r -- "would run: ${prefix}apt autoclean"
@@ -951,16 +1026,16 @@ _upkg_run_clean_apt() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'apt autoremove failed' apt autoremove
+    _upkg_run_cleanup_step 'apt autoremove failed' apt autoremove || return $?
   else
-    _upkg_run_cleanup_step 'apt autoremove failed' sudo apt autoremove
+    _upkg_run_cleanup_step 'apt autoremove failed' sudo apt autoremove || return $?
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'apt autoclean failed' apt autoclean
+    _upkg_run_cleanup_step 'apt autoclean failed' apt autoclean || return $?
   else
-    _upkg_run_cleanup_step 'apt autoclean failed' sudo apt autoclean
+    _upkg_run_cleanup_step 'apt autoclean failed' sudo apt autoclean || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -979,7 +1054,7 @@ _upkg_run_clean_dnf() {
     prefix=$(_upkg_cleanup_privilege_prefix)
     _upkg_print_cleanup_phase 'Unused packages'
     print 'preview: dnf --cacheonly repoquery --unneeded'
-    _upkg_run_cleanup_step 'dnf cache-only unneeded-package preview failed' dnf --cacheonly repoquery --unneeded
+    _upkg_run_cleanup_step 'dnf cache-only unneeded-package preview failed' dnf --cacheonly repoquery --unneeded || return $?
 
     _upkg_print_cleanup_phase 'Package cache'
     print -r -- "would run: ${prefix}dnf clean all"
@@ -999,16 +1074,16 @@ _upkg_run_clean_dnf() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'dnf autoremove failed' dnf autoremove
+    _upkg_run_cleanup_step 'dnf autoremove failed' dnf autoremove || return $?
   else
-    _upkg_run_cleanup_step 'dnf autoremove failed' sudo dnf autoremove
+    _upkg_run_cleanup_step 'dnf autoremove failed' sudo dnf autoremove || return $?
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if _upkg_is_root; then
-    _upkg_run_cleanup_step 'dnf clean all failed' dnf clean all
+    _upkg_run_cleanup_step 'dnf clean all failed' dnf clean all || return $?
   else
-    _upkg_run_cleanup_step 'dnf clean all failed' sudo dnf clean all
+    _upkg_run_cleanup_step 'dnf clean all failed' sudo dnf clean all || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -1017,8 +1092,8 @@ _upkg_run_clean_dnf() {
 _upkg_run_clean_pacman() {
   emulate -L zsh
 
-  local orphan_output rc prefix
-  local succeeded=0 failed=0
+  local orphan_output diagnostic line rc prefix
+  local succeeded=0 failed=0 no_match_diagnostics=1
   local -a failures orphans
 
   _upkg_print_section pacman
@@ -1035,8 +1110,15 @@ _upkg_run_clean_pacman() {
 
   prefix=$(_upkg_cleanup_privilege_prefix)
   _upkg_print_cleanup_phase 'Unused packages'
-  orphan_output=$(command pacman -Qtdq)
+  LC_ALL=C _upkg_capture_query pacman -Qtdq
   rc=$?
+  orphan_output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  for line in ${(f)diagnostic}; do
+    [[ -z $line || $line == warning:* ]] || no_match_diagnostics=0
+  done
+  _upkg_check_interrupt "$rc" || return $?
   if (( rc == 0 )); then
     orphans=( ${(f)orphan_output} )
     if (( ${#orphans[@]} == 0 )); then
@@ -1048,12 +1130,12 @@ _upkg_run_clean_pacman() {
       (( succeeded++ ))
     else
       if _upkg_is_root; then
-        _upkg_run_cleanup_step 'pacman orphan removal failed' pacman -Rs -- "${orphans[@]}"
+        _upkg_run_cleanup_step 'pacman orphan removal failed' pacman -Rs -- "${orphans[@]}" || return $?
       else
-        _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}"
+        _upkg_run_cleanup_step 'pacman orphan removal failed' sudo pacman -Rs -- "${orphans[@]}" || return $?
       fi
     fi
-  elif (( rc == 1 )) && [ -z "$orphan_output" ]; then
+  elif (( rc == 1 && no_match_diagnostics )) && [ -z "$orphan_output" ]; then
     print 'No orphaned packages found.'
     (( succeeded++ ))
   else
@@ -1068,9 +1150,9 @@ _upkg_run_clean_pacman() {
     (( succeeded++ ))
   else
     if _upkg_is_root; then
-      _upkg_run_cleanup_step 'pacman -Sc failed' pacman -Sc
+      _upkg_run_cleanup_step 'pacman -Sc failed' pacman -Sc || return $?
     else
-      _upkg_run_cleanup_step 'pacman -Sc failed' sudo pacman -Sc
+      _upkg_run_cleanup_step 'pacman -Sc failed' sudo pacman -Sc || return $?
     fi
   fi
 
@@ -1103,10 +1185,10 @@ _upkg_run_clean_paru() {
   fi
 
   _upkg_print_cleanup_phase 'Unused packages'
-  _upkg_run_cleanup_step 'paru -c failed' paru -c
+  _upkg_run_cleanup_step 'paru -c failed' paru -c || return $?
 
   _upkg_print_cleanup_phase 'Package cache'
-  _upkg_run_cleanup_step 'paru -Sc failed' paru -Sc
+  _upkg_run_cleanup_step 'paru -Sc failed' paru -Sc || return $?
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
 }
@@ -1121,16 +1203,16 @@ _upkg_run_clean_brew() {
 
   _upkg_print_cleanup_phase 'Unused packages'
   if (( _UPKG_DRY_RUN )); then
-    _upkg_run_cleanup_step 'brew autoremove preview failed' brew autoremove --dry-run
+    _upkg_run_cleanup_step 'brew autoremove preview failed' brew autoremove --dry-run || return $?
   else
-    _upkg_run_cleanup_step 'brew autoremove failed' brew autoremove
+    _upkg_run_cleanup_step 'brew autoremove failed' brew autoremove || return $?
   fi
 
   _upkg_print_cleanup_phase 'Package cache'
   if (( _UPKG_DRY_RUN )); then
-    _upkg_run_cleanup_step 'brew cleanup preview failed' brew cleanup --dry-run
+    _upkg_run_cleanup_step 'brew cleanup preview failed' brew cleanup --dry-run || return $?
   else
-    _upkg_run_cleanup_step 'brew cleanup failed' brew cleanup
+    _upkg_run_cleanup_step 'brew cleanup failed' brew cleanup || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -1156,10 +1238,10 @@ _upkg_run_clean_flatpak() {
   fi
 
   _upkg_print_cleanup_phase 'Unused user refs'
-  _upkg_run_cleanup_step 'flatpak user cleanup failed' flatpak uninstall --unused --user
+  _upkg_run_cleanup_step 'flatpak user cleanup failed' flatpak uninstall --unused --user || return $?
 
   _upkg_print_cleanup_phase 'Unused system refs'
-  _upkg_run_cleanup_step 'flatpak system cleanup failed' flatpak uninstall --unused --system
+  _upkg_run_cleanup_step 'flatpak system cleanup failed' flatpak uninstall --unused --system || return $?
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
 }
@@ -1180,9 +1262,9 @@ _upkg_run_clean_nix() {
 
   _upkg_print_cleanup_phase 'Unreachable store objects'
   if (( _UPKG_DRY_RUN )); then
-    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage --dry-run
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage --dry-run || return $?
   else
-    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage
+    _upkg_run_cleanup_step 'nix-collect-garbage failed' nix-collect-garbage || return $?
   fi
 
   _upkg_finish_cleanup_result "$succeeded" "$failed" "${(j:; :)failures}"
@@ -1272,9 +1354,10 @@ _upkg_run_clean_npm() {
   if (( _UPKG_DRY_RUN )); then
     _upkg_run_npm_npx_cache_command ls
     rc=$?
+    _upkg_check_interrupt "$rc" || return $?
     output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
     unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
-    _upkg_record_cleanup_result "$rc" 'npx cache preview failed'
+    _upkg_record_cleanup_result "$rc" 'npx cache preview failed' || return $?
     if (( rc != 0 )) && _upkg_npm_npx_cache_unsupported "$output"; then
       print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
     fi
@@ -1288,6 +1371,7 @@ _upkg_run_clean_npm() {
 
   _upkg_run_npm_npx_cache_command ls
   rc=$?
+  _upkg_check_interrupt "$rc" || return $?
   output=${_UPKG_NPM_NPX_DIAGNOSTIC:-}
   listing=${_UPKG_NPM_NPX_STDOUT:-}
   unset _UPKG_NPM_NPX_STDOUT _UPKG_NPM_NPX_STDERR _UPKG_NPM_NPX_DIAGNOSTIC
@@ -1299,10 +1383,10 @@ _upkg_run_clean_npm() {
       npx_failure_detail='npx cache cleanup is unsupported'
       print 'This npm release does not support the npx cache subcommand; upgrade npm to enable npx cache cleanup.'
     fi
-    _upkg_record_cleanup_result "$rc" "$npx_failure_detail"
+    _upkg_record_cleanup_result "$rc" "$npx_failure_detail" || return $?
   elif [ -z "$listing" ]; then
     print 'No npx cache entries found.'
-    _upkg_record_cleanup_result 0 ''
+    _upkg_record_cleanup_result 0 '' || return $?
   else
     for line in ${(f)listing}; do
       [ -n "$line" ] || continue
@@ -1323,15 +1407,15 @@ _upkg_run_clean_npm() {
 
     if (( parse_failed || ${#npx_keys[@]} == 0 )); then
       print -u2 -- 'Could not safely parse npm npx cache keys; no npx entries were removed.'
-      _upkg_record_cleanup_result 1 'npx cache listing could not be parsed'
+      _upkg_record_cleanup_result 1 'npx cache listing could not be parsed' || return $?
     else
-      _upkg_run_cleanup_step 'npx cache cleanup failed' npm cache npx rm "${npx_keys[@]}"
+      _upkg_run_cleanup_step 'npx cache cleanup failed' npm cache npx rm "${npx_keys[@]}" || return $?
     fi
   fi
 
   _upkg_print_cleanup_phase 'npm cache'
   verify_failures_before=$failed
-  _upkg_run_cleanup_step 'npm cache verify failed' npm cache verify
+  _upkg_run_cleanup_step 'npm cache verify failed' npm cache verify || return $?
   if (( npx_unsupported && failed == verify_failures_before )); then
     failures[-1]='npx cache cleanup is unsupported; npm cache verified'
   fi

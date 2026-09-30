@@ -11,7 +11,7 @@
     print 'Commands:'
     print '  add [pkg ...]        Add package(s); with no args opens an fzf picker'
     print '  install [pkg ...]    Alias for add'
-    print '  find [query]         Fuzzy-pick nixpkgs attribute names and add selections'
+    print '  find [--] [query ...] Fuzzy-pick nixpkgs attributes and add selections'
     print '  search <query>       Run a plain nixpkgs search with descriptions'
     print '  list                 List packages in the current profile'
     print '  remove [pkg ...]     Remove package(s); with no args opens an fzf picker'
@@ -33,7 +33,29 @@
     print '  - npkg find searches a cached list of nixpkgs attribute names'
     print '  - npkg refresh and outdated need jq'
     print '  - Interactive add/find/remove needs jq and fzf 0.68.0+'
+    print '  - refresh/outdated/check/diff accept no operands; -h/--help shows usage'
+    print '  - find/pick/fzf recognizes -h/--help before --; after -- they are query text'
+    print '  - Native add/remove/list/search/upgrade arguments pass through as documented'
     print '  - Advanced nix flags can be passed through by calling nix directly'
+  }
+
+  _npkg_helper_usage() {
+    emulate -L zsh
+    case $1 in
+      refresh)
+        print 'Usage: npkg refresh [-h|--help]'
+        print 'Rebuild the cached nixpkgs attribute index. No operands are accepted.'
+        ;;
+      outdated|check|diff)
+        print -r -- "Usage: npkg $1 [-h|--help]"
+        print 'Compare installed and evaluated outputs in the current profile. No operands are accepted.'
+        ;;
+      find|pick|fzf)
+        print -r -- "Usage: npkg $1 [-h|--help] [--] [query ...]"
+        print 'Open the install picker with the supplied query words.'
+        print 'Use -- before a literal -h or --help query word.'
+        ;;
+    esac
   }
 
   _npkg_current_system() {
@@ -287,7 +309,7 @@
               .elements
               | to_entries
               | sort_by(.key)
-              | map(select(.value.active // true))
+              | map(select(.value.active != false))
               | .[]
               | {
                   target: .key,
@@ -297,7 +319,7 @@
                 }
             elif (.elements | type) == "array" then
               .elements[]
-              | select(.active // true)
+              | select(.active != false)
               | {
                   target: (.storePaths[0] // .attrPath // ""),
                   name: ((.attrPath // (.storePaths[0] // "")) | split(".")[-1]),
@@ -412,6 +434,36 @@
     _npkg_nix eval --json "${source}#${attr_path}" --apply "$apply_expr"
   }
 
+  # Reap only the caller's recorded workers; a cancelled worker stops its peers.
+  _npkg_wait_workers() {
+    local pid worker_status
+    while (( ${#job_pids} )); do
+      pid=$job_pids[1]
+      while true; do
+        wait "$pid" 2>/dev/null
+        worker_status=$?
+        # A wrapper signal interrupts wait before the worker finishes cleanup.
+        case $worker_status in
+          129|130|143)
+            (( interrupted )) && _zsh_owned_job_is_running "$pid" && continue
+            ;;
+        esac
+        break
+      done
+      job_pids[1]=()
+      unset "job_identities[$pid]"
+      case $worker_status in
+        129|130|143)
+          if (( ! interrupted )); then
+            interrupted=$worker_status
+            _zsh_stop_owned_jobs "${job_pids[@]}"
+          fi
+          ;;
+      esac
+    done
+    job_pids=()
+  }
+
   _npkg_outdated() {
     emulate -L zsh
     setopt pipefail localtraps NO_MONITOR NO_NOTIFY
@@ -423,7 +475,7 @@
       return 1
     fi
 
-    local profile_json profile_error_file profile_error entry_data entry_json name attr_path source locked_uri
+    local profile_json profile_error_file profile_capture_dir profile_error entry_data entry_json name attr_path source locked_uri
     local store_paths_json outputs_json structural_value
     local tmp_dir current_record locked_record installed_paths available_paths
     local installed_version available_version package_state display_state marker role detail error_output
@@ -432,24 +484,41 @@
     integer pkg_count=0 changed=0 unknown=0 idx interrupted=0
     integer max_jobs=8
     local -a names attrs sources locked_uris installed_path_sets output_specs structurally_valid
-    local -a installed_versions available_versions statuses unknown_details job_pids
+    local -a installed_versions available_versions statuses unknown_details job_pids worker_fields
+    local -A job_identities
+    local worker_stat _ZSH_QUERY_ROOT_PID _ZSH_QUERY_ROOT_IDENTITY
+    local -a inherited_cleanup_dirs
+    if (( ${funcstack[(Ie)_upkg_run_outdated_nix]} )); then
+      inherited_cleanup_dirs=( "${_ZSH_QUERY_ROOT_CLEANUP_DIRS[@]-}" )
+    fi
+    local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=( "${inherited_cleanup_dirs[@]}" )
+    zmodload zsh/system || return 1
+    _ZSH_QUERY_ROOT_PID=$sysparams[pid]
+    worker_stat=$(</proc/$_ZSH_QUERY_ROOT_PID/stat)
+    worker_fields=( ${=${worker_stat##*\) }} )
+    _ZSH_QUERY_ROOT_IDENTITY=${worker_fields[20]}
 
-    profile_error_file=$(command mktemp "${TMPDIR:-/tmp}/npkg-profile-error.XXXXXX") || {
+    profile_capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-profile.XXXXXX") || {
       print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
       return 1
     }
-    trap 'command rm -f -- "$profile_error_file"; trap - INT TERM; return 130' INT TERM
-
-    profile_json=$(_npkg_nix profile list --json 2>"$profile_error_file") || {
+    _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$profile_capture_dir" )
+    profile_error_file="$profile_capture_dir/stderr"
+    local profile_status
+    {
+      _zsh_run_owned_query _npkg_nix profile list --json >"$profile_capture_dir/stdout" 2>"$profile_error_file"
+      profile_status=$?
+      profile_json=$(<"$profile_capture_dir/stdout")
       profile_error=$(<"$profile_error_file")
-      command rm -f -- "$profile_error_file"
-      trap - INT TERM
+    } always {
+      command rm -rf -- "$profile_capture_dir"
+    }
+    if (( profile_status != 0 )); then
+      case $profile_status in 129|130|143) return "$profile_status" ;; esac
       print -u2 -r -- 'Failed to read Nix profile.'
       [[ -n $profile_error ]] && print -u2 -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
       return 1
-    }
-    command rm -f -- "$profile_error_file"
-    trap - INT TERM
+    fi
 
     print -r -- "$profile_json" | command jq -e '
       type == "object"
@@ -484,12 +553,11 @@
         manifest_entries
         | .fallbackName as $fallback
         | .value as $value
-        | select(($value.active // true) == true)
+        | select($value.active != false)
         | (($value.attrPath // "") | text) as $attr
         | (($value.originalUrl // $value.originalUri // "") | text) as $original
         | (($value.uri // $value.url // "") | text) as $locked
         | ($value.storePaths // null) as $stores
-        | select((($original + " " + $locked) | ascii_downcase | contains("nixpkgs")))
         | {
             displayName: (
               if (($value.name // "") | text) != "" then (($value.name // "") | text)
@@ -553,7 +621,7 @@
     pkg_count=${#names[@]}
     if (( pkg_count == 0 )); then
       _npkg_set_outdated_state current 0 0 0
-      echo "No nixpkgs packages found in the current profile."
+      echo "No active packages found in the current profile."
       return 0
     fi
 
@@ -568,57 +636,65 @@
       return 1
     }
 
+    _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$tmp_dir" )
     trap 'command rm -rf -- "$tmp_dir"' EXIT
-    trap 'interrupted=1; for pid in "${job_pids[@]}"; do command kill "$pid" 2>/dev/null; done' INT TERM
+    trap 'interrupted=130; _zsh_stop_owned_jobs "${job_pids[@]}"' INT
+    trap 'interrupted=143; _zsh_stop_owned_jobs "${job_pids[@]}"' TERM
+    trap 'interrupted=129; _zsh_stop_owned_jobs "${job_pids[@]}"' HUP
 
     for (( idx = 1; idx <= pkg_count; idx++ )); do
       (( interrupted )) && break
       (( structurally_valid[$idx] )) || continue
 
       (
-        _npkg_eval_installable_record \
+        trap - EXIT INT TERM HUP
+        local evaluation_status
+        _zsh_run_owned_query _npkg_eval_installable_record \
           "${sources[$idx]}" \
           "${attrs[$idx]}" \
           "${output_specs[$idx]}" \
           >"${tmp_dir}/${idx}.current" \
           2>"${tmp_dir}/${idx}.current.error"
+        evaluation_status=$?
+        case $evaluation_status in 129|130|143) exit "$evaluation_status" ;; esac
 
         if [[ -n ${locked_uris[$idx]} ]]; then
-          _npkg_eval_installable_record \
+          _zsh_run_owned_query _npkg_eval_installable_record \
             "${locked_uris[$idx]}" \
             "${attrs[$idx]}" \
             "${output_specs[$idx]}" \
             >"${tmp_dir}/${idx}.locked" \
             2>"${tmp_dir}/${idx}.locked.error"
+          evaluation_status=$?
+          case $evaluation_status in 129|130|143) exit "$evaluation_status" ;; esac
         fi
         :
       ) &
       job_pids+=("$!")
+      if [[ -r /proc/${job_pids[-1]}/stat ]]; then
+        worker_stat=$(</proc/${job_pids[-1]}/stat)
+        worker_fields=( ${=${worker_stat##*\) }} )
+        job_identities[${job_pids[-1]}]=${worker_fields[20]-}
+      fi
 
       if (( interrupted )); then
-        command kill "${job_pids[-1]}" 2>/dev/null
+        _zsh_stop_owned_jobs "${job_pids[-1]}"
         break
       fi
 
       if (( ${#job_pids[@]} >= max_jobs )); then
-        for pid in "${job_pids[@]}"; do
-          wait "$pid" 2>/dev/null
-        done
-        job_pids=()
+        _npkg_wait_workers
         (( interrupted )) && break
       fi
     done
 
-    for pid in "${job_pids[@]}"; do
-      wait "$pid" 2>/dev/null
-    done
-    job_pids=()
+    _npkg_wait_workers
 
     if (( interrupted )); then
-      trap - INT TERM
+      trap - INT TERM HUP
       command rm -rf -- "$tmp_dir"
       trap - EXIT
-      return 130
+      return "$interrupted"
     fi
 
     for (( idx = 1; idx <= pkg_count; idx++ )); do
@@ -631,7 +707,7 @@
       locked_file="${tmp_dir}/${idx}.locked"
 
       if (( ! structurally_valid[$idx] )); then
-        detail='incomplete profile data'
+        detail='incomplete profile data (an evaluable flake source, attribute, and installed outputs are required)'
       fi
 
       if [[ -s $locked_file ]]; then
@@ -684,11 +760,11 @@
       unknown_details+=("$detail")
     done
 
-    trap - INT TERM
+    trap - INT TERM HUP
     if (( interrupted )); then
       command rm -rf -- "$tmp_dir"
       trap - EXIT
-      return 130
+      return "$interrupted"
     fi
 
     command rm -rf -- "$tmp_dir"
@@ -814,12 +890,42 @@
     emulate -L zsh
 
     local cmd=${1:-help}
-    local installable
-    local -a expanded
+    local installable argument
+    local literal_query=0
+    local -a expanded query_args
 
     if (( $# > 0 )); then
       shift
     fi
+
+    # Validate helper-owned arguments before cache/evaluation/picker work.
+    # Native passthrough commands keep their own option handling below.
+    case $cmd in
+      refresh|outdated|check|diff)
+        for argument in "$@"; do
+          case $argument in
+            -h|--help) _npkg_helper_usage "$cmd"; return 0 ;;
+          esac
+        done
+        if (( $# > 0 )); then
+          print -u2 -r -- "npkg $cmd: unsupported arguments; this command accepts no operands"
+          _npkg_helper_usage "$cmd" >&2
+          return 1
+        fi
+        ;;
+      find|pick|fzf)
+        for argument in "$@"; do
+          if (( ! literal_query )); then
+            case $argument in
+              --) literal_query=1; continue ;;
+              -h|--help) _npkg_helper_usage "$cmd"; return 0 ;;
+            esac
+          fi
+          query_args+=("$argument")
+        done
+        set -- "${query_args[@]}"
+        ;;
+    esac
 
     case $cmd in
       install|add|i)
