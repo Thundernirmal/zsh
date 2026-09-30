@@ -678,7 +678,7 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 | `pacman` | `checkupdates --nocolor` when available; otherwise cached `pacman -Qu` | `pacman -Syu` |
 | `paru` | `paru -Qu` (configured scope) | `paru -Syu` |
 | `brew` | `brew outdated` | `brew upgrade` |
-| `flatpak` | `flatpak remote-ls --updates` | `flatpak update` |
+| `flatpak` | `flatpak remote-ls --updates --all` | `flatpak update` |
 | `nix` | `npkg outdated` | `npkg upgrade` |
 | `npm` | `npm outdated -g --depth=0 --json=false --parseable=false --color=false` | `npm update -g` |
 
@@ -689,6 +689,8 @@ APT refresh treats every repository error, including transient fetch errors, as 
 `apt`, `dnf`, and `pacman` upgrade paths require root or explicit `--sudo`. Paru also requires the explicit flag, but runs unprefixed so Paru controls privilege escalation. Homebrew and npm always remain unprefixed; an unwritable npm global prefix blocks the upgrade with a user-space setup hint.
 
 npm inventories explicitly select an uncolored table, overriding inherited JSON and parseable output preferences. Registry, authentication, and global-prefix settings remain native npm configuration. Empty successful output means up to date; unrecognized nonempty output fails the inventory. Native diagnostics remain on stderr. npm status 1 with a recognized table and only `npm warn`/`npm WARN` or `npm notice` diagnostics means updates available; error or unrecognized diagnostics keep that result failed.
+
+Flatpak inventories include hidden update refs through `--all`, including installed locale/debug extensions and supported secondary architectures. The native default user/system installation scope is retained; a remote-change inventory does not resolve the eventual update transaction.
 
 The Nix outdated and plan paths require `jq`; Nix upgrade does not. Nix cleanup depends on `nix-collect-garbage`, not `jq`.
 

@@ -1,16 +1,15 @@
 # Open issue reports
 
-This directory tracks the 2 unresolved findings from the 2026-09-30 full repository audit at commit `12e276a`. It describes defects and the behavior required after repair. Creating these reports does not fix the implementation or promise that no other defects exist.
+This directory tracks the 1 unresolved findings from the 2026-09-30 full repository audit at commit `12e276a`. It describes defects and the behavior required after repair. Creating these reports does not fix the implementation or promise that no other defects exist.
 
-The audit covered startup, aliases, lazy loading, file/system/Git/package commands, Nix, credentials, themes, help, completion, documentation, and CI. The complete regression runner and four real fzf terminal cases passed at the audited baseline. The findings identify behavior not covered by those passing tests. 1 reports have reproduced evidence; ZSH-012 is established by the official Flatpak manual and upstream filtering code. A review subagent independently checked the findings.
+Each report records its evidence, affected commands, reproduction, required behavior, and validation criteria. Completed findings and their audit evidence remain in Git history.
 
 ## Issue index
 
-P1 means a high-priority safety-contract failure: unsafe generated-code activation or unexpected compressed-source removal. The extraction reproductions retained decompressed content; they do not establish loss of the original content. P2 means a correctness or workflow failure needing repair. Priority does not describe whether an exploit has occurred on this machine.
+P1 indicates a high-priority safety-contract failure. P2 indicates a correctness or workflow failure needing repair. Priority does not establish that an exploit occurred.
 
 | ID | Priority | Issue | Affected surface |
 | --- | --- | --- | --- |
-| [ZSH-012](012-flatpak-hidden-update-refs.md) | P2 | Flatpak update inventory hides installed extension and secondary-architecture updates | upkg outdated --only flatpak; Flatpak update inventory |
 | [ZSH-013](013-npkg-subcommand-help-and-arguments.md) | P2 | Nix helper subcommands perform work for help and ignore unsupported arguments | npkg refresh; npkg find/pick/fzf; npkg outdated/check/diff |
 
 ## Report structure
@@ -43,7 +42,7 @@ Before marking a fix ready:
 - Run `zsh scripts/run-tests.zsh`, as required by [AGENTS.md](../../AGENTS.md).
 - Run `python3 scripts/test-fzf-pty.py` when changing picker integration or payload rendering and a supported real fzf is available.
 - Update user-facing documentation, help, completion, and tips at their ownership level when behavior changes.
-- Follow the requested repair loop: fix one issue, commit it, obtain subagent review, address review findings, then proceed to the next issue. Coordinate ZSH-008 and ZSH-009 because they touch the same npm classifier.
+- Follow the requested repair loop: fix one issue, commit it, obtain subagent review, address review findings, then proceed to the next issue.
 
 ## Maintenance
 

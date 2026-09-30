@@ -446,3 +446,43 @@ exit "$AUDIT_SEARCH_RC"'
   done
   print 'ok: Homebrew metadata failures and interrupts retain their status'
 ) || exit 1
+
+(
+  export AUDIT_LOG="$scratch/flatpak-inventory.log"
+  write_fake flatpak '
+printf "%s\n" "$*" >> "$AUDIT_LOG"
+case "$*" in
+  "remote-ls --updates") exit 0 ;;
+  "remote-ls --updates --all")
+    printf "%s\n" "flatpak inventory warning" >&2
+    [ -z "$AUDIT_FLATPAK_REF" ] || printf "%s\n" "$AUDIT_FLATPAK_REF"
+    exit "$AUDIT_RC" ;;
+  *) exit 99 ;;
+esac'
+  PATH="$scratch:$original_path"
+  for AUDIT_FLATPAK_REF in '' 'org.example.App.Locale/x86_64/stable' 'org.example.App.Debug/x86_64/stable' 'org.example.Platform/i386/stable'; do
+    export AUDIT_FLATPAK_REF
+    for AUDIT_RC in 0 1 130; do
+      export AUDIT_RC
+      : > "$AUDIT_LOG"
+      _upkg_run_outdated_flatpak >"$scratch/flatpak-out" 2>"$scratch/flatpak-err"
+      result=$?
+      case $AUDIT_RC in
+        0)
+          assert test "$result" -eq 0
+          if [[ -z $AUDIT_FLATPAK_REF ]]; then
+            assert test "$_UPKG_LAST_STATE" = 'up to date'
+          else
+            assert test "$_UPKG_LAST_STATE" = 'updates available'
+            output=$(<"$scratch/flatpak-out")
+            assert test "${output#*$AUDIT_FLATPAK_REF}" != "$output"
+          fi ;;
+        1) assert test "$result" -eq 1; assert test "$_UPKG_LAST_STATE" = failed ;;
+        130) assert test "$result" -eq 130; assert test "$_UPKG_LAST_STATE" = cancelled ;;
+      esac
+      assert test "$(<"$AUDIT_LOG")" = 'remote-ls --updates --all'
+      assert test "$(<"$scratch/flatpak-err")" = 'flatpak inventory warning'
+    done
+  done
+) || exit 1
+print 'ok: Flatpak inventories include extension and secondary-architecture refs without changing scope'

@@ -473,7 +473,7 @@ esac
 
   write_fake flatpak '
 case "$*" in
-  "remote-ls --updates") printf "%s\n" "org.example.App stable" ;;
+  "remote-ls --updates --all") printf "%s\n" "org.example.App stable" ;;
   "search --columns=application,version,name,description -- ripgrep") printf "org.example.Ripgrep\t14.1.1\tRipgrep Viewer\tRemote ripgrep browser\n" ;;
   "update") printf "%s\n" "flatpak upgrade" ;;
   *) exit 2 ;;

@@ -8,7 +8,7 @@
 # Finder reminders include restarting after a blocked integration is repaired.
 # Navigation reminders include startup diagnostics after cache settings change.
 # Cleanup reminders require checking the summary for failed phases.
-# Package search and npm inventory reminders cover visible diagnostics.
+# Package inventory reminders cover visible diagnostics and hidden Flatpak refs.
 # Git picker reminders keep display labels separate from canonical identities.
 # Package queries may use the network and write caches without changing packages.
 

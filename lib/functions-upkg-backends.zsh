@@ -671,7 +671,7 @@ _upkg_run_outdated_flatpak() {
 
   _upkg_print_section flatpak
 
-  _upkg_capture_query flatpak remote-ls --updates
+  _upkg_capture_query flatpak remote-ls --updates --all
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
