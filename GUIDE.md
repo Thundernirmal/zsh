@@ -694,7 +694,7 @@ npm inventories explicitly select an uncolored table, overriding inherited JSON 
 
 Flatpak inventories include hidden update refs through `--all`, including installed locale/debug extensions and supported secondary architectures. The native default user/system installation scope is retained; a remote-change inventory does not resolve the eventual update transaction.
 
-The Nix outdated and plan paths require `jq`; Nix upgrade does not. Nix cleanup depends on `nix-collect-garbage`, not `jq`.
+The Nix bridge retains partial-check state and keeps evaluation diagnostics on stderr. The Nix outdated and plan paths require `jq`; Nix upgrade does not. Nix cleanup depends on `nix-collect-garbage`, not `jq`.
 
 `upkg` never auto-confirms native prompts. It does not inject `-y`, `--assumeyes`, `--noconfirm`, or `sudo` without the explicit authorization flag.
 

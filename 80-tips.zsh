@@ -11,6 +11,7 @@
 # Cleanup reminders require checking the summary for failed phases.
 # Package inventory reminders cover visible diagnostics and hidden Flatpak refs.
 # Git picker reminders keep display labels separate from canonical identities.
+# Nix inventory reminders preserve visible evaluation diagnostics.
 # Nix helper reminders cover help before work and literal picker queries.
 # Nix search uses native quiet logging while retaining diagnostics.
 # npm search reminders apply across native parseable column layouts.

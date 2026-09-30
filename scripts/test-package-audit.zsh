@@ -524,3 +524,29 @@ exit "$AUDIT_NIX_RC"'
   assert test "$(<"$scratch/nix-search-err")" = 'error: evaluation failed'
 ) || exit 1
 print 'ok: Nix search requests quiet evaluation while retaining warnings and errors'
+
+(
+  write_fake jq 'exit 0'
+  PATH="$scratch:$original_path"
+  npkg() {
+    typeset -g _NPKG_OUTDATED_STATE=$AUDIT_NPKG_STATE
+    typeset -g _NPKG_OUTDATED_CHANGED=1 _NPKG_OUTDATED_UNKNOWN=1
+    print -r -- 'package row'
+    print -u2 -r -- 'evaluation diagnostic'
+    return "$AUDIT_NPKG_RC"
+  }
+  for AUDIT_NPKG_STATE in current changed partial; do
+    AUDIT_NPKG_RC=0
+    [[ $AUDIT_NPKG_STATE == partial ]] && AUDIT_NPKG_RC=1
+    _upkg_run_outdated_nix >"$scratch/bridge-out" 2>"$scratch/bridge-err"
+    assert test "$?" -eq "$AUDIT_NPKG_RC"
+    assert test "$(<"$scratch/bridge-err")" = 'evaluation diagnostic'
+    [[ $(<"$scratch/bridge-out") == *'package row'* && $(<"$scratch/bridge-out") != *'evaluation diagnostic'* ]] || exit 1
+    case $AUDIT_NPKG_STATE in
+      current) assert test "$_UPKG_LAST_STATE" = 'up to date' ;;
+      changed) assert test "$_UPKG_LAST_STATE" = 'updates available' ;;
+      partial) assert test "$_UPKG_LAST_STATE" = failed ;;
+    esac
+  done
+) || exit 1
+print 'ok: Nix bridge preserves result globals and separates diagnostic streams'

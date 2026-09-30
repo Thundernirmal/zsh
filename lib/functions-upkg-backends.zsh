@@ -708,7 +708,7 @@ _upkg_run_outdated_flatpak() {
 _upkg_run_outdated_nix() {
   emulate -L zsh
 
-  local output output_file rc state changed unknown
+  local output diagnostic capture_dir rc state changed unknown
 
   _upkg_print_section nix
 
@@ -718,15 +718,20 @@ _upkg_run_outdated_nix() {
     return 0
   fi
 
-  output_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-nix-outdated.XXXXXX") || {
-    _upkg_set_last_result 'failed' 'could not create a temp file for npkg outdated'
+  capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-nix-outdated.XXXXXX") || {
+    _upkg_set_last_result 'failed' 'could not create temporary storage for npkg outdated'
     return 1
   }
-
-  npkg outdated >"$output_file" 2>&1
-  rc=$?
-  output=$(<"$output_file")
-  command rm -f -- "$output_file"
+  # Invoke in this process: result globals survive, streams stay independent.
+  {
+    npkg outdated >"$capture_dir/stdout" 2>"$capture_dir/stderr"
+    rc=$?
+    output=$(<"$capture_dir/stdout")
+    diagnostic=$(<"$capture_dir/stderr")
+  } always {
+    command rm -rf -- "$capture_dir"
+  }
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
   [ -n "$output" ] && print -r -- "$output"
