@@ -712,7 +712,7 @@ _upkg_run_outdated_npm() {
     return 1
   }
 
-  command npm outdated -g --depth=0 >"$stdout_file" 2>"$stderr_file"
+  command npm outdated -g --depth=0 --json=false --parseable=false --color=false >"$stdout_file" 2>"$stderr_file"
   rc=$?
 
   stdout_output=$(<"$stdout_file")
@@ -722,12 +722,17 @@ _upkg_run_outdated_npm() {
 
   case $rc in
     0)
-      if [ -n "$stdout_output" ]; then
+      if [ -z "$stdout_output" ]; then
+        print 'No updates available.'
+        _upkg_set_last_result 'up to date' ''
+      elif _upkg_npm_outdated_looks_valid "$stdout_output"; then
         print -r -- "$stdout_output"
         _upkg_set_last_result 'updates available' ''
       else
-        print 'No updates available.'
-        _upkg_set_last_result 'up to date' ''
+        print -r -- "$stdout_output"
+        [ -n "$stderr_output" ] && print -u2 -- "$stderr_output"
+        _upkg_set_last_result 'failed' 'npm outdated returned unrecognized output'
+        return 1
       fi
       ;;
     1)

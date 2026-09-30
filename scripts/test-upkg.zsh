@@ -483,7 +483,7 @@ esac
 write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
-  "outdated -g --depth=0") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+  "outdated -g --depth=0 --json=false --parseable=false --color=false") printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
   "search --parseable -- help") printf "helpful-lib\tLibrary named after help\tnpm-user\t2024-01-01\t2.0.0\thelper\n" ;;
   "search --parseable -- managers") printf "managers-kit\tLibrary named after managers\tnpm-user\t2024-01-01\t4.5.6\tmanager\n" ;;
   "search --parseable -- ripgrep") printf "ripgrep-js\tJavaScript wrapper around ripgrep\tnpm-user\t2024-01-01\t3.4.5\tripgrep\n" ;;
@@ -999,7 +999,7 @@ esac
   write_fake npm '
 case "$*" in
   "config get prefix") printf "%s\n" "$UPKG_TEST_NPM_PREFIX" ;;
-  "outdated -g --depth=0") printf "%s\n" "npm notice using cached metadata"; printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+  "outdated -g --depth=0 --json=false --parseable=false --color=false") printf "%s\n" "npm notice using cached metadata"; printf "%s\n" "Package Current Wanted Latest Location"; printf "%s\n" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
   "update -g") printf "%s\n" "npm upgrade" ;;
   *) exit 2 ;;
 esac
@@ -1009,6 +1009,36 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 0 'npm outdated accepts header after a notice line' || return 1
   assert_contains "$output" 'eslint 8.0.0 8.1.0 9.0.0 global' 'npm outdated still prints package rows after a notice line' || return 1
+
+  # Formatting preferences must not change the inventory contract. Exact argv
+  # matching also leaves registry/prefix preferences untouched.
+  write_fake npm '
+case "$*" in
+  "outdated -g --depth=0 --json=false --parseable=false --color=false")
+    case "$UPKG_TEST_NPM_FORMAT_RESULT" in
+      empty) exit 0 ;;
+      updates) printf "%s\n" "Package Current Wanted Latest Location" "eslint 8.0.0 8.1.0 9.0.0 global"; exit 1 ;;
+      malformed) printf "%s\n" "{}"; exit 0 ;;
+      error) printf "%s\n" "npm error registry unavailable" >&2; exit 2 ;;
+    esac ;;
+  *) exit 3 ;;
+esac
+'
+  local preference result expected_state expected_status
+  for preference in json parseable color; do
+    for result in empty updates malformed error; do
+      case $result in
+        empty) expected_state='up to date'; expected_status=0 ;;
+        updates) expected_state='updates available'; expected_status=0 ;;
+        *) expected_state=failed; expected_status=1 ;;
+      esac
+      output=$(export "npm_config_${preference}=true" UPKG_TEST_NPM_FORMAT_RESULT=$result
+        upkg outdated --only=npm 2>&1)
+      cmd_status=$?
+      assert_status "$cmd_status" "$expected_status" "npm $result ignores inherited $preference format" || return 1
+      assert_contains "$output" "npm: $expected_state" "npm $result has stable state under $preference" || return 1
+    done
+  done
 
   output=$(upkg --dry-run --only=flatpak)
   assert_contains "$output" 'org.example.App stable' 'bare dry-run previews selected managers' || return 1

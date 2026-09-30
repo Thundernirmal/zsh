@@ -55,7 +55,7 @@ Always preserve native diagnostics on stderr. Classify a recognized valid update
 - Do not ignore all status-1 stderr; that would hide real failure.
 - Do not turn warning text into package rows.
 - Preserve interrupts and temporary-file cleanup.
-- Coordinate output-format handling with [ZSH-008](008-npm-outdated-output-format.md).
+- Preserve the explicit uncolored table format selected by the inventory command.
 
 ## Acceptance criteria
 
