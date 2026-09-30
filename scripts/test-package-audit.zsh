@@ -285,12 +285,23 @@ print 'ok: every installed distro backend remains explicitly selectable'
   _zsh_functions_load_domain files || exit 1
   fallback_dir="$scratch/fallbacks"
   command mkdir "$fallback_dir"
-  command ln -s "$(command -v find)" "$fallback_dir/find"
+  export AUDIT_FIND_LOG="$scratch/find-fallback.log"
+  print -r -- '#!/bin/sh
+printf "%s\n" "$*" >> "$AUDIT_FIND_LOG"
+printf "%s\n" "fixture find failure" >&2
+exit 7' > "$fallback_dir/find"
+  command chmod +x "$fallback_dir/find"
   command ln -s "$(command -v grep)" "$fallback_dir/grep"
   PATH=$fallback_dir
   ff needle "$scratch/nonexistent" > "$scratch/search.stdout" 2> "$scratch/search.stderr"
   assert test "$?" -eq 1
   assert test -s "$scratch/search.stderr"
+  assert test ! -s "$scratch/search.stdout"
+  assert test ! -e "$AUDIT_FIND_LOG"
+  ff needle "$fallback_dir" > "$scratch/search.stdout" 2> "$scratch/search.stderr"
+  assert test "$?" -eq 7
+  assert test -s "$AUDIT_FIND_LOG"
+  assert test "$(<"$scratch/search.stderr")" = 'fixture find failure'
   assert test ! -s "$scratch/search.stdout"
   ft needle "$scratch/nonexistent" > "$scratch/search.stdout" 2> "$scratch/search.stderr"
   assert test "$?" -eq 2
@@ -299,7 +310,7 @@ print 'ok: every installed distro backend remains explicitly selectable'
   assert test "$?" -eq 2
   assert test -s "$scratch/search.stderr"
 ) || exit 1
-print 'ok: find and grep fallbacks preserve missing-path and invalid-pattern errors'
+print 'ok: find fallback is invoked and preserves native status/diagnostics; grep errors remain visible'
 
 (
   export AUDIT_LOG="$scratch/paru-scope.log"

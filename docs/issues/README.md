@@ -10,7 +10,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 | [ZSH-025](025-issue-tracker-restates-maintenance-rules.md) | P2 | The issue tracker's standing pages restate maintenance rules owned elsewhere |
 | [ZSH-030](030-checkupdates-resyncs-repositories-per-run.md) | P2 | Every pacman inventory re-syncs all repository databases |
 | [ZSH-031](031-cancellation-inferred-from-child-status.md) | P2 | Cancellation is inferred from child exit statuses at every call site |
-| [ZSH-035](035-ff-fallback-test-skips-find.md) | P2 | The ff fallback test never reaches the find fallback |
 
 ## Report structure and verification
 
