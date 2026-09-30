@@ -18,6 +18,7 @@
 # npm search reminders apply across native parseable column layouts.
 # DNF search reminders cover native no-match classification.
 # Fresh Arch inventory setup includes checkupdates and its fakeroot prerequisite.
+# Search progress is cleared before cancellation summaries and diagnostics.
 # Package queries may use the network and write caches without changing packages.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}

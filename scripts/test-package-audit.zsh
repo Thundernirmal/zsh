@@ -745,3 +745,44 @@ esac'
   [[ $_UPKG_LAST_DETAIL == *'0 completed, 0 failed; npx cache cancelled'* ]] || exit 1
 ) || exit 1
 print 'ok: cleanup cancellation retains counters, phase, prior errors, and native output'
+
+(
+  local manager phase capture_count cancel_at progress_status
+  _upkg_search_progress() { print -r -- progress; }
+  _upkg_search_progress_clear() { print -r -- cleared; }
+  _upkg_capture_query() {
+    (( capture_count++ ))
+    _UPKG_QUERY_STDOUT=''
+    _UPKG_QUERY_STDERR=''
+    if (( capture_count == cancel_at )); then
+      _UPKG_QUERY_STDERR='native diagnostic'
+      return 130
+    fi
+    case "$*" in
+      'brew search --formula -- sample') _UPKG_QUERY_STDOUT=sample ;;
+      'brew search --cask -- sample') _UPKG_QUERY_STDOUT=sample-cask ;;
+      'brew info --formula sample') _UPKG_QUERY_STDOUT='sample: stable 1.0.0' ;;
+    esac
+    return 0
+  }
+  for manager in apt dnf pacman paru flatpak nix npm brew; do
+    for phase in 1 2 3 4; do
+      [[ $manager == brew || $phase == 1 ]] || continue
+      capture_count=0; cancel_at=$phase
+      "_upkg_run_search_$manager" sample > "$scratch/progress-cancel" 2>&1
+      progress_status=$?
+      assert test "$progress_status" -eq 130
+      assert test "$capture_count" -eq "$phase"
+      output=$(<"$scratch/progress-cancel")
+      # Every started phase is cleared, including the cancelled final phase.
+      local -a starts clears
+      starts=( ${(M)${(f)output}:#progress} )
+      clears=( ${(M)${(f)output}:#cleared} )
+      assert test "${#starts}" -eq "$phase"
+      assert test "${#clears}" -eq "$phase"
+      [[ $output != *'native diagnostic'* || $output == *$'cleared\nnative diagnostic'* ]] || exit 1
+      assert test "$_UPKG_LAST_STATE" = cancelled
+    done
+  done
+) || exit 1
+print 'ok: cancelled search phases clear progress before diagnostics and return'

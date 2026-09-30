@@ -10,11 +10,11 @@ _upkg_run_search_apt() {
   _upkg_search_progress apt ''
   LC_ALL=C _upkg_capture_query apt search --names-only -- "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
   output=$(print -r -- "$output" | sed '/^WARNING: apt does not have a stable CLI interface\./d;/^Sorting\.\.\.$/d;/^Full Text Search\.\.\.$/d')
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
@@ -66,9 +66,9 @@ _upkg_run_search_dnf() {
   # Quiet DNF5 suppresses its no-match diagnostic, making status 1 ambiguous.
   LC_ALL=C _upkg_capture_query dnf --color=never list --available "${query_patterns[@]}"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
-  _upkg_search_progress_clear
   _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
@@ -110,11 +110,11 @@ _upkg_run_search_pacman() {
   _upkg_search_progress pacman ''
   LC_ALL=C _upkg_capture_query pacman --color never -Ss -- "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
 
   if (( rc != 0 )); then
     if (( rc == 1 )) && [[ -z $output && -z $diagnostic ]]; then
@@ -159,11 +159,11 @@ _upkg_run_search_paru() {
   _upkg_search_progress paru ''
   LC_ALL=C _upkg_capture_query paru --color never -Ss -- "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
 
   if (( rc != 0 )); then
     if (( rc == 1 )) && [[ -z $output && -z $diagnostic ]]; then
@@ -210,12 +210,12 @@ _upkg_run_search_brew() {
   _upkg_search_progress brew 'formulae'
   LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew search --formula -- "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
   if (( rc != 0 )); then
     if (( rc != 1 )) || [[ $combined != *'No formulae found'* && $combined != *'No formulae or casks found'* ]]; then
       [ -n "$output" ] && print -r -- "$output"
@@ -236,12 +236,12 @@ _upkg_run_search_brew() {
   _upkg_search_progress brew 'casks'
   LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew search --cask -- "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
   if (( rc != 0 )); then
     if (( rc != 1 )) || [[ $combined != *'No casks found'* && $combined != *'No formulae or casks found'* ]]; then
       [ -n "$output" ] && print -r -- "$output"
@@ -289,11 +289,11 @@ _upkg_run_search_brew() {
     _upkg_search_progress brew 'formula info'
     LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew info --formula "${formulae_for_info[@]}"
     rc=$?
+    _upkg_search_progress_clear
     output=$_UPKG_QUERY_STDOUT
     diagnostic=$_UPKG_QUERY_STDERR
     [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_check_interrupt "$rc" || return $?
-    _upkg_search_progress_clear
     if (( rc != 0 )); then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew info failed'
@@ -317,11 +317,11 @@ _upkg_run_search_brew() {
     _upkg_search_progress brew 'cask info'
     LC_ALL=C HOMEBREW_NO_AUTO_UPDATE=1 _upkg_capture_query brew info --cask "${casks_for_info[@]}"
     rc=$?
+    _upkg_search_progress_clear
     output=$_UPKG_QUERY_STDOUT
     diagnostic=$_UPKG_QUERY_STDERR
     [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_check_interrupt "$rc" || return $?
-    _upkg_search_progress_clear
     if (( rc != 0 )); then
       [ -n "$output" ] && print -r -- "$output"
       _upkg_set_last_result 'failed' 'brew info failed'
@@ -353,12 +353,12 @@ _upkg_run_search_flatpak() {
   _upkg_search_progress flatpak ''
   LC_ALL=C _upkg_capture_query flatpak search --columns=application,version,name,description -- "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
 
   if (( rc != 0 )); then
     if (( rc == 1 )) && [[ $combined == *'No matches found'* ]]; then
@@ -405,12 +405,12 @@ _upkg_run_search_nix() {
   _upkg_search_progress nix ''
   LC_ALL=C _upkg_capture_query nix --extra-experimental-features "nix-command flakes" --quiet search nixpkgs "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   combined="${output}"$'\n'"${diagnostic}"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
 
   if (( rc != 0 )); then
     output_lower=${(L)combined}
@@ -459,11 +459,11 @@ _upkg_run_search_npm() {
   _upkg_search_progress npm ''
   LC_ALL=C _upkg_capture_query npm search --parseable --json=false --color=false -- "$@"
   rc=$?
+  _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
-  _upkg_search_progress_clear
 
   if (( rc != 0 )); then
     [ -n "$output" ] && print -r -- "$output"
