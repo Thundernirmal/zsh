@@ -455,7 +455,12 @@ _upkg_check_interrupt() {
   case $1 in
     129|130|143)
       _UPKG_INTERRUPTED_STATUS=$1
-      _upkg_set_last_result 'cancelled' "interrupted (status $1)"
+      local cancellation_detail="interrupted (status $1)"
+      if [[ ${_UPKG_OPERATION:-} == clean ]] && (( ${+succeeded} && ${+failed} )); then
+        cancellation_detail="$succeeded completed, $failed failed; ${_UPKG_CLEANUP_PHASE:-cleanup phase} cancelled (status $1)"
+        (( ${#failures} == 0 )) || cancellation_detail+="; ${(j:; :)failures}"
+      fi
+      _upkg_set_last_result 'cancelled' "$cancellation_detail"
       return "$1"
       ;;
   esac
@@ -479,6 +484,7 @@ _upkg_finish_upgrade_result() {
 }
 
 _upkg_print_cleanup_phase() {
+  typeset -g _UPKG_CLEANUP_PHASE=$1
   print ''
   print "$1:"
 }

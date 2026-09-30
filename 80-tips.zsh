@@ -9,7 +9,7 @@
 # Finder activation tolerates stale widget names while preserving bindings.
 # Finder reminders include restarting after a blocked integration is repaired.
 # Navigation reminders include startup diagnostics after cache settings change.
-# Cleanup reminders distinguish failed phases from cancelled work.
+# Cleanup cancellation retains earlier phase counts and identifies the interrupted phase.
 # Package inventory reminders cover visible diagnostics and hidden Flatpak refs.
 # Git picker reminders keep display labels separate from validated canonical identities.
 # Nix inventory reminders preserve visible evaluation diagnostics.

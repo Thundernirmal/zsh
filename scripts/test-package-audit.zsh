@@ -696,3 +696,52 @@ NIX_FIXTURE
   done
 ) || exit 1
 print 'ok: wrapper INT/TERM/HUP stop owned query/profile/evaluation descendants only'
+
+(
+  _UPKG_OPERATION=clean
+  _UPKG_DRY_RUN=0
+  typeset -ga _UPKG_SUMMARY_ORDER
+  typeset -gA _UPKG_SUMMARY_STATE _UPKG_SUMMARY_DETAIL
+  source "$repo_dir/55-ui-helpers.zsh"
+  write_fake brew '
+case "$1" in
+ autoremove) printf "%s\n" "first phase output"; exit "$AUDIT_FIRST_RC" ;;
+ cleanup) exit "$AUDIT_RC" ;;
+esac'
+  PATH="$scratch:$original_path"
+  for code in 129 130 143; do
+    export AUDIT_RC=$code
+    for first_code in 0 1 "$code"; do
+      export AUDIT_FIRST_RC=$first_code
+      _upkg_run_clean_brew > "$scratch/cleanup-cancel" 2>/dev/null
+      assert test "$?" -eq "$code"
+      assert test "$_UPKG_LAST_STATE" = cancelled
+      case $first_code in
+        0) [[ $_UPKG_LAST_DETAIL == *'1 completed, 0 failed; Package cache cancelled'* ]] || exit 1 ;;
+        1) [[ $_UPKG_LAST_DETAIL == *'0 completed, 1 failed; Package cache cancelled'* && $_UPKG_LAST_DETAIL == *'brew autoremove failed'* ]] || exit 1 ;;
+        *) [[ $_UPKG_LAST_DETAIL == *'0 completed, 0 failed; Unused packages cancelled'* ]] || exit 1 ;;
+      esac
+      [[ $(<"$scratch/cleanup-cancel") == *'first phase output'* ]] || exit 1
+      _UPKG_SUMMARY_ORDER=(brew)
+      _UPKG_SUMMARY_STATE=(brew "$_UPKG_LAST_STATE")
+      _UPKG_SUMMARY_DETAIL=(brew "$_UPKG_LAST_DETAIL")
+      _UPKG_THEME_MODE=1
+      _ui_plain_mode() { return 1; }
+      output=$(_upkg_print_summary)
+      [[ $output == *"$_UPKG_LAST_DETAIL"* && $output == *'1 cancelled'* ]] || exit 1
+      _ui_plain_mode() { return 0; }
+      output=$(_upkg_print_summary)
+      [[ $output == *"$_UPKG_LAST_DETAIL"* ]] || exit 1
+    done
+  done
+  _upkg_is_root() { return 0; }
+  _upkg_capture_query() { _UPKG_QUERY_STDOUT=''; _UPKG_QUERY_STDERR=''; return 130; }
+  _upkg_run_clean_pacman >/dev/null 2>&1
+  assert test "$?" -eq 130
+  [[ $_UPKG_LAST_DETAIL == *'0 completed, 0 failed; Unused packages cancelled'* ]] || exit 1
+  _upkg_run_npm_npx_cache_command() { return 130; }
+  _upkg_run_clean_npm >/dev/null 2>&1
+  assert test "$?" -eq 130
+  [[ $_UPKG_LAST_DETAIL == *'0 completed, 0 failed; npx cache cancelled'* ]] || exit 1
+) || exit 1
+print 'ok: cleanup cancellation retains counters, phase, prior errors, and native output'
