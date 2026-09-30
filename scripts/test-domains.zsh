@@ -46,7 +46,7 @@ PATH="$tmp_dir/bin" "$zsh_bin" -fc '
 print -r -- '#!/bin/sh
 printf "%s\n" "$*" > "$NIX_SEARCH_LOG"
 case "$*" in
-  "--extra-experimental-features nix-command flakes search nixpkgs ripgrep")
+  "--extra-experimental-features nix-command flakes --quiet search nixpkgs ripgrep")
     printf "* legacyPackages.x86_64-linux.ripgrep (14.1.0)\n  Search text\n"
     exit 0 ;;
   *) exit 88 ;;

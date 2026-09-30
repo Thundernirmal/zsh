@@ -403,7 +403,7 @@ _upkg_run_search_nix() {
     return 1
   }
   _upkg_search_progress nix ''
-  LC_ALL=C _upkg_capture_query nix --extra-experimental-features "nix-command flakes" search nixpkgs "$@"
+  LC_ALL=C _upkg_capture_query nix --extra-experimental-features "nix-command flakes" --quiet search nixpkgs "$@"
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR

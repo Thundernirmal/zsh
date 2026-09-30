@@ -12,6 +12,7 @@
 # Package inventory reminders cover visible diagnostics and hidden Flatpak refs.
 # Git picker reminders keep display labels separate from canonical identities.
 # Nix helper reminders cover help before work and literal picker queries.
+# Nix search uses native quiet logging while retaining diagnostics.
 # npm search reminders apply across native parseable column layouts.
 # DNF search reminders cover native no-match classification.
 # Package queries may use the network and write caches without changing packages.

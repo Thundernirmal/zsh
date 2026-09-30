@@ -502,3 +502,25 @@ print 'ok: Flatpak inventories include extension and secondary-architecture refs
   assert test "${_UPKG_SEARCH_ROWS[5]}" = $'npm\told-empty\t5.0.0-beta.1+build.2\t'
 ) || exit 1
 print 'ok: npm search supports omitted descriptions, authors, and empty keywords'
+
+(
+  write_fake nix '
+case "$*" in
+  *" --quiet search nixpkgs "*) ;;
+  *) printf "evaluating attribute %s\n" one two three >&2; exit 99 ;;
+esac
+printf "%s\n" "$AUDIT_NIX_DIAGNOSTIC" >&2
+[ "$AUDIT_NIX_RC" = 0 ] && printf "%s\n" "* legacyPackages.test.sample (1.2.0)"
+exit "$AUDIT_NIX_RC"'
+  PATH="$scratch:$original_path"
+  export AUDIT_NIX_RC=0 AUDIT_NIX_DIAGNOSTIC='warning: native warning'
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_nix sample >"$scratch/nix-search-out" 2>"$scratch/nix-search-err" || exit 1
+  assert test "${#_UPKG_SEARCH_ROWS}" -eq 1
+  assert test "$(<"$scratch/nix-search-err")" = 'warning: native warning'
+  export AUDIT_NIX_RC=1 AUDIT_NIX_DIAGNOSTIC='error: evaluation failed'
+  _upkg_run_search_nix sample >"$scratch/nix-search-out" 2>"$scratch/nix-search-err"
+  assert test "$?" -eq 1
+  assert test "$(<"$scratch/nix-search-err")" = 'error: evaluation failed'
+) || exit 1
+print 'ok: Nix search requests quiet evaluation while retaining warnings and errors'

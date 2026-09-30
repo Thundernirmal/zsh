@@ -520,6 +520,7 @@ write_fake nix '
 while [ "$1" = "--extra-experimental-features" ]; do
   shift 2
 done
+[ "${1-}" != --quiet ] || shift
 
   if [ "$*" = "profile list --json" ]; then
     if [ "$(sed -n "1p" "$NPKG_TEST_PROFILE_FILE")" = "__FAIL__" ]; then
