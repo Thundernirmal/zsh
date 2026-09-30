@@ -4,9 +4,7 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 ## Issue index
 
-| ID | Priority | Report |
-| --- | --- | --- |
-| ZSH-038 | P2 (blocking) | [The worker-wait fixture can hang the entire regression runner](038-worker-wait-fixture-pid-collision-hangs-runner.md) |
+There are currently no open issue reports.
 
 ## Report structure and verification
 

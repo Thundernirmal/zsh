@@ -619,6 +619,7 @@ print 'ok: rich cancellation has its own aggregate bucket and preserves cleanup 
   local signalled=''
   wait() { [[ $1 == 9002 ]] && return 130; return 0; }
   _zsh_stop_owned_jobs() { signalled="${(j: :)@}"; }
+  _zsh_owned_job_is_running() { return 1; }
   _npkg_wait_workers
   assert test "$signalled" = 9003
   assert test "${#job_pids}" -eq 0
@@ -626,6 +627,68 @@ print 'ok: rich cancellation has its own aggregate bucket and preserves cleanup 
   assert test "$interrupted" -eq 130
 ) || exit 1
 print 'ok: completed workers leave the cancellation ownership set immediately'
+
+# A live sibling is not a waitable worker, even if its recorded identity matches.
+(
+  _zsh_functions_load_domain nix || exit 1
+  zmodload zsh/system || exit 1
+  zmodload zsh/zselect || exit 1
+  local unrelated_pid='' harness_pid='' proc_text result_file="$scratch/foreign-worker-result"
+  local -a fields
+  local -A job_identities
+  integer ticks=0
+  _audit_foreign_worker_cleanup() {
+    if [[ -n $harness_pid ]]; then
+      builtin kill -TERM "$harness_pid" 2>/dev/null
+      builtin wait "$harness_pid" 2>/dev/null
+      harness_pid=''
+    fi
+    if [[ -n $unrelated_pid ]]; then
+      builtin kill -TERM "$unrelated_pid" 2>/dev/null
+      builtin wait "$unrelated_pid" 2>/dev/null
+      unrelated_pid=''
+    fi
+    return 0
+  }
+  trap _audit_foreign_worker_cleanup EXIT
+  {
+    command sleep 30 &
+    unrelated_pid=$!
+    proc_text=$(</proc/$unrelated_pid/stat)
+    fields=( ${=${proc_text##*\) }} )
+    job_identities[$unrelated_pid]=${fields[20]}
+    _zsh_owned_job_is_running "$unrelated_pid" || exit 1
+    job_identities[$unrelated_pid]=wrong-start
+    _zsh_owned_job_is_running "$unrelated_pid" && exit 1
+    job_identities[$unrelated_pid]=${fields[20]}
+    (
+      trap - EXIT
+      local -a job_pids=( "$unrelated_pid" )
+      integer interrupted=130 wait_calls=0 native_wait_status=0
+      _zsh_owned_job_is_running "$unrelated_pid" && exit 1
+      wait() {
+        (( wait_calls++ ))
+        builtin wait "$@"
+        native_wait_status=$?
+        return "$native_wait_status"
+      }
+      _npkg_wait_workers
+      # A recorded sibling must also be excluded from termination requests.
+      _zsh_stop_owned_jobs "$unrelated_pid"
+      print -r -- "$wait_calls $native_wait_status $interrupted ${#job_pids} ${#job_identities}" > "$result_file"
+    ) &
+    harness_pid=$!
+    while [[ ! -s $result_file ]] && (( ticks++ < 100 )); do zselect -t 1; done
+    [[ -s $result_file ]] || { print -u2 'not ok: non-child wait failed to terminate promptly'; exit 1; }
+    builtin wait "$harness_pid" || exit 1
+    harness_pid=''
+    assert test "$(<"$result_file")" = '1 127 130 0 0'
+    builtin kill -0 "$unrelated_pid" 2>/dev/null || exit 1
+  } always {
+    _audit_foreign_worker_cleanup
+  }
+) || exit 1
+print 'ok: non-child wait returns promptly and leaves the unrelated process alive'
 
 # Signals target only the wrapper PID; no terminal/group signal reaches children.
 (

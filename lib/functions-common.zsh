@@ -310,18 +310,25 @@ if ! (( $+functions[_ui_visible_count] )); then
   }
 fi
 
+# Liveness means this shell's recorded worker, not merely an occupied PID.
+_zsh_owned_job_is_running() {
+  emulate -L zsh
+  zmodload zsh/system || return 1
+  local pid=$1 stat_text expected
+  local -a fields
+  [[ $pid == <-> && -r /proc/$pid/stat ]] || return 1
+  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  [[ ${fields[2]-} == "$sysparams[pid]" && ${fields[1]-} != Z ]] || return 1
+  expected=${job_identities[$pid]-}
+  [[ -z $expected || ${fields[20]-} == "$expected" ]]
+}
+
 # Workers own their native query sessions and perform their own shutdown.
 _zsh_stop_owned_jobs() {
   emulate -L zsh
-  zmodload zsh/system || return 1
-  local pid stat_text expected
-  local -a fields
+  local pid
   for pid in "$@"; do
-    [[ $pid == <-> && -r /proc/$pid/stat ]] || continue
-    stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
-    [[ ${fields[2]-} == "$sysparams[pid]" && ${fields[1]-} != Z ]] || continue
-    expected=${job_identities[$pid]-}
-    [[ -z $expected || ${fields[20]-} == "$expected" ]] || continue
+    _zsh_owned_job_is_running "$pid" || continue
     builtin kill -TERM "$pid" 2>/dev/null
   done
   return 0

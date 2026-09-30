@@ -443,7 +443,11 @@
         wait "$pid" 2>/dev/null
         worker_status=$?
         # A wrapper signal interrupts wait before the worker finishes cleanup.
-        (( interrupted )) && builtin kill -0 "$pid" 2>/dev/null && continue
+        case $worker_status in
+          129|130|143)
+            (( interrupted )) && _zsh_owned_job_is_running "$pid" && continue
+            ;;
+        esac
         break
       done
       job_pids[1]=()
