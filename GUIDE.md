@@ -665,7 +665,7 @@ All other installed distro backends remain available through `--only <id>`. For 
 | `--sudo` | Authorize privileged distro upgrade or cleanup paths |
 | `--dry-run` | Inventory updates for upgrade, or preview cleanup |
 
-Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user. Empty or whitespace-only values for `--only` and `--skip` are rejected before any backend runs; an empty variable never expands the operation to every manager.
+Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user. Empty or whitespace-only values and empty IDs between, before, or after commas in `--only` and `--skip` are rejected before any backend runs; an empty variable never expands the operation to every manager.
 
 `plan` and `upgrade --dry-run` run outdated queries. Their output explicitly identifies an update inventory: dependencies, replacements, removals, and conflicts are resolved later by the native upgrade command. Review the native transaction before confirming, especially APT `full-upgrade`, which may remove packages. Inventory and upgrade can also use different metadata snapshots.
 

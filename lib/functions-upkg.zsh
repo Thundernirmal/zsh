@@ -98,7 +98,7 @@ _upkg_parse_manager_list() {
 
   [ -n "$raw" ] || return 0
 
-  for item in ${(s:,:)raw}; do
+  for item in "${(@s:,:)raw}"; do
     item=${item//[[:space:]]/}
 
     if [ -z "$item" ]; then

@@ -29,7 +29,7 @@ write_fake() {
   _upkg_run_upgrade_brew() { print -r -- called >> "$scratch/calls"; }
   _upkg_run_upgrade_flatpak() { print -r -- called >> "$scratch/calls"; }
   for flag in --only --skip; do
-    for empty in '' '   '; do
+    for empty in '' '   ' ',' ',brew' 'brew,' 'brew,,flatpak' 'brew, ,flatpak'; do
       upkg upgrade "$flag" "$empty" >/dev/null 2>&1
       assert test "$?" -eq 1
       upkg upgrade "$flag=$empty" >/dev/null 2>&1
@@ -38,7 +38,7 @@ write_fake() {
   done
   assert test ! -e "$scratch/calls"
 ) || exit 1
-print 'ok: empty manager filters never invoke upgrade backends'
+print 'ok: empty lists and empty manager IDs never invoke upgrade backends'
 (
   _upkg_detect_managers() {
     typeset -ga _UPKG_ACTIVE_MANAGERS=(brew flatpak)

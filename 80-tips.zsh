@@ -9,7 +9,7 @@
 # Update-check reminders preserve separate query diagnostics.
 # DNF search reminders apply to both DNF4 and DNF5.
 # Cancellation stops later package managers and cleanup phases.
-# Manager-selection reminders expose every installed backend with explicit lists.
+# Manager-selection reminders expose every installed backend with explicit lists that reject empty IDs.
 # The zdoctor reminder covers checking navigation after shell startup changes.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
