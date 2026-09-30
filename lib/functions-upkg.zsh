@@ -426,6 +426,30 @@ _upkg_print_summary() {
   fi
 }
 
+# Capture query data separately from diagnostics; never use this for prompts.
+_upkg_capture_query() {
+  emulate -L zsh
+  setopt localtraps
+  typeset -g _UPKG_QUERY_STDOUT='' _UPKG_QUERY_STDERR=''
+  local capture_dir rc
+  capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-query.XXXXXX") || {
+    _UPKG_QUERY_STDERR='Could not create temporary storage for package query.'
+    return 1
+  }
+  {
+    trap 'return 130' INT
+    trap 'return 143' TERM
+    trap 'return 129' HUP
+    command "$@" >"$capture_dir/stdout" 2>"$capture_dir/stderr"
+    rc=$?
+    _UPKG_QUERY_STDOUT=$(<"$capture_dir/stdout")
+    _UPKG_QUERY_STDERR=$(<"$capture_dir/stderr")
+  } always {
+    command rm -rf -- "$capture_dir"
+  }
+  return "$rc"
+}
+
 # Ordinary backend failures may continue; cancellation must stop orchestration.
 _upkg_check_interrupt() {
   case $1 in

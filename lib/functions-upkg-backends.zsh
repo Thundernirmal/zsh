@@ -51,41 +51,47 @@ _upkg_run_search_apt() {
 _upkg_run_search_dnf() {
   emulate -L zsh
 
-  local output rc line name version query
+  local output diagnostic rc line name version query combined
   local -a rows fields query_patterns
-
   for query in "$@"; do
     query_patterns+=("*${query}*")
   done
 
   _upkg_search_progress dnf ''
-  output=$(command dnf list --available "${query_patterns[@]}" 2>&1)
+  LC_ALL=C _upkg_capture_query dnf -q --color=never list --available "${query_patterns[@]}"
   rc=$?
-  _upkg_check_interrupt "$rc" || return $?
+  output=$_UPKG_QUERY_STDOUT
+  diagnostic=$_UPKG_QUERY_STDERR
   _upkg_search_progress_clear
+  _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
-    if [[ $output == *'No matching Packages to list'* ]]; then
-      _upkg_finish_search_results dnf
-      return 0
+    combined="${output}"$'\n'"${diagnostic}"
+    # Both DNF generations use status 1 for a valid empty list.
+    if (( rc == 1 )); then
+      for line in ${(f)combined}; do
+        if [[ $line == 'No matches found.' || $line == 'No matching Packages to list' || $line == 'Error: No matching Packages to list' ]]; then
+          _upkg_finish_search_results dnf
+          return 0
+        fi
+      done
     fi
-    [ -n "$output" ] && print -r -- "$output"
+    [[ -z $output ]] || print -r -- "$output"
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
     _upkg_set_last_result 'failed' 'dnf list --available failed'
     return 1
   fi
+  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
 
   for line in ${(f)output}; do
-    [ -n "$line" ] || continue
-    [[ $line == 'Available Packages'* ]] && continue
-    [[ $line == 'Last metadata expiration check:'* ]] && continue
-
     fields=( ${(z)line} )
-    (( ${#fields[@]} >= 2 )) || continue
+    (( ${#fields[@]} == 3 )) || continue
     name=${fields[1]}
     version=${fields[2]}
+    # name.arch + EVR + repository: reject headers and progress as package data.
+    [[ $name =~ '^[[:alnum:]_+.-]+\.[[:alnum:]_]+$' ]] || continue
     rows+=("${name}"$'\t'"${version}"$'\t')
   done
-
   _upkg_finish_search_results dnf "${rows[@]}"
 }
 

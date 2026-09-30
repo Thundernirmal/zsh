@@ -696,7 +696,7 @@ upkg search ripgrep --only=nix
 upkg search ripgrep viewer --only=brew,npm
 ```
 
-Results are normalized into one table with manager, package, available version, and a cheap native description when available. A no-match result is summarized once. Backend failures name the affected managers, and other managers continue.
+Results are normalized into one table with manager, package, available version, and a cheap native description when available. DNF search runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. A no-match result is summarized once. Backend failures name the affected managers, and other managers continue.
 
 Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
 

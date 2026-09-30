@@ -105,3 +105,30 @@ if command -v jq >/dev/null 2>&1; then
   ) || exit 1
   print 'ok: cancelled Nix evaluation workers stop later package managers'
 fi
+(
+  write_fake dnf '
+case "$*" in
+  "-q --color=never list --available *ripgrep*")
+    printf "%s\n" "Updating and loading repositories:" "Repositories loaded." "Available packages" "ripgrep.x86_64 15.2.0-1.fc44 updates"
+    printf "%s\n" "metadata warning" >&2 ;;
+  "-q --color=never list --available *empty4*") printf "%s\n" "Error: No matching Packages to list" >&2; exit 1 ;;
+  "-q --color=never list --available *empty5*") printf "%s\n" "No matches found." >&2; exit 1 ;;
+  *) printf "%s\n" "repository failure" >&2; exit 1 ;;
+esac'
+  PATH="$scratch:$original_path"
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_dnf ripgrep >"$scratch/dnf-out" 2>"$scratch/dnf-err"
+  assert test "$?" -eq 0
+  assert test "${#_UPKG_SEARCH_ROWS}" -eq 1
+  assert test "${_UPKG_SEARCH_ROWS[1]}" = $'dnf\tripgrep.x86_64\t15.2.0-1.fc44\t'
+  assert test "$(<"$scratch/dnf-err")" = 'metadata warning'
+  for query in empty4 empty5; do
+    _upkg_run_search_dnf "$query" >/dev/null 2>&1
+    assert test "$?" -eq 0
+    assert test "$_UPKG_LAST_STATE" = 'no matches'
+  done
+  _upkg_run_search_dnf broken >/dev/null 2>&1
+  assert test "$?" -eq 1
+  assert test "$_UPKG_LAST_STATE" = failed
+) || exit 1
+print 'ok: DNF4/5 search distinguishes packages, diagnostics, no matches, and failures'

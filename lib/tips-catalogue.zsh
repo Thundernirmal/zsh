@@ -112,6 +112,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
   _zsh_tip_pool+=(
     "Run upkg to check detected package managers for updates"
     "Run upkg search ripgrep to search detected package managers"
+    "Run upkg search ripgrep --only=dnf to search RPM package names"
     "Run upkg managers to show active and alternate backends"
     "Use a nonempty list such as upkg --only=brew,npm to limit package operations"
     "Run upkg plan to preview package upgrades"

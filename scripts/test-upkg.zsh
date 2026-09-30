@@ -1757,7 +1757,7 @@ esac
   command rm -f "$fakebin/apt"
   write_fake dnf '
 case "$*" in
-  "list --available *ripgrep*")
+  "-q --color=never list --available *ripgrep*")
     printf "%s\n" "Available Packages"
     printf "%s\n" "ripgrep.x86_64 14.1.1-1.fc40 updates"
     ;;
