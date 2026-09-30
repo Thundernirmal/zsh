@@ -2,6 +2,7 @@
 # and credential-status reminders stay in lib/tips-catalogue.zsh. Destructive
 # file commands keep native semantics across domain loading. Package-search
 # reminders apply on first use, including the independently loaded Nix backend.
+# Nix removal reminders operate on active profile entries.
 # DNF search reminders apply to both DNF4 and DNF5.
 # Cancellation stops later package managers and cleanup phases.
 # Manager-selection reminders use explicit nonempty lists.

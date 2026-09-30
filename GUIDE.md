@@ -790,6 +790,8 @@ The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refr
 
 ### Outdated semantics
 
+Explicitly inactive profile elements are excluded from outdated checks and the removal picker; a missing or null activity field retains the default active behavior.
+
 `npkg outdated` compares the complete installed store-path set for each active nixpkgs profile element with the output set selected by the currently evaluated installable:
 
 | State | Meaning |

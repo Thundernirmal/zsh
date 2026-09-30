@@ -287,7 +287,7 @@
               .elements
               | to_entries
               | sort_by(.key)
-              | map(select(.value.active // true))
+              | map(select(.value.active != false))
               | .[]
               | {
                   target: .key,
@@ -297,7 +297,7 @@
                 }
             elif (.elements | type) == "array" then
               .elements[]
-              | select(.active // true)
+              | select(.active != false)
               | {
                   target: (.storePaths[0] // .attrPath // ""),
                   name: ((.attrPath // (.storePaths[0] // "")) | split(".")[-1]),
@@ -508,7 +508,7 @@
         manifest_entries
         | .fallbackName as $fallback
         | .value as $value
-        | select(($value.active // true) == true)
+        | select($value.active != false)
         | (($value.attrPath // "") | text) as $attr
         | (($value.originalUrl // $value.originalUri // "") | text) as $original
         | (($value.uri // $value.url // "") | text) as $locked

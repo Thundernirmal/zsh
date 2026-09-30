@@ -132,3 +132,32 @@ esac'
   assert test "$_UPKG_LAST_STATE" = failed
 ) || exit 1
 print 'ok: DNF4/5 search distinguishes packages, diagnostics, no matches, and failures'
+if command -v jq >/dev/null 2>&1; then
+  (
+    _zsh_functions_load_domain nix || exit 1
+    _npkg_nix() { print -r -- "$AUDIT_PROFILE"; }
+    _npkg_eval_installable_record() { print -r -- '{"paths":["/nix/store/pkg"],"version":"1"}'; }
+    inactive='{"active":false,"originalUrl":"nixpkgs","attrPath":"packages.test.inactive","storePaths":[]}'
+    active='{"originalUrl":"nixpkgs","url":"github:NixOS/nixpkgs/rev","attrPath":"packages.test.pkg","storePaths":["/nix/store/pkg"]}'
+    for AUDIT_PROFILE in "{\"elements\":{\"inactive\":$inactive,\"active\":$active}}" "{\"elements\":[$inactive,$active]}"; do
+      npkg outdated >/dev/null 2>&1
+      assert test "$?" -eq 0
+      assert test "$_NPKG_OUTDATED_TOTAL" -eq 1
+      assert test "$_NPKG_OUTDATED_STATE" = current
+      # Capture actual picker candidates, cancel before any removal operation.
+      _npkg_require_picker() { return 0; }
+      _fzf_picker_multi_args() { REPLY=''; reply=(); }
+      _fzf_picker_context_args() { reply=(); }
+      _fzf_picker_preview_args() { reply=(); }
+      export AUDIT_CANDIDATES="$scratch/nix-candidates"
+      write_fake fzf 'cat > "$AUDIT_CANDIDATES"; exit 1'
+      PATH="$scratch:$original_path"
+      command rm -f -- "$scratch/jq"
+      npkg remove >/dev/null 2>&1
+      candidate_text=$(<"$AUDIT_CANDIDATES")
+      assert test "${candidate_text#*inactive}" = "$candidate_text"
+      assert test -n "$candidate_text"
+    done
+  ) || exit 1
+  print 'ok: inactive object/array Nix elements are excluded from checks and removal'
+fi
