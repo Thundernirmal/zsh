@@ -115,6 +115,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Run upkg search ripgrep to search detected package managers"
     "Run upkg search ripgrep --only=dnf to search RPM package names"
     "Run upkg managers to show active and alternate backends"
+    'Use upkg --only dnf to select DNF even when another distro backend is active'
     "Use a nonempty list such as upkg --only=brew,npm to limit package operations"
     "Run upkg plan to inventory updates; review the native upgrade transaction"
     "Run upkg clean --dry-run before package cleanup"

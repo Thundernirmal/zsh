@@ -124,18 +124,16 @@ _upkg_detect_managers() {
   _UPKG_ACTIVE_MANAGERS=()
   _UPKG_ALTERNATE_MANAGERS=()
 
-  if command -v paru >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(paru)
-    if command -v pacman >/dev/null 2>&1; then
-      _UPKG_ALTERNATE_MANAGERS+=(pacman)
+  local distro_manager
+  for distro_manager in paru pacman apt dnf; do
+    if command -v "$distro_manager" >/dev/null 2>&1; then
+      if (( ${#_UPKG_ACTIVE_MANAGERS} == 0 )); then
+        _UPKG_ACTIVE_MANAGERS+=("$distro_manager")
+      else
+        _UPKG_ALTERNATE_MANAGERS+=("$distro_manager")
+      fi
     fi
-  elif command -v pacman >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(pacman)
-  elif command -v apt >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(apt)
-  elif command -v dnf >/dev/null 2>&1; then
-    _UPKG_ACTIVE_MANAGERS+=(dnf)
-  fi
+  done
 
   if command -v brew >/dev/null 2>&1; then
     _UPKG_ACTIVE_MANAGERS+=(brew)

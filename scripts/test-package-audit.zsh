@@ -250,3 +250,27 @@ if command -v jq >/dev/null 2>&1; then
   ) || exit 1
   print 'ok: Nix inventories include custom flakes and expose unsupported active entries'
 fi
+
+(
+  detection_dir="$scratch/detection"
+  command mkdir "$detection_dir"
+  for tool in paru pacman apt dnf; do
+    print -r -- '#!/bin/sh' > "$detection_dir/$tool"
+    command chmod +x "$detection_dir/$tool"
+  done
+  PATH=$detection_dir
+  _upkg_detect_managers
+  assert test "${(j:,:)_UPKG_ACTIVE_MANAGERS}" = paru
+  assert test "${(j:,:)_UPKG_ALTERNATE_MANAGERS}" = pacman,apt,dnf
+  _upkg_apply_filters dnf '' || exit 1
+  assert test "${(j:,:)_UPKG_SELECTED_MANAGERS}" = dnf
+  PATH=$original_path
+  command rm "$detection_dir/paru" "$detection_dir/pacman"
+  PATH=$detection_dir
+  _upkg_detect_managers
+  assert test "${(j:,:)_UPKG_ACTIVE_MANAGERS}" = apt
+  assert test "${(j:,:)_UPKG_ALTERNATE_MANAGERS}" = dnf
+  _upkg_apply_filters dnf '' || exit 1
+  assert test "${(j:,:)_UPKG_SELECTED_MANAGERS}" = dnf
+) || exit 1
+print 'ok: every installed distro backend remains explicitly selectable'

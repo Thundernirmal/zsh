@@ -641,7 +641,7 @@ The active order is:
 4. Nix through `npkg`;
 5. global `npm`.
 
-When both `paru` and `pacman` exist, `paru` is active and `pacman` remains available through `--only pacman`.
+All other installed distro backends remain available through `--only <id>`. For example, `--only dnf` works even when APT is also installed. Defaults still run only the first available distro backend; `upkg managers` lists the alternatives.
 
 ### Commands
 
