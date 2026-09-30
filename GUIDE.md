@@ -128,6 +128,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 | `tree` | `lt` and directory previews when `lsd` is absent | Preview uses `ls`; `lt` is unavailable without `lsd` or `tree` |
 | `fd` / `fdfind` | Faster `ff` search | GNU `find` |
 | `rg` | Faster `ft` content search | Recursive `grep` |
+| `checkupdates` (pacman-contrib) and `fakeroot` | Fresh Pacman inventory in a private database | Absent helper uses labelled cached `pacman -Qu`; a present helper that cannot refresh fails with its native diagnostic |
 | `setsid` (util-linux) | Isolated captured package queries | Queries report a missing prerequisite; other commands remain available |
 | `jq` | `npkg refresh`, `npkg outdated`, and Nix pickers | Those workflows are unavailable; basic Nix commands still work |
 | `secret-tool` | Defines `cgm` | The entire module is skipped |
@@ -135,6 +136,8 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 | `nix` | Defines `npkg` and the `upkg` Nix backend | Nix commands are absent |
 | `nix-collect-garbage` | `upkg clean --only nix` | Nix cleanup reports a failure |
 | `unzip`, `unrar`, `7z`, and related tools | Format-specific extraction | `extract` reports the missing tool when used |
+
+`checkupdates` requires `fakeroot`; on Arch, install both with `sudo pacman -S pacman-contrib fakeroot`. The dependency checker reports missing `fakeroot` when Pacman and checkupdates are present. A failed fresh query remains a failure rather than silently switching to cached data.
 
 Package managers are detected at runtime; they are not setup dependencies. The checker reports the primary optional integrations, while format-specific unpackers and ordinary GNU userland tools are checked only by the workflows that need them.
 

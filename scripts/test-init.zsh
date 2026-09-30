@@ -872,6 +872,25 @@ run_dependency_case() {
   typeset -g FZF_DEP_DIR=$case_dir
 }
 
+test_checkupdates_dependency_checker() {
+  local case_dir output tool
+  case_dir=$(mktemp -d "$tmp_home/arch-deps.XXXXXX") || return 1
+  prepare_dependency_fakebin "$case_dir/bin" 0.74.0 0 1 || return 1
+  for tool in pacman checkupdates; do
+    print -r -- '#!/bin/sh
+exit 99' > "$case_dir/bin/$tool"
+    command chmod +x "$case_dir/bin/$tool"
+  done
+  output=$(PATH="$case_dir/bin" /bin/sh "$repo_dir/scripts/check-deps.sh")
+  assert_status "$?" 0 'missing fakeroot remains optional' || return 1
+  assert_contains "$output" 'missing optional: fakeroot' 'checker names the checkupdates prerequisite' || return 1
+  assert_contains "$output" 'pacman-contrib fakeroot' 'checker gives complete Arch setup guidance' || return 1
+  command rm "$case_dir/bin/checkupdates"
+  output=$(PATH="$case_dir/bin" /bin/sh "$repo_dir/scripts/check-deps.sh")
+  assert_not_contains "$output" 'missing optional: fakeroot' 'fakeroot check is conditional on checkupdates' || return 1
+  command rm -rf -- "$case_dir"
+}
+
 test_fzf_dependency_checker() {
   local case_spec label version version_status include_fzf expected
   local -a fields blocked_cases supported_cases
@@ -1189,6 +1208,7 @@ main() {
   test_fzf_generated_guards || return 1
   test_fzf_theme_option_refresh || return 1
   test_fzf_dependency_checker || return 1
+  test_checkupdates_dependency_checker || return 1
 }
 
 main "$@"

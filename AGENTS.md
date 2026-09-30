@@ -42,7 +42,7 @@
 Run `zsh scripts/run-tests.zsh` after edits. The runner is the executable source of truth for the ordered syntax checks, regression suites, and fixed-install-path smoke test used by CI.
 
 - Optional environment check: `"$HOME/.config/zsh/scripts/check-deps.sh"`
-- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`setsid`, `bat`, `tree`, `fd`/`fdfind`, `jq`, `secret-tool`, `gdbus`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
+- `scripts/check-deps.sh` exits nonzero only when required tools are missing (`zsh`, `git`, `curl`, `ss`, `lsd`, `zoxide`, `fzf`). Missing optional tools (`setsid`, conditional `checkupdates`/`fakeroot`, `bat`, `tree`, `fd`/`fdfind`, `jq`, `secret-tool`, `gdbus`, `nix`, and `nix-collect-garbage` when Nix is installed) still exit `0` and only print hints.
 - `skills-lock.json` records maintainer skill provenance only; it is not a runtime dependency or package-manager lockfile.
 
 ## Manual QA Checklist

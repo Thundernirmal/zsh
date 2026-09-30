@@ -166,7 +166,7 @@ print_hints() {
       ;;
     pacman)
       printf '  sudo pacman -S zsh git curl iproute2 lsd zoxide bat tree fd jq libsecret\n'
-      printf '  Optional for fresh repo inventories: sudo pacman -S pacman-contrib\n'
+      printf '  Optional for fresh repo inventories: sudo pacman -S pacman-contrib fakeroot\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     brew)
@@ -211,6 +211,9 @@ check_cmd secret-tool optional
 check_cmd gdbus optional
 if have_cmd pacman; then
   check_cmd checkupdates optional
+  if have_cmd checkupdates; then
+    check_cmd fakeroot optional
+  fi
 fi
 check_cmd nix optional
 if have_cmd nix; then
