@@ -258,13 +258,13 @@ _zsh_theme_fzf_chrome_args() {
 
   case $layout in
     compact)
-      args=( '--height=~60%' --layout=reverse --style=default --info=inline-right --padding=0,1 )
+      args=( '--height=60%' --layout=reverse --style=default --info=inline-right --padding=0,1 )
       ;;
     roomy)
       args=( '--height=80%' --layout=reverse --style=default --info=inline-right --padding=1,2 )
       ;;
     minimal)
-      args=( '--height=~45%' --layout=reverse --style=minimal --info=inline-right --padding=0,1 )
+      args=( '--height=45%' --layout=reverse --style=minimal --info=inline-right --padding=0,1 )
       ;;
     *) return 1 ;;
   esac
@@ -319,19 +319,23 @@ _zsh_theme_fzf_preview_window() {
   integer width=${COLUMNS:-80}
   local layout=${ZSH_FZF_LAYOUT:-compact}
   local wide narrow
+  integer preview_threshold horizontal_padding
 
   case $width in
     ''|*[!0-9]*) width=80 ;;
   esac
   case $layout in
-    compact) wide=50; narrow=40 ;;
-    roomy) wide=55; narrow=45 ;;
-    minimal) wide=45; narrow=35 ;;
+    compact) wide=50; narrow=40; horizontal_padding=2 ;;
+    roomy) wide=55; narrow=45; horizontal_padding=4 ;;
+    minimal) wide=45; narrow=35; horizontal_padding=2 ;;
     *) return 1 ;;
   esac
 
   if (( width >= 100 )); then
-    REPLY="right,${wide}%,border-left,wrap-word,<100(down,${narrow}%,border-top,wrap-word)"
+    # fzf measures this threshold in preview columns, not terminal columns.
+    # Its rounded outer border reserves three columns before horizontal padding.
+    preview_threshold=$(( (100 - 3 - horizontal_padding) * wide / 100 ))
+    REPLY="right,${wide}%,border-left,wrap-word,<${preview_threshold}(down,${narrow}%,border-top,wrap-word)"
   else
     REPLY="down,${narrow}%,border-top,wrap-word"
   fi

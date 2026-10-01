@@ -1,4 +1,5 @@
 # Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
+# Finder layout sizing and responsive previews follow GUIDE.md.
 # The catalogue checks matching tool capabilities when it loads on first use.
 # Package reminders follow the current workflows and ownership boundaries in GUIDE.md.
 

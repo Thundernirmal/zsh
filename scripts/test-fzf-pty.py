@@ -22,6 +22,7 @@ import struct
 import subprocess
 import sys
 import termios
+import tempfile
 import textwrap
 import time
 from dataclasses import dataclass
@@ -41,6 +42,8 @@ class Case:
     glyphs: str
     no_color: bool
     action: str
+    layout: str = "compact"
+    rows: int = 3
 
 
 CASES = (
@@ -61,7 +64,7 @@ CHILD_SCRIPT = textwrap.dedent(
     typeset -g LINES=24
     typeset -g ZSH_UI_THEME=terminal
     typeset -g ZSH_FZF_THEME=terminal
-    typeset -g ZSH_FZF_LAYOUT=compact
+    typeset -g ZSH_FZF_LAYOUT=${ZSH_PTY_LAYOUT:-compact}
     typeset -g ZSH_UI_GLYPHS=${ZSH_PTY_GLYPHS:-unicode}
     if [[ ${ZSH_PTY_NO_COLOR:-0} == 1 ]]; then
       typeset -g NO_COLOR=1
@@ -80,7 +83,7 @@ CHILD_SCRIPT = textwrap.dedent(
     _fzf_picker_context_args 'PTY Rows' 'Type to filter rows' 'Enter choose  Tab mark  Selected 0  Esc close' || exit 14
     picker_args+=( "${reply[@]}" )
     _fzf_picker_preview_args Preview || exit 15
-    picker_args+=( "${reply[@]}" --preview 'printf PREVIEW' )
+    picker_args+=( "${reply[@]}" --preview 'printf "PREVIEW_%s_COLUMNS" "$FZF_PREVIEW_COLUMNS"' )
     _fzf_picker_multi_args choose || exit 16
     picker_args+=( "${reply[@]}" --delimiter=$'\t' --with-nth=1,2 --accept-nth=2 --no-sort )
 
@@ -102,9 +105,9 @@ CHILD_SCRIPT = textwrap.dedent(
 
     local selected rc
     selected=$(
-      print -r -- $'alpha\talpha-value'
-      print -r -- $'雪\t雪-value'
-      print -r -- $'beta\tbeta-value'
+      print -r -- $'ROW_ONLY_alpha\talpha-value'
+      (( ${ZSH_PTY_ROWS:-3} < 2 )) || print -r -- $'ROW_ONLY_雪\t雪-value'
+      (( ${ZSH_PTY_ROWS:-3} < 3 )) || print -r -- $'ROW_ONLY_beta\tbeta-value'
     )
     selected=$(print -r -- "$selected" | "$FZF_BIN" "${picker_args[@]}" )
     rc=$?
@@ -162,7 +165,7 @@ def read_until(
     """Wait for a marker while enforcing a bound around interactive steps."""
 
     deadline = time.monotonic() + timeout
-    while marker not in output:
+    while marker not in strip_terminal_controls(output):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise AssertionError(
@@ -174,7 +177,7 @@ def read_until(
         if process.poll() is not None and not ready:
             break
 
-    if marker not in output:
+    if marker not in strip_terminal_controls(output):
         raise AssertionError(
             f"process exited before {marker!r}; output was:\n{decode(output)}"
         )
@@ -261,12 +264,21 @@ def kill_process_group(process: subprocess.Popen[bytes]) -> None:
 
 
 def run_case(zsh_bin: str, fzf_bin: str, case: Case) -> None:
+    with tempfile.TemporaryDirectory(prefix="zsh-picker-pty-") as home:
+        _run_case(zsh_bin, fzf_bin, case, Path(home))
+
+
+def _run_case(zsh_bin: str, fzf_bin: str, case: Case, home: Path) -> None:
     environment = os.environ.copy()
     environment.update(
         {
+            "HOME": str(home),
+            "XDG_CACHE_HOME": str(home / ".cache"),
             "FZF_BIN": fzf_bin,
             "PATH": str(Path(fzf_bin).parent) + os.pathsep + os.environ.get("PATH", ""),
             "ZSH_PTY_WIDTH": str(case.width),
+            "ZSH_PTY_LAYOUT": case.layout,
+            "ZSH_PTY_ROWS": str(case.rows),
             "ZSH_PTY_GLYPHS": case.glyphs,
             "ZSH_PTY_NO_COLOR": "1" if case.no_color else "0",
             "TERM": "xterm-256color",
@@ -275,6 +287,7 @@ def run_case(zsh_bin: str, fzf_bin: str, case: Case) -> None:
         }
     )
     for name in (
+        "ZSH_FZF_EXTRA_OPTS",
         "FZF_DEFAULT_OPTS",
         "FZF_CTRL_T_OPTS",
         "FZF_CTRL_R_OPTS",
@@ -305,11 +318,22 @@ def run_case(zsh_bin: str, fzf_bin: str, case: Case) -> None:
     try:
         read_until(master, process, output, b"CONFIG_CONTEXT=1", 5.0)
         read_until(master, process, output, b"Search", 5.0)
+        # Row-only sentinels never appear in configuration output or previews.
+        read_until(master, process, output, b"ROW_ONLY_alpha", 3.0)
+        if case.rows >= 2:
+            read_until(master, process, output, "ROW_ONLY_雪".encode(), 3.0)
+        read_until(master, process, output, b"_COLUMNS", 3.0)
+        dimensions = re.search(rb"PREVIEW_(\d+)_COLUMNS", strip_terminal_controls(output))
+        if dimensions is None:
+            raise AssertionError("preview dimensions were not rendered")
+        preview_columns = int(dimensions[1])
+        if (preview_columns < case.width * 0.65) != (case.width >= 100):
+            raise AssertionError(f"actual preview orientation is wrong: {decode(output)}")
 
-        if case.action == "select":
+        if case.action in {"select", "single"}:
             os.write(master, b"\x10\x10")  # shared Ctrl-P preview toggle off/on
             read_until(master, process, output, b"PREVIEW", 3.0)
-            os.write(master, b"\t\t\r")
+            os.write(master, b"\t\t\r" if case.action == "select" else b"\r")
         else:
             os.write(master, b"\x1b")  # fzf's cancellation key
 
@@ -345,19 +369,145 @@ def run_case(zsh_bin: str, fzf_bin: str, case: Case) -> None:
     elif "CONFIG_NO_COLOR=0" not in rendered:
         raise AssertionError(f"color mode unexpectedly changed for {case.name}:\n{rendered}")
 
-    if case.action == "select":
+    if case.action in {"select", "single"}:
         if result_value(rendered, "RESULT_RC") != "0":
             raise AssertionError(f"selection did not complete: {rendered}")
-        if result_value(rendered, "RESULT_ROWS") != "2":
+        if result_value(rendered, "RESULT_ROWS") != ("2" if case.action == "select" else "1"):
             raise AssertionError(f"multi-selection did not return two rows: {rendered}")
         data = result_value(rendered, "RESULT_DATA")
-        if "alpha-value" not in data or "雪-value" not in data:
+        if "alpha-value" not in data or (case.action == "select" and "雪-value" not in data):
             raise AssertionError(f"stable selected fields were not returned: {rendered}")
     else:
         if result_value(rendered, "RESULT_RC") == "0":
             raise AssertionError(f"cancellation returned success: {rendered}")
         if result_value(rendered, "RESULT_ROWS") != "0":
             raise AssertionError(f"cancellation returned selected rows: {rendered}")
+
+
+
+BRANCH_SCRIPT = textwrap.dedent(
+    r'''
+    emulate -L zsh
+    setopt NO_UNSET
+    typeset -g COLUMNS=$ZSH_PTY_WIDTH LINES=32
+    typeset -g ZSH_UI_THEME=terminal ZSH_FZF_THEME=terminal
+    typeset -g ZSH_FZF_LAYOUT=$ZSH_PTY_LAYOUT ZSH_UI_GLYPHS=ascii
+    source "$1/25-theme.zsh" || exit 10
+    source "$1/40-fzf.zsh" || exit 11
+    source "$1/55-ui-helpers.zsh" || exit 12
+    source "$1/60-functions.zsh" || exit 13
+    cd -- "$2" || exit 14
+    print -r -- PTY_READY
+    fbr
+    print -r -- "RESULT_CWD=$PWD"
+    print -r -- "RESULT_HEAD=$(command git symbolic-ref --short -q HEAD || print detached)"
+    print -r -- QUEUED_COMMAND_OK
+    '''
+)
+
+
+def run_branch_case(
+    zsh_bin: str, fzf_bin: str, width: int, layout: str, rows: int, action: str
+) -> None:
+    """Drive actual fbr against disposable Git/worktree state, before filtering."""
+
+    with tempfile.TemporaryDirectory(prefix="zsh-fbr-pty-") as temporary:
+        root = Path(temporary)
+        fixture, worktree = root / "repo", root / "worktree"
+        home = root / "home"
+        home.mkdir()
+
+        def git(*args: str) -> None:
+            subprocess.run(
+                ["git", *args], check=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, timeout=5,
+                env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull,
+                     "GIT_CONFIG_NOSYSTEM": "1"},
+            )
+
+        git("init", "-b", "main", str(fixture))
+        git("-C", str(fixture), "-c", "user.name=QA", "-c",
+            "user.email=qa@example.invalid", "commit", "--allow-empty", "-m", "PTY commit")
+        if rows == 1:
+            git("-C", str(fixture), "checkout", "--detach")
+            target = "main"
+        else:
+            target = "qa-topic"
+            git("-C", str(fixture), "branch", target)
+        git("-C", str(fixture), "worktree", "add", str(worktree), target)
+
+        environment = os.environ.copy()
+        for name in list(environment):
+            if name.startswith("FZF_") or name.startswith("ZSH_FZF_"):
+                environment.pop(name)
+        environment.update({
+            "HOME": str(home), "XDG_CACHE_HOME": str(home / ".cache"),
+            "PATH": str(Path(fzf_bin).parent) + os.pathsep + environment.get("PATH", ""),
+            "ZSH_PTY_WIDTH": str(width), "ZSH_PTY_LAYOUT": layout,
+            "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+        })
+        if rows == 1:
+            environment["NO_COLOR"] = "1"
+        else:
+            environment.pop("NO_COLOR", None)
+        master, slave = pty.openpty()
+        set_window(master, width, 32)
+        process = subprocess.Popen(
+            [zsh_bin, "-f", "-c", BRANCH_SCRIPT, "zsh", str(REPO_ROOT), str(fixture)],
+            stdin=slave, stdout=slave, stderr=slave, env=environment,
+            close_fds=True, start_new_session=True,
+        )
+        os.close(slave)
+        output = bytearray()
+        try:
+            read_until(master, process, output, b"PTY_READY", 5.0)
+            # Git's decorated log contains branch names, but never the worktree badge.
+            read_until(master, process, output, b"[WT]", 5.0)
+            initial = strip_terminal_controls(output)
+            if rows == 2 and b"main    " not in initial:
+                read_until(master, process, output, b"main    ", 3.0)
+            if width == 110:
+                # Exercise the live fallback, where adaptive height lost list space.
+                for resized_width in (50, 110):
+                    set_window(master, resized_width, 32)
+                    os.killpg(process.pid, signal.SIGWINCH)
+                    redraw = bytearray()
+                    read_until(master, process, redraw, b"[WT]", 3.0)
+                    if rows == 2:
+                        read_until(master, process, redraw, b"main    ", 3.0)
+                    output.extend(redraw)
+            # Require redraw after each toggle while filtering a known canonical ref.
+            query = "main" if action == "normal" else target
+            os.write(master, query.encode())
+            for _ in range(2):
+                os.write(master, b"\x10")
+                redraw = bytearray()
+                read_until(master, process, redraw, b"[WT]" if action != "normal" else b"main    ", 3.0)
+                output.extend(redraw)
+            if action == "cancel":
+                os.write(master, b"\x1b")
+            else:
+                os.write(master, b"\r")
+            drain_until_exit(master, process, output, 5.0)
+            if process.returncode != 0:
+                raise AssertionError(f"fbr shell failed: {decode(output)}")
+        finally:
+            kill_process_group(process)
+            os.close(master)
+        rendered = decode(strip_terminal_controls(output))
+        expected_cwd = fixture if action in {"normal", "cancel"} else worktree
+        expected_head = ("detached" if rows == 1 else "main") if action == "cancel" else (
+            "main" if action == "normal" else target
+        )
+        if result_value(rendered, "RESULT_CWD") != str(expected_cwd):
+            raise AssertionError(f"fbr changed to the wrong directory: {rendered}")
+        if result_value(rendered, "RESULT_HEAD") != expected_head:
+            raise AssertionError(f"fbr changed the wrong branch: {rendered}")
+        if "QUEUED_COMMAND_OK" not in rendered:
+            raise AssertionError(f"fbr lost following shell state: {rendered}")
+        if rows == 1 and colored_sgr_sequences(output):
+            raise AssertionError("NO_COLOR branch picker emitted colors")
 
 
 def fzf_version(fzf_bin: str) -> str:
@@ -396,6 +546,22 @@ def main() -> int:
         print(f"case {case.name}: width={case.width} glyphs={case.glyphs} no_color={case.no_color}")
         run_case(zsh_bin, fzf_bin, case)
         print(f"ok: {case.name}")
+    for layout in ("compact", "minimal", "roomy"):
+        for width in (50, 80, 110, 120):
+            for rows in (1, 2):
+                name = f"fbr-{layout}-{width}-{rows}"
+                action = "cancel" if width == 80 else "worktree"
+                run_branch_case(zsh_bin, fzf_bin, width, layout, rows, action)
+                print(f"ok: {name} initial rows, preview redraw, {action}")
+        run_branch_case(zsh_bin, fzf_bin, 110, layout, 2, "normal")
+        print(f"ok: fbr-{layout}-normal canonical branch selection")
+        # Shared preview arguments also cover short non-Git lists.
+        for width in (50, 110):
+            for rows in (1, 2):
+                case = Case(f"short-{layout}-{width}-{rows}", width, "ascii", rows == 1,
+                            "single" if rows == 1 else "select", layout, rows)
+                run_case(zsh_bin, fzf_bin, case)
+                print(f"ok: {case.name}")
     return 0
 
 

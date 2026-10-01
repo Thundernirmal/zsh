@@ -4,9 +4,7 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 ## Issue index
 
-| ID | Priority | Finding |
-| --- | --- | --- |
-| [ZSH-041](ZSH-041.md) | P2 | Wide adaptive branch pickers hide every row while preview is open |
+There are currently no open issue reports. Completed findings are retained in Git history.
 
 ## Report structure and verification
 
