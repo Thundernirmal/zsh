@@ -43,6 +43,7 @@ zsh ./scripts/test-cgm.zsh
 zsh ./scripts/test-upkg.zsh
 zsh ./scripts/test-package-audit.zsh
 zsh ./scripts/test-query-ownership.zsh
+zsh ./scripts/test-query-launcher.zsh
 zsh ./scripts/test-completions.zsh
 zsh ./scripts/test-help.zsh
 zsh ./scripts/test-doctor.zsh

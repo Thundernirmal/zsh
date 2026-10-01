@@ -181,13 +181,13 @@ for layout in compact roomy minimal; do
   [[ $REPLY == *--border=rounded* && $REPLY == *--list-border=none* && $REPLY == *--input-border=bottom* && $REPLY == *--header-border=bottom* && $REPLY == *--footer-border=top* ]] || exit 20
   [[ $REPLY != *--style=full:line* && $REPLY != *--style=full:rounded* ]] || exit 21
   [[ $REPLY != *--separator=* ]] || exit 22
-  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}"
+  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}:${reply[1]}"
 done
 NO_COLOR=1
 _zsh_theme_detect_color_depth; _ZSH_UI_COLOR_DEPTH=$REPLY
 _zsh_theme_fzf_color_args || exit 17
 print -r -- "nocolor=${(j:,:)reply}"')
-  assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1\nnocolor=--no-color,--color=bw,footer:-1' 'fzf compiler covers every cohesive frame, semantic target, and no-color mode' || return 1
+  assert_equals "$output" $'compact:20:--style=default:--padding=0,1:--height=60%\nroomy:20:--style=default:--padding=1,2:--height=80%\nminimal:20:--style=minimal:--padding=0,1:--height=45%\nnocolor=--no-color,--color=bw,footer:-1' 'fzf compiler covers every cohesive frame, semantic target, and no-color mode' || return 1
 
   output=$(run_theme_case '' '
 for layout in compact roomy minimal; do
@@ -196,9 +196,9 @@ for layout in compact roomy minimal; do
   _zsh_theme_fzf_chrome_args || exit 23
   _zsh_theme_join_shell_args "${reply[@]}"
   [[ $REPLY == *input-bg:-1* && $REPLY == *footer-bg:-1* && $REPLY != *#* && $REPLY == *footer-border* && $REPLY == *ghost* && $REPLY == *gutter* ]] || exit 24
-  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}"
+  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}:${reply[1]}"
 done')
-  assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1' 'terminal default compiles terminal-owned colors without hex values' || return 1
+  assert_equals "$output" $'compact:20:--style=default:--padding=0,1:--height=60%\nroomy:20:--style=default:--padding=1,2:--height=80%\nminimal:20:--style=minimal:--padding=0,1:--height=45%' 'terminal default compiles terminal-owned colors without hex values' || return 1
 
   if (( $+commands[fzf] )); then
     (
@@ -220,6 +220,15 @@ done')
 test_picker_presentation() {
   local output
   output=$(run_theme_case '' '
+for layout in compact roomy minimal; do
+  ZSH_FZF_LAYOUT=$layout COLUMNS=100
+  _zsh_theme_fzf_chrome_args || exit 26
+  local padding=${reply[5]}
+  _zsh_theme_fzf_preview_window || exit 27
+  print -r -- "$layout:$padding:$REPLY"
+done')
+  assert_equals "$output" $'compact:--padding=0,1:right,50%,border-left,wrap-word,<47(down,40%,border-top,wrap-word)\nroomy:--padding=1,2:right,55%,border-left,wrap-word,<50(down,45%,border-top,wrap-word)\nminimal:--padding=0,1:right,45%,border-left,wrap-word,<42(down,35%,border-top,wrap-word)' 'preview boundary thresholds stay paired with each layout padding' || return 1
+  output=$(run_theme_case '' '
 source '"${repo_dir}"'/40-fzf.zsh
 _zsh_theme_fzf_context_args Files "Type to filter files" "Enter insert  Esc close"
 print -r -- "context:${reply[1]}:${reply[2]}"
@@ -233,7 +242,7 @@ print -r -- "$REPLY"
 print -r -- "${(j:|:)reply}"')
   assert_equals "${${(f)output}[1]}" 'context:--border-label=Files:--input-label=Search' 'picker context labels the cohesive outer frame and input divider' || return 1
   assert_equals "${${(f)output}[2]}" '99:--preview-label=Usage:--preview-window=down,40%,border-top,wrap-word:--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word' 'picker previews move below at 99 columns' || return 1
-  assert_equals "${${(f)output}[3]}" '100:--preview-label=Usage:--preview-window=right,50%,border-left,wrap-word,<100(down,40%,border-top,wrap-word):--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word' 'picker previews move right at 100 columns' || return 1
+  assert_equals "${${(f)output}[3]}" '100:--preview-label=Usage:--preview-window=right,50%,border-left,wrap-word,<47(down,40%,border-top,wrap-word):--bind=ctrl-p:toggle-preview,ctrl-/:toggle-preview-wrap-word' 'picker previews move right at 100 columns' || return 1
   assert_equals "${${(f)output}[4]}" 'Enter remove  Tab mark  Selected 0  Esc close' 'multi-picker footer starts at zero selected items' || return 1
   [[ ${${(f)output}[5]} == *'--multi'* && ${${(f)output}[5]} == *'transform-footer'* && ${${(f)output}[5]} == *'$FZF_SELECT_COUNT'* ]]
   assert_status "$?" 0 'multi-picker footer updates from the fzf selection count' || return 1

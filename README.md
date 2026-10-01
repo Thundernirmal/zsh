@@ -41,7 +41,7 @@ ztheme list
 
 `zdoctor` diagnoses install location, missing modules, completion readiness, tool availability, glyph settings, and integration status without touching the network or Secret Service unless asked (`zdoctor --network`, `zdoctor --secrets`). `zhelp` opens a searchable palette in a capable terminal and prints a plain command list elsewhere. Selecting an entry queues an example for editing; it never runs the example. Helpers load by domain so small commands leave package code unloaded. Package searches work on first use, including native DNF4 and DNF5 no-match handling, and Nix searches suppress evaluation progress, and update checks keep warnings separate from package results; see [package search](GUIDE.md#search-behavior). General helpers support `--help`; see the [guide](GUIDE.md#function-reference) for search controls, validated extraction destinations, native input-link handling, bounded network requests, and credential status.
 
-Fuzzy pickers share one rounded frame with unfilled input and footer rows, restrained section dividers, concise key hints, responsive previews, and theme-aware focus and selection cues. Tabular pickers align their display columns by terminal cells while returning undecorated values. Glyphs default to Nerd Font icons in UTF-8 locales; use `NO_NERD_FONT=1` or `ZSH_UI_GLYPHS=unicode` for ordinary Unicode instead (see [theme settings](GUIDE.md#terminal-output-modes)). Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
+Fuzzy pickers share one rounded frame with unfilled input and footer rows, restrained section dividers, concise key hints, responsive previews that open to the right at 100 columns, stable percentage frames (see [sizing limits](GUIDE.md#finder-layout-and-option-precedence)), and theme-aware focus and selection cues. Tabular pickers align their display columns by terminal cells while returning undecorated values. Glyphs default to Nerd Font icons in UTF-8 locales; use `NO_NERD_FONT=1` or `ZSH_UI_GLYPHS=unicode` for ordinary Unicode instead (see [theme settings](GUIDE.md#terminal-output-modes)). Preview pickers use Ctrl+P to show or hide the preview and Ctrl+/ to toggle word wrapping.
 
 ## What it provides
 
@@ -53,7 +53,7 @@ Fuzzy pickers share one rounded frame with unfilled input and footer rows, restr
 - On-demand tips include manager-specific reminders only when their tools are available.
 - Shared themes for rich dashboards and every fzf entry point, with atomic session switching and read-only inspection through `ztheme` and deterministic plain-text fallbacks.
 
-Upgrade previews inventory available updates; cleanup previews describe cleanup work. Both avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, cleared search progress and distinct cancellation summaries and owned query-process cleanup after cancellation or abnormal owner death, and cleanup effects.
+Upgrade previews inventory available updates; cleanup previews describe cleanup work. Both avoid installing or removing packages but can contact the network and write caches. See [the package workflow reference](GUIDE.md#package-manager-upkg) for metadata freshness, transaction limits, cleared search progress and distinct cancellation summaries and owned query-process cleanup with verified startup termination and deterministic process parsing and handling of cancellation or abnormal owner death, and cleanup effects.
 
 ## Requirements
 
@@ -63,7 +63,7 @@ The dependency checker treats these as required for the intended setup:
 - `lsd` and `zoxide`
 - stable `fzf` 0.68.0 or newer
 
-Captured package queries require Linux `/proc` and `setsid` from util-linux. Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. Optional `checkupdates` (`pacman-contrib`, requiring `fakeroot`) enables fresh Pacman inventories using a separate database. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
+Captured package queries require readable Linux `/proc` process identities and `setsid` from util-linux; optional per-task child lists are not required. Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. Optional `checkupdates` (`pacman-contrib`, requiring `fakeroot`) enables fresh Pacman inventories using a separate database. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
 
 If the packaged fzf is older than 0.68.0, upgrade it through a current package source or follow the upstream installation link printed by `scripts/check-deps.sh`.
 
@@ -79,4 +79,4 @@ This repository does not manage Oh My Zsh, Starship, PATH setup, `compinit`, or 
 - [`docs/issues/README.md`](./docs/issues/README.md) — unresolved issue tracker and consistent report template
 - [`AGENTS.md`](./AGENTS.md) — repository maintenance rules and required verification
 
-For changes, follow the documentation ownership rules and run `zsh scripts/run-tests.zsh`; the maintenance contract is in [`GUIDE.md`](./GUIDE.md#maintenance-and-verification).
+For changes, follow the documentation ownership rules and run `zsh scripts/run-tests.zsh`; the maintenance contract and native picker test coverage are in [`GUIDE.md`](./GUIDE.md#maintenance-and-verification).

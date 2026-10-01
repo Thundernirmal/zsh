@@ -62,7 +62,7 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Press Ctrl+T to insert a selected file path"
     "Press Alt+C to select and enter a directory"
     "Type in the unfilled fzf input row to filter; use the footer for keys"
-    "Press Ctrl+P in preview pickers to toggle the preview; use Ctrl+/ to wrap"
+    "On short terminals hide previews with Ctrl+P or enlarge the window; Ctrl+/ wraps"
     "Run fkill TERM to stop selected processes; use fkill 9 only to force"
     "Run fkill --all to include processes from all users"
     "Run fbr to select exact branches even when branch and tag names collide"
