@@ -23,4 +23,4 @@ if (( ! _ZSH_TIPS_CATALOGUE_LOADED )); then
   }
 fi
 
-# Query cleanup prerequisites and Linux process discovery are documented in GUIDE.md.
+# Query ownership, verified startup termination, and discovery limits are documented in GUIDE.md.

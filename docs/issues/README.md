@@ -6,7 +6,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 | ID | Priority | Finding |
 | --- | --- | --- |
-| [ZSH-044](ZSH-044.md) | P2 | Launcher cleanup can abandon stopped processes and signal unverified PIDs |
 | [ZSH-045](ZSH-045.md) | P2 | Children-list parsing follows the caller's IFS and bypasses the launcher fallback |
 | [ZSH-046](ZSH-046.md) | P2 | PTY harness can inherit host FZF_DEFAULT_OPTS_FILE and change case outcomes |
 | [ZSH-047](ZSH-047.md) | P2 | PTY coverage claims exceed what the suite verifies |

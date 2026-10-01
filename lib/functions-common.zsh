@@ -363,50 +363,85 @@ _zsh_query_task_children() {
   reply=( "${children[@]}" )
 }
 
+# A held proc descriptor keeps reads tied to the original task, even after reap.
+_zsh_query_process_record() {
+  emulate -L zsh
+  local IFS=$' \t\n'
+  local pid=$1 fd=${2:-} text opened=0
+  reply=()
+  [[ $pid == <-> ]] || return 1
+  zmodload zsh/system || return 1
+  if [[ -z $fd ]]; then
+    sysopen -r -o cloexec -u fd "/proc/$pid/stat" 2>/dev/null || return 1
+    opened=1
+  fi
+  {
+    sysseek -u "$fd" 0 2>/dev/null || return 1
+    sysread -i "$fd" text 2>/dev/null || return 1
+    reply=( ${=${text##*\) }} )
+    [[ ${reply[2]-} == <-> && ${reply[20]-} == <-> ]]
+  } always {
+    (( ! opened )) || exec {fd}<&-
+  }
+}
+
 # Before the handshake, own the launch process and its direct setsid child.
 _zsh_stop_unidentified_launcher() {
   emulate -L zsh
-  local pid=$1 identity=$2 parent=$3 stat_text stat_file child child_identity
-  local -a fields children reply
-  [[ -n $identity && -r /proc/$pid/stat ]] || return 0
-  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
-  [[ ${fields[2]-} == "$parent" && ${fields[20]-} == "$identity" ]] || return 0
-  # Freeze the launcher so setsid cannot fork after discovery.
-  builtin kill -STOP "$pid" 2>/dev/null || return 0
-  if _zsh_query_task_children "$pid"; then
-    children=( "${reply[@]}" )
-  else
-    # Read-only discovery; PPID establishes candidates, never permission to kill.
-    for stat_file in /proc/<->/stat(N); do
-      [[ -r $stat_file ]] || continue
-      stat_text=$(<"$stat_file") 2>/dev/null || continue
-      fields=( ${=${stat_text##*\) }} )
-      [[ ${fields[2]-} == "$pid" ]] || continue
-      children+=( "${stat_file:h:t}" )
-    done
-  fi
-  for child in "${children[@]}"; do
-    [[ $child == <-> && -r /proc/$child/stat ]] || continue
-    stat_text=$(</proc/$child/stat); fields=( ${=${stat_text##*\) }} )
-    [[ ${fields[2]-} == "$pid" && ${fields[1]-} != Z ]] || continue
-    child_identity=${fields[20]-}
-    # Pin the pre-session child too: it cannot fork or change session during inspection.
-    builtin kill -STOP "$child" 2>/dev/null || continue
-    [[ -r /proc/$child/stat ]] || continue
-    stat_text=$(</proc/$child/stat); fields=( ${=${stat_text##*\) }} )
-    [[ ${fields[2]-} == "$pid" && ${fields[20]-} == "$child_identity" ]] || continue
-    if [[ ${fields[3]-} == "$child" && ${fields[4]-} == "$child" ]]; then
-      _zsh_stop_owned_group "$child" "$child_identity" 1
+  local pid=$1 identity=$2 parent=$3 stat_file child child_identity launcher_fd
+  local -a children reply
+  [[ -n $identity && $pid == <-> ]] || return 0
+  zmodload zsh/system || return 0
+  # Open before STOP: later path permission/visibility changes cannot strand it.
+  sysopen -r -o cloexec -u launcher_fd "/proc/$pid/stat" 2>/dev/null || return 0
+  {
+    _zsh_query_process_record "$pid" "$launcher_fd" || return 0
+    [[ ${reply[2]} == "$parent" && ${reply[20]} == "$identity" && ${reply[1]} != Z ]] || return 0
+    builtin kill -STOP "$pid" 2>/dev/null || return 0
+    if _zsh_query_task_children "$pid"; then
+      children=( "${reply[@]}" )
     else
-      builtin kill -KILL "$child" 2>/dev/null
+      # Read-only discovery; PPID establishes candidates, never permission to kill.
+      for stat_file in /proc/<->/stat(N); do
+        _zsh_query_process_record "${stat_file:h:t}" || continue
+        [[ ${reply[2]} == "$pid" ]] || continue
+        children+=( "${stat_file:h:t}" )
+      done
     fi
-  done
-  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
-  if [[ ${fields[3]-} == "$pid" && ${fields[4]-} == "$pid" ]]; then
-    _zsh_stop_owned_group "$pid" "$identity" 1
-  else
-    builtin kill -KILL "$pid" 2>/dev/null
-  fi
+    for child in "${children[@]}"; do
+      _zsh_query_process_record "$child" || continue
+      [[ ${reply[2]} == "$pid" && ${reply[1]} != Z ]] || continue
+      child_identity=${reply[20]}
+      if [[ ${reply[3]} == "$child" && ${reply[4]} == "$child" ]]; then
+        _zsh_stop_owned_group "$child" "$child_identity" 1
+      else
+        # Do not STOP children: failed revalidation must never strand a stopped task.
+        builtin kill -TERM "$child" 2>/dev/null
+        zselect -t 10
+        # Previously established parent ownership survives reparenting; the start
+        # identity must still match. Recheck in case setsid ran during the grace.
+        _zsh_query_process_record "$child" || continue
+        [[ ${reply[20]} == "$child_identity" && ${reply[1]} != Z ]] || continue
+        if [[ ${reply[3]} == "$child" && ${reply[4]} == "$child" ]]; then
+          _zsh_stop_owned_group "$child" "$child_identity" 1
+        else
+          builtin kill -KILL "$child" 2>/dev/null
+        fi
+      fi
+    done
+  } always {
+    # Revalidate through the held descriptor, including parent and start time.
+    # A dead original task returns ESRCH, rather than data for a recycled PID.
+    if _zsh_query_process_record "$pid" "$launcher_fd" &&
+       [[ ${reply[2]} == "$parent" && ${reply[20]} == "$identity" && ${reply[1]} != Z ]]; then
+      if [[ ${reply[3]} == "$pid" && ${reply[4]} == "$pid" ]]; then
+        builtin kill -KILL -- "-$pid" 2>/dev/null
+      else
+        builtin kill -KILL "$pid" 2>/dev/null
+      fi
+    fi
+    exec {launcher_fd}<&-
+  }
   return 0
 }
 
