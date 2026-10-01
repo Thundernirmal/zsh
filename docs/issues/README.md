@@ -4,9 +4,7 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 ## Issue index
 
-| ID | Priority | Finding |
-| --- | --- | --- |
-| [ZSH-047](ZSH-047.md) | P2 | PTY coverage claims exceed what the suite verifies |
+There are currently no open issue reports. Completed findings are retained in Git history.
 
 ## Report structure and verification
 

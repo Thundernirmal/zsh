@@ -452,6 +452,9 @@ def run_branch_case(
         else:
             target = "qa-topic"
             git("-C", str(fixture), "branch", target)
+        if action == "normal":
+            # Accepting main must change HEAD; an ignored selection cannot pass.
+            git("-C", str(fixture), "checkout", "--detach")
         git("-C", str(fixture), "worktree", "add", str(worktree), target)
 
         environment = isolated_finder_environment()
