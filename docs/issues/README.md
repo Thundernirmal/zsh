@@ -6,7 +6,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 | ID | Priority | Finding |
 | --- | --- | --- |
-| [ZSH-046](ZSH-046.md) | P2 | PTY harness can inherit host FZF_DEFAULT_OPTS_FILE and change case outcomes |
 | [ZSH-047](ZSH-047.md) | P2 | PTY coverage claims exceed what the suite verifies |
 
 ## Report structure and verification

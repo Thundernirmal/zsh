@@ -271,13 +271,21 @@ def kill_process_group(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=1)
 
 
+def isolated_finder_environment() -> dict[str, str]:
+    """Remove host finder configuration before adding each case's explicit inputs."""
+    return {
+        name: value for name, value in os.environ.items()
+        if not name.startswith(("FZF_", "ZSH_FZF_"))
+    }
+
+
 def run_case(zsh_bin: str, fzf_bin: str, case: Case) -> None:
     with tempfile.TemporaryDirectory(prefix="zsh-picker-pty-") as home:
         _run_case(zsh_bin, fzf_bin, case, Path(home))
 
 
 def _run_case(zsh_bin: str, fzf_bin: str, case: Case, home: Path) -> None:
-    environment = os.environ.copy()
+    environment = isolated_finder_environment()
     environment.update(
         {
             "HOME": str(home),
@@ -297,17 +305,6 @@ def _run_case(zsh_bin: str, fzf_bin: str, case: Case, home: Path) -> None:
             "LC_ALL": "C.UTF-8",
         }
     )
-    for name in (
-        "ZSH_FZF_EXTRA_OPTS",
-        "FZF_DEFAULT_OPTS",
-        "FZF_CTRL_T_OPTS",
-        "FZF_CTRL_R_OPTS",
-        "FZF_ALT_C_OPTS",
-        "FZF_COMPLETION_OPTS",
-        "FZF_COMPLETION_PATH_OPTS",
-        "FZF_COMPLETION_DIR_OPTS",
-    ):
-        environment.pop(name, None)
     if case.no_color:
         environment["NO_COLOR"] = "1"
     else:
@@ -457,10 +454,7 @@ def run_branch_case(
             git("-C", str(fixture), "branch", target)
         git("-C", str(fixture), "worktree", "add", str(worktree), target)
 
-        environment = os.environ.copy()
-        for name in list(environment):
-            if name.startswith("FZF_") or name.startswith("ZSH_FZF_"):
-                environment.pop(name)
+        environment = isolated_finder_environment()
         environment.update({
             "HOME": str(home), "XDG_CACHE_HOME": str(home / ".cache"),
             "PATH": str(Path(fzf_bin).parent) + os.pathsep + environment.get("PATH", ""),
@@ -529,6 +523,30 @@ def run_branch_case(
             raise AssertionError(f"fbr lost following shell state: {rendered}")
         if rows == 1 and colored_sgr_sequences(output):
             raise AssertionError("NO_COLOR branch picker emitted colors")
+
+
+def check_host_finder_isolation(zsh_bin: str, fzf_bin: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="zsh-host-fzf-") as temporary:
+        options = Path(temporary) / "host-options"
+        options.write_text("--expect=ctrl-x\n--header=HOST_CONFIGURATION\n")
+        hostile = {
+            "FZF_DEFAULT_OPTS_FILE": str(options),
+            "FZF_DEFAULT_OPTS": "--expect=ctrl-x",
+            "FZF_DEFAULT_COMMAND": "exit 99",
+            "ZSH_FZF_EXTRA_OPTS": "--expect=ctrl-x",
+        }
+        saved = {name: os.environ.get(name) for name in hostile}
+        try:
+            os.environ.update(hostile)
+            run_case(zsh_bin, fzf_bin, Case("host-options-shared", 100, "ascii", False, "select"))
+            run_branch_case(zsh_bin, fzf_bin, 100, "roomy", 2, "worktree")
+        finally:
+            for name, value in saved.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+    print("ok: hostile finder options leave shared and branch outcomes unchanged")
 
 
 def fzf_version(fzf_bin: str) -> str:
@@ -601,6 +619,7 @@ def main() -> int:
                         expected_frame=expected_frames[layout][height])
             run_case(zsh_bin, fzf_bin, case)
             print(f"ok: {case.name} no-preview exported defaults and measured frame")
+    check_host_finder_isolation(zsh_bin, fzf_bin)
     return 0
 
 
