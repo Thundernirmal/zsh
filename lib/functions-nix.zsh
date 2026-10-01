@@ -466,6 +466,7 @@
 
   _npkg_outdated() {
     emulate -L zsh
+    local IFS=$' \t\n'
     setopt pipefail localtraps NO_MONITOR NO_NOTIFY
 
     _npkg_set_outdated_state partial 0 0 0

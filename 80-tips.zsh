@@ -23,4 +23,4 @@ if (( ! _ZSH_TIPS_CATALOGUE_LOADED )); then
   }
 fi
 
-# Query ownership, verified startup termination, and discovery limits are documented in GUIDE.md.
+# Query ownership, deterministic process parsing, and discovery limits are documented in GUIDE.md.

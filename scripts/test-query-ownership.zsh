@@ -59,7 +59,7 @@ check_gone() {
   builtin kill -0 "$unrelated" 2>/dev/null || fail 'unrelated job was stopped'
   [[ $(<"$scratch/unrelated-storage/sentinel") == sentinel ]] || fail 'ambient cleanup path was used'
 }
-command sleep 30 &
+command sleep 120 &
 unrelated=$!
 command mkdir "$scratch/bin"
 command cat > "$scratch/backend" <<'BACKEND'
@@ -176,6 +176,35 @@ owner=''
 check_gone "${groups[@]}"
 print 'ok: failed completion publication terminates and retains captured data'
 
+# Exercise the real kernel-discovery helper under modified IFS as well.
+local discovery_parent=$sysparams[pid]
+(
+  local IFS=$'\n'
+  local -a reply
+  if ! _zsh_query_task_children "$discovery_parent"; then
+    _zsh_query_proc_children "$discovery_parent"
+  fi
+  (( ${reply[(Ie)$unrelated]} )) || fail 'real discovery lost a live owned child under newline IFS'
+) || exit 1
+
+# Directly exercise the production parser, including normal trailing whitespace.
+local children_file="$scratch/children-input"
+for parsing_ifs in $'\n' ':' ''; do
+  (
+    local IFS=$parsing_ifs
+    local -a reply
+    print -r -- '123 456 ' > "$children_file"
+    _zsh_query_task_children_files "$children_file" || fail 'valid children were rejected'
+    [[ ${#reply} == 2 && $reply[1] == 123 && $reply[2] == 456 ]] || fail 'children parsing inherited IFS'
+    for malformed in '' '123 broken' '123 45x'; do
+      print -r -- "$malformed" > "$children_file"
+      if _zsh_query_task_children_files "$children_file"; then fail 'unusable children suppressed fallback'; fi
+    done
+    if _zsh_query_task_children_files "$scratch/missing-input"; then fail 'missing children input succeeded'; fi
+  ) || exit 1
+ done
+print 'ok: real children parser handles caller IFS and rejects malformed or empty input'
+
 # A faithful startup failure: session leader ignores TERM and never publishes identity.
 command mkdir -p "$scratch/slow/lib" "$scratch/fork-bin"
 command cat > "$scratch/slow/lib/query-supervisor.zsh" <<'SLOW'
@@ -194,7 +223,7 @@ SLOW
 print -r -- '#!/bin/sh' > "$scratch/fork-bin/setsid"
 printf 'exec %q --fork "$@"\n' "$setsid_bin" >> "$scratch/fork-bin/setsid"
 command chmod +x "$scratch/fork-bin/setsid"
-for mode in direct fork fork-missing-children fork-unreadable-children; do
+for mode in direct fork fork-missing-children fork-unreadable-children fork-newline fork-malformed-children fork-empty-children fork-stale-children; do
   case_dir="$scratch/slow-$mode"
   command mkdir -p "$case_dir/tmp"
   export OWNERSHIP_PIDS="$case_dir/pids" OWNERSHIP_GROUP="$case_dir/group"
@@ -217,6 +246,25 @@ for mode in direct fork fork-missing-children fork-unreadable-children; do
         # A directory makes the read fail even when tests run with elevated privileges.
         command mkdir "$case_dir/unreadable-children" ;;
     esac
+    case $mode in
+      fork-newline|fork-malformed-children|fork-empty-children|fork-stale-children)
+        IFS=$'\n'
+        functions[_fixture_proc_children]=$functions[_zsh_query_proc_children]
+        _zsh_query_proc_children() {
+          : > "$case_dir/fallback"
+          _fixture_proc_children "$@"
+        }
+        if [[ $mode != fork-newline ]]; then
+          case $mode in
+            fork-malformed-children) print '123 broken' > "$case_dir/children" ;;
+            fork-empty-children) : > "$case_dir/children" ;;
+            fork-stale-children) print 1 > "$case_dir/children" ;;
+          esac
+          # Substitute only the input path; run the real parser and discovery code.
+          functions[_fixture_children_parser]=$functions[_zsh_query_task_children_files]
+          _zsh_query_task_children_files() { _fixture_children_parser "$case_dir/children"; }
+        fi ;;
+    esac
     _ZSH_FUNCTIONS_MODULE_DIR="$scratch/slow"
     _upkg_capture_query true
     local rc=$?
@@ -236,6 +284,9 @@ for mode in direct fork fork-missing-children fork-unreadable-children; do
   owner=''
   [[ $(<"$case_dir/result") == 1 ]] || fail 'startup failure did not return status1'
   [[ $(<"$case_dir/stderr") == *'did not establish its identity'* ]] || fail "startup failure lacks diagnostic: $(<"$case_dir/stderr")"
+  if [[ $mode == fork-malformed-children || $mode == fork-empty-children || $mode == fork-stale-children ]]; then
+    [[ -e $case_dir/fallback ]] || fail 'unusable children did not engage proc fallback'
+  fi
   pids=( ${=$(<"$OWNERSHIP_PIDS")} )
   check_gone "${groups[@]}" "${pids[@]}"
   print -r -- "ok: $mode missing identity shuts down within its startup budget"

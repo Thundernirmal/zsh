@@ -313,6 +313,7 @@ fi
 # Liveness means this shell's recorded worker, not merely an occupied PID.
 _zsh_owned_job_is_running() {
   emulate -L zsh
+  local IFS=$' \t\n'
   zmodload zsh/system || return 1
   local pid=$1 stat_text expected
   local -a fields
@@ -337,6 +338,7 @@ _zsh_stop_owned_jobs() {
 # A live supervisor pins the process-group identity through TERM and KILL.
 _zsh_stop_owned_group() {
   emulate -L zsh
+  local IFS=$' \t\n'
   local pid=$1 identity=$2 stat_text
   local -a fields
   [[ $pid == <-> && -r /proc/$pid/stat ]] || return 0
@@ -348,17 +350,52 @@ _zsh_stop_owned_group() {
   return 0
 }
 
+# Parse kernel child lists with fixed whitespace, independent of caller IFS.
+_zsh_query_task_children_files() {
+  emulate -L zsh
+  local IFS=$' \t\n'
+  local child_file text child
+  local -a children tokens
+  reply=()
+  (( $# )) || return 1
+  for child_file in "$@"; do
+    [[ -r $child_file ]] || return 1
+    text=$(<"$child_file") 2>/dev/null || return 1
+    tokens=( ${=text} )
+    for child in "${tokens[@]}"; do
+      [[ $child == <-> ]] || return 1
+      children+=( "$child" )
+    done
+  done
+  (( ${#children} )) || return 1
+  reply=( "${children[@]}" )
+}
+
 # Optional per-task child lists are not present in every Linux kernel.
 _zsh_query_task_children() {
   emulate -L zsh
-  local child_file text
-  local -a files children
-  files=( /proc/$1/task/*/children(N) )
-  (( ${#files} )) || return 1
-  for child_file in "${files[@]}"; do
-    [[ -r $child_file ]] || return 1
-    text=$(<"$child_file") 2>/dev/null || return 1
-    children+=( ${=text} )
+  local pid=$1 child
+  local -a files candidates children
+  files=( /proc/$pid/task/*/children(N) )
+  _zsh_query_task_children_files "${files[@]}" || return 1
+  candidates=( "${reply[@]}" )
+  for child in "${candidates[@]}"; do
+    _zsh_query_process_record "$child" || return 1
+    [[ ${reply[2]} == "$pid" && ${reply[1]} != Z ]] || return 1
+    children+=( "$child" )
+  done
+  reply=( "${children[@]}" )
+  (( ${#children} ))
+}
+
+_zsh_query_proc_children() {
+  emulate -L zsh
+  local pid=$1 stat_file
+  local -a children
+  for stat_file in /proc/<->/stat(N); do
+    _zsh_query_process_record "${stat_file:h:t}" || continue
+    [[ ${reply[2]} == "$pid" ]] || continue
+    children+=( "${stat_file:h:t}" )
   done
   reply=( "${children[@]}" )
 }
@@ -402,11 +439,8 @@ _zsh_stop_unidentified_launcher() {
       children=( "${reply[@]}" )
     else
       # Read-only discovery; PPID establishes candidates, never permission to kill.
-      for stat_file in /proc/<->/stat(N); do
-        _zsh_query_process_record "${stat_file:h:t}" || continue
-        [[ ${reply[2]} == "$pid" ]] || continue
-        children+=( "${stat_file:h:t}" )
-      done
+      _zsh_query_proc_children "$pid"
+      children=( "${reply[@]}" )
     fi
     for child in "${children[@]}"; do
       _zsh_query_process_record "$child" || continue
@@ -448,6 +482,7 @@ _zsh_stop_unidentified_launcher() {
 # Captured queries have a private session, including children forked during TERM.
 _zsh_run_owned_query() {
   emulate -L zsh
+  local IFS=$' \t\n'
   setopt localtraps NO_MONITOR
   local control_dir='' launcher_pid='' owner_pid='' identity='' command_status=1 signal_status=0
   local shell_executable caller_pid caller_identity root_pid root_identity launcher_identity='' stat_text
