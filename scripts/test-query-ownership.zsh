@@ -194,14 +194,29 @@ SLOW
 print -r -- '#!/bin/sh' > "$scratch/fork-bin/setsid"
 printf 'exec %q --fork "$@"\n' "$setsid_bin" >> "$scratch/fork-bin/setsid"
 command chmod +x "$scratch/fork-bin/setsid"
-for mode in direct fork; do
+for mode in direct fork fork-missing-children fork-unreadable-children; do
   case_dir="$scratch/slow-$mode"
   command mkdir -p "$case_dir/tmp"
   export OWNERSHIP_PIDS="$case_dir/pids" OWNERSHIP_GROUP="$case_dir/group"
   (
     trap - EXIT
     export TMPDIR="$case_dir/tmp"
-    [[ $mode != fork ]] || export PATH="$scratch/fork-bin:$original_path"
+    [[ $mode != fork* ]] || export PATH="$scratch/fork-bin:$original_path"
+    # Exercise unavailable discovery separately from a valid empty child list.
+    case $mode in
+      fork-missing-children)
+        _zsh_query_task_children() {
+          local -a files=( "$case_dir"/missing/task/*/children(N) )
+          (( ${#files} )) || return 1
+        } ;;
+      fork-unreadable-children)
+        _zsh_query_task_children() {
+          local text
+          text=$(<"$case_dir/unreadable-children") 2>/dev/null
+        }
+        # A directory makes the read fail even when tests run with elevated privileges.
+        command mkdir "$case_dir/unreadable-children" ;;
+    esac
     _ZSH_FUNCTIONS_MODULE_DIR="$scratch/slow"
     _upkg_capture_query true
     local rc=$?

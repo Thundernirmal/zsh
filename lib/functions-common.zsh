@@ -348,28 +348,58 @@ _zsh_stop_owned_group() {
   return 0
 }
 
+# Optional per-task child lists are not present in every Linux kernel.
+_zsh_query_task_children() {
+  emulate -L zsh
+  local child_file text
+  local -a files children
+  files=( /proc/$1/task/*/children(N) )
+  (( ${#files} )) || return 1
+  for child_file in "${files[@]}"; do
+    [[ -r $child_file ]] || return 1
+    text=$(<"$child_file") 2>/dev/null || return 1
+    children+=( ${=text} )
+  done
+  reply=( "${children[@]}" )
+}
+
 # Before the handshake, own the launch process and its direct setsid child.
 _zsh_stop_unidentified_launcher() {
   emulate -L zsh
-  local pid=$1 identity=$2 parent=$3 stat_text child_file child
-  local -a fields children
+  local pid=$1 identity=$2 parent=$3 stat_text stat_file child child_identity
+  local -a fields children reply
   [[ -n $identity && -r /proc/$pid/stat ]] || return 0
   stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
   [[ ${fields[2]-} == "$parent" && ${fields[20]-} == "$identity" ]] || return 0
-  # Freeze the launcher so setsid cannot fork after its child list is read.
+  # Freeze the launcher so setsid cannot fork after discovery.
   builtin kill -STOP "$pid" 2>/dev/null || return 0
-  for child_file in /proc/$pid/task/*/children(N); do
-    children=( ${=$(<"$child_file")} )
-    for child in "${children[@]}"; do
-      [[ -r /proc/$child/stat ]] || continue
-      stat_text=$(</proc/$child/stat); fields=( ${=${stat_text##*\) }} )
-      [[ ${fields[2]-} == "$pid" && ${fields[1]-} != Z ]] || continue
-      if [[ ${fields[3]-} == "$child" && ${fields[4]-} == "$child" ]]; then
-        _zsh_stop_owned_group "$child" "${fields[20]}" 1
-      else
-        builtin kill -KILL "$child" 2>/dev/null
-      fi
+  if _zsh_query_task_children "$pid"; then
+    children=( "${reply[@]}" )
+  else
+    # Read-only discovery; PPID establishes candidates, never permission to kill.
+    for stat_file in /proc/<->/stat(N); do
+      [[ -r $stat_file ]] || continue
+      stat_text=$(<"$stat_file") 2>/dev/null || continue
+      fields=( ${=${stat_text##*\) }} )
+      [[ ${fields[2]-} == "$pid" ]] || continue
+      children+=( "${stat_file:h:t}" )
     done
+  fi
+  for child in "${children[@]}"; do
+    [[ $child == <-> && -r /proc/$child/stat ]] || continue
+    stat_text=$(</proc/$child/stat); fields=( ${=${stat_text##*\) }} )
+    [[ ${fields[2]-} == "$pid" && ${fields[1]-} != Z ]] || continue
+    child_identity=${fields[20]-}
+    # Pin the pre-session child too: it cannot fork or change session during inspection.
+    builtin kill -STOP "$child" 2>/dev/null || continue
+    [[ -r /proc/$child/stat ]] || continue
+    stat_text=$(</proc/$child/stat); fields=( ${=${stat_text##*\) }} )
+    [[ ${fields[2]-} == "$pid" && ${fields[20]-} == "$child_identity" ]] || continue
+    if [[ ${fields[3]-} == "$child" && ${fields[4]-} == "$child" ]]; then
+      _zsh_stop_owned_group "$child" "$child_identity" 1
+    else
+      builtin kill -KILL "$child" 2>/dev/null
+    fi
   done
   stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
   if [[ ${fields[3]-} == "$pid" && ${fields[4]-} == "$pid" ]]; then

@@ -63,7 +63,7 @@ The dependency checker treats these as required for the intended setup:
 - `lsd` and `zoxide`
 - stable `fzf` 0.68.0 or newer
 
-Captured package queries require Linux `/proc` and `setsid` from util-linux. Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. Optional `checkupdates` (`pacman-contrib`, requiring `fakeroot`) enables fresh Pacman inventories using a separate database. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
+Captured package queries require readable Linux `/proc` process identities and `setsid` from util-linux; optional per-task child lists are not required. Optional integrations use `bat`, `tree`, `fd` or `fdfind`, `jq`, `secret-tool`, and Nix. Optional `checkupdates` (`pacman-contrib`, requiring `fakeroot`) enables fresh Pacman inventories using a separate database. When Nix is installed, `nix-collect-garbage` enables the cleanup path. Missing optional tools either disable a feature or select a documented fallback.
 
 If the packaged fzf is older than 0.68.0, upgrade it through a current package source or follow the upstream installation link printed by `scripts/check-deps.sh`.
 

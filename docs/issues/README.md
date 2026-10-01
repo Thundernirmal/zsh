@@ -6,7 +6,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 | ID | Priority | Finding |
 | --- | --- | --- |
-| [ZSH-040](ZSH-040.md) | P1 | Failed query startup leaves forked supervisors alive without proc child lists |
 | [ZSH-041](ZSH-041.md) | P2 | Wide adaptive branch pickers hide every row while preview is open |
 
 ## Report structure and verification

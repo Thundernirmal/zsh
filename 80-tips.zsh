@@ -21,3 +21,5 @@ if (( ! _ZSH_TIPS_CATALOGUE_LOADED )); then
     tips "$@"
   }
 fi
+
+# Query cleanup prerequisites and Linux process discovery are documented in GUIDE.md.
