@@ -44,6 +44,10 @@ class Case:
     action: str
     layout: str = "compact"
     rows: int = 3
+    height: int = 24
+    preview: bool = True
+    exported: bool = False
+    expected_frame: int | None = None
 
 
 CASES = (
@@ -61,7 +65,7 @@ CHILD_SCRIPT = textwrap.dedent(
 
     repo_dir=$1
     typeset -g COLUMNS=${ZSH_PTY_WIDTH:-80}
-    typeset -g LINES=24
+    typeset -g LINES=${ZSH_PTY_HEIGHT:-24}
     typeset -g ZSH_UI_THEME=terminal
     typeset -g ZSH_FZF_THEME=terminal
     typeset -g ZSH_FZF_LAYOUT=${ZSH_PTY_LAYOUT:-compact}
@@ -79,11 +83,15 @@ CHILD_SCRIPT = textwrap.dedent(
     _zsh_theme_fzf_chrome_args || exit 13
     local -a picker_args
     picker_args=( "${reply[@]}" )
+    # Exported-default probes rely on FZF_DEFAULT_OPTS, as widgets/completions do.
+    [[ ${ZSH_PTY_EXPORTED:-0} != 1 ]] || picker_args=()
 
     _fzf_picker_context_args 'PTY Rows' 'Type to filter rows' 'Enter choose  Tab mark  Selected 0  Esc close' || exit 14
     picker_args+=( "${reply[@]}" )
-    _fzf_picker_preview_args Preview || exit 15
-    picker_args+=( "${reply[@]}" --preview 'printf "PREVIEW_%s_COLUMNS" "$FZF_PREVIEW_COLUMNS"' )
+    if [[ ${ZSH_PTY_PREVIEW:-1} == 1 ]]; then
+      _fzf_picker_preview_args Preview || exit 15
+      picker_args+=( "${reply[@]}" --preview 'printf "PREVIEW_%s_COLUMNS" "$FZF_PREVIEW_COLUMNS"' )
+    fi
     _fzf_picker_multi_args choose || exit 16
     picker_args+=( "${reply[@]}" --delimiter=$'\t' --with-nth=1,2 --accept-nth=2 --no-sort )
 
@@ -277,6 +285,9 @@ def _run_case(zsh_bin: str, fzf_bin: str, case: Case, home: Path) -> None:
             "FZF_BIN": fzf_bin,
             "PATH": str(Path(fzf_bin).parent) + os.pathsep + os.environ.get("PATH", ""),
             "ZSH_PTY_WIDTH": str(case.width),
+            "ZSH_PTY_HEIGHT": str(case.height),
+            "ZSH_PTY_PREVIEW": "1" if case.preview else "0",
+            "ZSH_PTY_EXPORTED": "1" if case.exported else "0",
             "ZSH_PTY_LAYOUT": case.layout,
             "ZSH_PTY_ROWS": str(case.rows),
             "ZSH_PTY_GLYPHS": case.glyphs,
@@ -303,7 +314,7 @@ def _run_case(zsh_bin: str, fzf_bin: str, case: Case, home: Path) -> None:
         environment.pop("NO_COLOR", None)
 
     master, slave = pty.openpty()
-    set_window(master, case.width)
+    set_window(master, case.width, case.height)
     process = subprocess.Popen(
         [zsh_bin, "-f", "-c", CHILD_SCRIPT, "zsh", str(REPO_ROOT)],
         stdin=slave,
@@ -322,17 +333,27 @@ def _run_case(zsh_bin: str, fzf_bin: str, case: Case, home: Path) -> None:
         read_until(master, process, output, b"ROW_ONLY_alpha", 3.0)
         if case.rows >= 2:
             read_until(master, process, output, "ROW_ONLY_雪".encode(), 3.0)
-        read_until(master, process, output, b"_COLUMNS", 3.0)
-        dimensions = re.search(rb"PREVIEW_(\d+)_COLUMNS", strip_terminal_controls(output))
-        if dimensions is None:
-            raise AssertionError("preview dimensions were not rendered")
-        preview_columns = int(dimensions[1])
-        if (preview_columns < case.width * 0.65) != (case.width >= 100):
-            raise AssertionError(f"actual preview orientation is wrong: {decode(output)}")
+        if case.preview:
+            read_until(master, process, output, b"_COLUMNS", 3.0)
+            dimensions = re.search(rb"PREVIEW_(\d+)_COLUMNS", strip_terminal_controls(output))
+            if dimensions is None:
+                raise AssertionError("preview dimensions were not rendered")
+            preview_columns = int(dimensions[1])
+            if (preview_columns < case.width * 0.65) != (case.width >= 100):
+                raise AssertionError(f"actual preview orientation is wrong: {decode(output)}")
+        if case.expected_frame is not None:
+            # Measure the initial outer box, before internal dividers are painted.
+            outline = re.search("╭─+╮(.*?)╰─+╯", decode(strip_terminal_controls(output)), re.S)
+            if outline is None:
+                raise AssertionError("initial outer frame was not rendered")
+            frame_height = outline[1].count("│") // 2 + 2
+            if frame_height != case.expected_frame:
+                raise AssertionError(f"{case.name}: frame {frame_height}, expected {case.expected_frame}")
 
         if case.action in {"select", "single"}:
-            os.write(master, b"\x10\x10")  # shared Ctrl-P preview toggle off/on
-            read_until(master, process, output, b"PREVIEW", 3.0)
+            if case.preview:
+                os.write(master, b"\x10\x10")  # shared Ctrl-P preview toggle off/on
+                read_until(master, process, output, b"PREVIEW", 3.0)
             os.write(master, b"\t\t\r" if case.action == "select" else b"\r")
         else:
             os.write(master, b"\x1b")  # fzf's cancellation key
@@ -346,12 +367,12 @@ def _run_case(zsh_bin: str, fzf_bin: str, case: Case, home: Path) -> None:
         os.close(master)
 
     rendered = decode(strip_terminal_controls(output))
-    if result_value(rendered, "CONFIG_CONTEXT") != "1 CONFIG_PREVIEW=1 CONFIG_MULTI=1 CONFIG_NO_COLOR=" + (
+    if result_value(rendered, "CONFIG_CONTEXT") != f"1 CONFIG_PREVIEW={int(case.preview)} CONFIG_MULTI=1 CONFIG_NO_COLOR=" + (
         "1" if case.no_color else "0"
     ):
         raise AssertionError(f"shared picker arguments were not all present:\n{rendered}")
 
-    expected_position = "right" if case.width >= 100 else "down"
+    expected_position = ("right" if case.width >= 100 else "down") if case.preview else "unknown"
     width_line = result_value(rendered, "CONFIG_WIDTH")
     if f"CONFIG_WIDTH={case.width}" not in rendered:
         raise AssertionError(f"terminal width was not propagated for {case.name}:\n{rendered}")
@@ -562,6 +583,24 @@ def main() -> int:
                             "single" if rows == 1 else "select", layout, rows)
                 run_case(zsh_bin, fzf_bin, case)
                 print(f"ok: {case.name}")
+    expected_frames = {
+        "compact": {12: 12, 16: 14, 24: 14},
+        "minimal": {12: 12, 16: 14, 24: 14},
+        "roomy": {12: 12, 16: 16, 24: 19},
+    }
+    for layout in ("compact", "minimal", "roomy"):
+        for height in (12, 16, 24):
+            for rows in (1, 2):
+                case = Case(f"height-{layout}-{height}-{rows}", 80, "ascii", False,
+                            "single" if rows == 1 else "select", layout, rows,
+                            height=height, expected_frame=expected_frames[layout][height])
+                run_case(zsh_bin, fzf_bin, case)
+                print(f"ok: {case.name} visible rows and measured frame")
+            case = Case(f"exported-{layout}-{height}", 80, "ascii", False, "select",
+                        layout, 2, height=height, preview=False, exported=True,
+                        expected_frame=expected_frames[layout][height])
+            run_case(zsh_bin, fzf_bin, case)
+            print(f"ok: {case.name} no-preview exported defaults and measured frame")
     return 0
 
 

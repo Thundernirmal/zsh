@@ -181,14 +181,13 @@ for layout in compact roomy minimal; do
   [[ $REPLY == *--border=rounded* && $REPLY == *--list-border=none* && $REPLY == *--input-border=bottom* && $REPLY == *--header-border=bottom* && $REPLY == *--footer-border=top* ]] || exit 20
   [[ $REPLY != *--style=full:line* && $REPLY != *--style=full:rounded* ]] || exit 21
   [[ $REPLY != *--separator=* ]] || exit 22
-  [[ ${reply[1]} == --height=[0-9]*% && ${reply[1]} != *~* ]] || exit 25
-  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}"
+  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}:${reply[1]}"
 done
 NO_COLOR=1
 _zsh_theme_detect_color_depth; _ZSH_UI_COLOR_DEPTH=$REPLY
 _zsh_theme_fzf_color_args || exit 17
 print -r -- "nocolor=${(j:,:)reply}"')
-  assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1\nnocolor=--no-color,--color=bw,footer:-1' 'fzf compiler covers every cohesive frame, semantic target, and no-color mode' || return 1
+  assert_equals "$output" $'compact:20:--style=default:--padding=0,1:--height=60%\nroomy:20:--style=default:--padding=1,2:--height=80%\nminimal:20:--style=minimal:--padding=0,1:--height=45%\nnocolor=--no-color,--color=bw,footer:-1' 'fzf compiler covers every cohesive frame, semantic target, and no-color mode' || return 1
 
   output=$(run_theme_case '' '
 for layout in compact roomy minimal; do
@@ -197,10 +196,9 @@ for layout in compact roomy minimal; do
   _zsh_theme_fzf_chrome_args || exit 23
   _zsh_theme_join_shell_args "${reply[@]}"
   [[ $REPLY == *input-bg:-1* && $REPLY == *footer-bg:-1* && $REPLY != *#* && $REPLY == *footer-border* && $REPLY == *ghost* && $REPLY == *gutter* ]] || exit 24
-  [[ ${reply[1]} == --height=[0-9]*% && ${reply[1]} != *~* ]] || exit 25
-  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}"
+  print -r -- "$layout:${#reply}:${reply[3]}:${reply[5]}:${reply[1]}"
 done')
-  assert_equals "$output" $'compact:20:--style=default:--padding=0,1\nroomy:20:--style=default:--padding=1,2\nminimal:20:--style=minimal:--padding=0,1' 'terminal default compiles terminal-owned colors without hex values' || return 1
+  assert_equals "$output" $'compact:20:--style=default:--padding=0,1:--height=60%\nroomy:20:--style=default:--padding=1,2:--height=80%\nminimal:20:--style=minimal:--padding=0,1:--height=45%' 'terminal default compiles terminal-owned colors without hex values' || return 1
 
   if (( $+commands[fzf] )); then
     (

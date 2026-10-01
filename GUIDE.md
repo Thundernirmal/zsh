@@ -228,13 +228,23 @@ All 15 keys are required, extra keys are rejected, and every value must be exact
 
 ### Finder layout and option precedence
 
-| Layout | Frame | Preview at 100+ columns | Preview below 100 columns |
+| Layout | Requested frame | Preview at 100+ columns | Preview below 100 columns |
 |---|---|---|---|
 | `compact` | fixed `60%`, one rounded frame, `0,1` padding | right `50%` | down `40%` |
 | `roomy` | fixed `80%`, one rounded frame, `1,2` padding | right `55%` | down `45%` |
 | `minimal` | fixed `45%`, one rounded frame, `0,1` padding | right `45%` | down `35%` |
 
-Fixed percentage heights keep room for selectable rows when a preview opens or moves below the list, including one- and two-item pickers. Every profile uses a single rounded outer box. The input and footer share the base finder background instead of drawing filled inner boxes. The input and optional header have one lower divider, the footer has one upper divider, and the list does not draw a nested box. The picker label sits in the outer border and `Search` sits in the input divider, avoiding the stacked top rules produced by fzf's `full:line` height-mode preset.
+Compact and minimal deliberately use a stable percentage frame rather than shrinking to one- or two-item content. This policy applies to exported defaults for widgets and completions too, and avoids adaptive-height allocation losing rows when a responsive preview moves below the list. The percentages are requests, not exact frame sizes: fzf's default `--min-height=10+` can enlarge them to account for frame controls, and terminal height caps the result. Additional headers, margins, and inherited overrides can change that geometry.
+
+With the default shared frame and a one- or two-item list, the native tests measure these frame heights, both with a below-list preview and with preview-free exported defaults:
+
+| Terminal rows | Compact | Minimal | Roomy |
+|---|---|---|---|
+| 12 | 12 | 12 | 12 |
+| 16 | 14 | 14 | 16 |
+| 24 | 14 | 14 | 19 |
+
+These cases retain selectable rows, but a short window can be filled by the frame. There is no visibility guarantee below 12 terminal rows or with arbitrary extra controls and overrides. Enlarge the terminal or hide the preview with Ctrl+P when space is limited. Every profile uses a single rounded outer box. The input and footer share the base finder background instead of drawing filled inner boxes. The input and optional header have one lower divider, the footer has one upper divider, and the list does not draw a nested box. The picker label sits in the outer border and `Search` sits in the input divider, avoiding the stacked top rules produced by fzf's `full:line` height-mode preset.
 
 The initial preview appears below the list through 99 columns and to the right from exactly 100 columns in every layout. While a wide picker is open, fzf can move its preview below the list on resize when its preview-column threshold is crossed (approximately this boundary with the default frame and padding). This affects presentation only. Candidate generation, selected values, and actions do not change. Palette, layout, glyphs, and the secure generated-integration cache are separate: changing presentation refreshes exported options without regenerating `fzf --zsh`.
 
