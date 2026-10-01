@@ -6,7 +6,6 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 | ID | Priority | Finding |
 | --- | --- | --- |
-| [ZSH-042](ZSH-042.md) | P2 | Roomy preview opens below the list at exactly 100 columns |
 | [ZSH-043](ZSH-043.md) | P2 | Fixed percentage heights do not deliver the documented short-terminal guarantee |
 | [ZSH-044](ZSH-044.md) | P2 | Launcher cleanup can abandon stopped processes and signal unverified PIDs |
 | [ZSH-045](ZSH-045.md) | P2 | Children-list parsing follows the caller's IFS and bypasses the launcher fallback |

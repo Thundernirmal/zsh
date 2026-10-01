@@ -547,7 +547,7 @@ def main() -> int:
         run_case(zsh_bin, fzf_bin, case)
         print(f"ok: {case.name}")
     for layout in ("compact", "minimal", "roomy"):
-        for width in (50, 80, 110, 120):
+        for width in (50, 80, 99, 100, 101, 110, 120):
             for rows in (1, 2):
                 name = f"fbr-{layout}-{width}-{rows}"
                 action = "cancel" if width == 80 else "worktree"
@@ -556,7 +556,7 @@ def main() -> int:
         run_branch_case(zsh_bin, fzf_bin, 110, layout, 2, "normal")
         print(f"ok: fbr-{layout}-normal canonical branch selection")
         # Shared preview arguments also cover short non-Git lists.
-        for width in (50, 110):
+        for width in (50, 99, 100, 101, 110):
             for rows in (1, 2):
                 case = Case(f"short-{layout}-{width}-{rows}", width, "ascii", rows == 1,
                             "single" if rows == 1 else "select", layout, rows)

@@ -222,6 +222,15 @@ done')
 test_picker_presentation() {
   local output
   output=$(run_theme_case '' '
+for layout in compact roomy minimal; do
+  ZSH_FZF_LAYOUT=$layout COLUMNS=100
+  _zsh_theme_fzf_chrome_args || exit 26
+  local padding=${reply[5]}
+  _zsh_theme_fzf_preview_window || exit 27
+  print -r -- "$layout:$padding:$REPLY"
+done')
+  assert_equals "$output" $'compact:--padding=0,1:right,50%,border-left,wrap-word,<47(down,40%,border-top,wrap-word)\nroomy:--padding=1,2:right,55%,border-left,wrap-word,<50(down,45%,border-top,wrap-word)\nminimal:--padding=0,1:right,45%,border-left,wrap-word,<42(down,35%,border-top,wrap-word)' 'preview boundary thresholds stay paired with each layout padding' || return 1
+  output=$(run_theme_case '' '
 source '"${repo_dir}"'/40-fzf.zsh
 _zsh_theme_fzf_context_args Files "Type to filter files" "Enter insert  Esc close"
 print -r -- "context:${reply[1]}:${reply[2]}"

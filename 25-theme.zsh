@@ -333,8 +333,8 @@ _zsh_theme_fzf_preview_window() {
 
   if (( width >= 100 )); then
     # fzf measures this threshold in preview columns, not terminal columns.
-    # Its rounded outer border reserves three columns before horizontal padding.
-    preview_threshold=$(( (100 - 3 - horizontal_padding) * wide / 100 ))
+    # Its rounded outer border reserves four columns before horizontal padding.
+    preview_threshold=$(( (100 - 4 - horizontal_padding) * wide / 100 ))
     REPLY="right,${wide}%,border-left,wrap-word,<${preview_threshold}(down,${narrow}%,border-top,wrap-word)"
   else
     REPLY="down,${narrow}%,border-top,wrap-word"
