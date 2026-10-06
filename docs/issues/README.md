@@ -4,9 +4,7 @@ This directory tracks unresolved findings and their repair requirements. Reports
 
 ## Issue index
 
-| ID | Priority | Finding |
-| --- | --- | --- |
-| [ZSH-048](ZSH-048-doctor-blocked-fzf.md) | P2 | `zdoctor` approves a blocked fzf integration ([#42](https://github.com/Thundernirmal/zsh/issues/42)) |
+There are currently no open issue reports. Completed findings are retained in Git history.
 
 ## Report structure and verification
 

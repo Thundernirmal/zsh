@@ -9,7 +9,7 @@ _zsh_tip_pool=(
   "Use *(D) when a glob should include hidden entries"
   "Start a command with a space to keep it out of saved history"
   "Run zhelp to find a command and queue an editable example"
-  "Run zdoctor after startup changes; restart after repairing a blocked fzf"
+  "Run zdoctor in an interactive shell; repair blocked fzf and restart"
   "Use ztheme show custom to inspect; ztheme use custom applies the palette"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"

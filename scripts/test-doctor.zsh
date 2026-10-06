@@ -217,6 +217,118 @@ test_glyph_reporting() {
   rehash
 }
 
+# Exercise the real initialization path in a fresh interactive command shell.
+# Initialization is explicit because -i -c intentionally skips prompt startup.
+test_fzf_integration_diagnostics() {
+  local fixture_home="$tmp_dir/doctor-integration-home" fakebin="$tmp_dir/doctor-integration-bin"
+  local real_zsh=$(command -v zsh) mode output rc expected reason
+  command mkdir -p -- "$fixture_home/.config"
+  command ln -s -- "$repo_dir" "$fixture_home/.config/zsh"
+  make_fakebin "$fakebin"
+  command rm -- "$fakebin/zsh"
+  command ln -s -- "$real_zsh" "$fakebin/zsh"
+  cat > "$fakebin/fzf" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >> "$ZDOCTOR_FZF_LOG"
+case "$1" in
+  --version)
+    case "$ZDOCTOR_FZF_MODE" in
+      old) printf '%s\n' '0.60.0' ;;
+      prerelease) printf '%s\n' '0.74.0-beta' ;;
+      *) printf '%s\n' '0.74.0' ;;
+    esac ;;
+  --zsh)
+    case "$ZDOCTOR_FZF_MODE" in
+      generation) exit 42 ;;
+      activation) printf '%s\n' 'return 1' ;;
+      *) printf '%s\n' ':' ;;
+    esac ;;
+  *) exit 1 ;;
+esac
+SH
+  command chmod +x -- "$fakebin/fzf"
+  # Any Secret Service access is a test failure, even if the caller suppresses output.
+  print -r -- '#!/bin/sh
+printf "%s\n" "$*" >> "$ZDOCTOR_SECRET_LOG"
+exit 1' > "$fakebin/secret-tool"
+
+  for mode in generation activation ready unchecked old prerelease missing; do
+    expected=1
+    reason=''
+    case $mode in
+      generation) reason='integration generation failed' ;;
+      activation) reason='integration initialization failed' ;;
+      ready|unchecked) expected=0 ;;
+    esac
+    [[ $mode != missing ]] || command mv "$fakebin/fzf" "$fakebin/fzf.hidden"
+    output=$(HOME="$fixture_home" XDG_CACHE_HOME="$tmp_dir/cache-$mode" \
+      PATH="$fakebin:$PATH" ZDOCTOR_FZF_MODE=$mode \
+      ZDOCTOR_FZF_LOG="$tmp_dir/fzf-$mode.log" \
+      ZDOCTOR_CURL_LOG="$tmp_dir/curl-$mode.log" \
+      ZDOCTOR_SECRET_LOG="$tmp_dir/secret-$mode.log" \
+      "$real_zsh" -fic '
+        source "$HOME/.config/zsh/init.zsh"
+        functions[_ui_plain_mode]="return 0"
+        if [[ $ZDOCTOR_FZF_MODE == missing ]]; then
+          PATH=${PATH%%:*}
+          rehash
+        fi
+        if [[ $ZDOCTOR_FZF_MODE != unchecked ]]; then
+          _fzf_initialize_zsh || true
+        fi
+        before_state=$(typeset -p _FZF_STATE _FZF_FOUND _FZF_CHECKED_PATH
+          typeset -p _FZF_INTEGRATION_STATE_BY_PATH _FZF_INTEGRATION_REASON_BY_PATH)
+        before_widgets=$(builtin zle -la; builtin bindkey -lL; builtin bindkey -L)
+        before_opts=$(typeset -p FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_CTRL_R_OPTS FZF_ALT_C_OPTS FZF_COMPLETION_OPTS 2>/dev/null)
+        before_cache=$(for cache_entry in "$XDG_CACHE_HOME"/**/*(DN); do
+          print -r -- "$cache_entry"
+          [[ ! -f $cache_entry ]] || print -r -- "$(<"$cache_entry")"
+        done)
+        : > "$ZDOCTOR_FZF_LOG"
+        zdoctor
+        doctor_rc=$?
+        after_state=$(typeset -p _FZF_STATE _FZF_FOUND _FZF_CHECKED_PATH
+          typeset -p _FZF_INTEGRATION_STATE_BY_PATH _FZF_INTEGRATION_REASON_BY_PATH)
+        after_widgets=$(builtin zle -la; builtin bindkey -lL; builtin bindkey -L)
+        after_opts=$(typeset -p FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS FZF_CTRL_R_OPTS FZF_ALT_C_OPTS FZF_COMPLETION_OPTS 2>/dev/null)
+        after_cache=$(for cache_entry in "$XDG_CACHE_HOME"/**/*(DN); do
+          print -r -- "$cache_entry"
+          [[ ! -f $cache_entry ]] || print -r -- "$(<"$cache_entry")"
+        done)
+        [[ $before_state == $after_state && $before_widgets == $after_widgets &&
+           $before_opts == $after_opts && $before_cache == $after_cache ]] || {
+          print -r -- "diagnosis mutated integration state"
+          [[ $before_state == $after_state ]] || print -r -- "state changed"
+          [[ $before_widgets == $after_widgets ]] || print -r -- "widgets changed"
+          [[ $before_opts == $after_opts ]] || print -r -- "options changed"
+          exit 99
+        }
+        print -r -- "retained-state=$_FZF_STATE reason=$_FZF_FOUND"
+        exit $doctor_rc
+      ' 2>&1); rc=$?
+    # Restore the absent-binary fixture for later runs/cleanup.
+    [[ ! -e $fakebin/fzf.hidden ]] || command mv "$fakebin/fzf.hidden" "$fakebin/fzf"
+    assert_status "$rc" "$expected" "$mode fzf diagnosis returns the expected aggregate status without mutation" || { print -u2 -r -- "$output"; return 1; }
+    if [[ $mode == unchecked ]]; then
+      assert_contains "$output" 'note: fzf integration state: unchecked (not initialized in this shell' 'unchecked command mode is described without initialization' || return 1
+      assert_contains "$output" 'retained-state=unchecked reason=not checked' 'unchecked state remains unchanged' || return 1
+    elif [[ $mode == ready ]]; then
+      assert_contains "$output" 'ok: fzf integration state: ready' 'ready integration stays successful' || return 1
+      assert_contains "$output" 'zdoctor: healthy' 'ready integration remains healthy' || return 1
+    else
+      assert_contains "$output" 'fail: fzf integration state: blocked' "$mode produces a failed integration diagnostic" || return 1
+      assert_not_contains "$output" 'ok: fzf integration state: blocked' "$mode has no contradictory success diagnostic" || return 1
+      assert_not_contains "$output" 'zdoctor: healthy' "$mode is not summarized as healthy" || return 1
+      [[ -z $reason ]] || assert_contains "$output" "retained-state=blocked reason=$reason" "$mode retains its original block reason" || return 1
+    fi
+    assert_not_contains "$(<"$tmp_dir/fzf-$mode.log")" '--zsh' "$mode diagnosis never regenerates integration" || return 1
+    [[ ! -e $tmp_dir/curl-$mode.log && ! -e $tmp_dir/secret-$mode.log ]] || {
+      print -u2 -- "not ok: $mode contacted network or Secret Service"; return 1
+    }
+    print -r -- "ok: $mode diagnosis never contacts network or Secret Service"
+  done
+}
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -229,6 +341,7 @@ main() {
   test_explicit_probes || return 1
   test_old_fzf_is_a_failure || return 1
   test_glyph_reporting || return 1
+  test_fzf_integration_diagnostics || return 1
 }
 
 main "$@"
