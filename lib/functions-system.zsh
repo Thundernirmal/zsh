@@ -766,7 +766,20 @@ zdoctor() {
     _zdoctor_report warn 'glyph resolver is not loaded yet; run `ztheme list` to load it'
   fi
 
-  _zdoctor_report ok "fzf integration state: ${_FZF_STATE:-unchecked} (found: ${_FZF_FOUND:-not checked})"
+  case ${_FZF_STATE:-unchecked} in
+    blocked)
+      _zdoctor_report fail "fzf integration state: blocked (found: ${_FZF_FOUND:-not checked}); repair the reported problem and restart the shell"
+      ;;
+    ready)
+      _zdoctor_report ok "fzf integration state: ready (found: ${_FZF_FOUND:-not checked})"
+      ;;
+    unchecked)
+      print -r -- 'note: fzf integration state: unchecked (not initialized in this shell; check a normal interactive shell)'
+      ;;
+    *)
+      _zdoctor_report warn "fzf integration state: ${_FZF_STATE} (unrecognized state; restart the shell)"
+      ;;
+  esac
   if command -v zoxide >/dev/null 2>&1; then
     if (( $+functions[zi] )); then
       _zdoctor_report ok 'zoxide integration is ready'

@@ -1,5 +1,6 @@
 # Fixed lazy loader for hook-free, on-demand tips in lib/tips-catalogue.zsh.
 # Finder percentage requests, minimum-height limits, and preview boundaries follow GUIDE.md.
+# Doctor reminders cover blocked integration failures and restarting after repair.
 # The catalogue checks matching tool capabilities when it loads on first use.
 # Package reminders follow the current workflows and ownership boundaries in GUIDE.md.
 
