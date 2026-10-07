@@ -18,7 +18,7 @@
 
 ## GUIDE.md and Website Compatibility
 
-The companion Astro repository, `zsh-web` (normally `~/projects/zsh-web`), publishes a committed snapshot of this repo. It reads `GUIDE.md`, command registrations, aliases, function implementations, help output, tips, and dependency guards without executing the shell configuration. Shell behavior remains authoritative; when its structure must change, update the website extractor rather than retaining an inaccurate shell interface for the parser.
+The companion Astro repository, [`zsh-web`](https://github.com/Thundernirmal/zsh-web), publishes a committed snapshot of this repo. It reads `GUIDE.md`, command registrations, aliases, function implementations, help output, tips, and dependency guards without executing the shell configuration. Shell behavior remains authoritative; when its structure must change, update the website extractor rather than retaining an inaccurate shell interface for the parser.
 
 ### Guide structure and links
 
