@@ -9,20 +9,44 @@ _zsh_zoxide_refresh_fzf_opts() {
   emulate -L zsh
 
   local managed context inherited=${_ZSH_ZOXIDE_INHERITED_FZF_OPTS:-} signature
-  local -a context_args
+  local global_inherited=${_FZF_INHERITED_DEFAULT_OPTS-${FZF_DEFAULT_OPTS-}}
+  local preview_command preview_window
+  local -a context_args args
 
   (( $+functions[_zsh_theme_fzf_chrome_opts] )) || return 0
-  signature="${_ZSH_FZF_ACTIVE_THEME:-}:${_ZSH_UI_COLOR_DEPTH:-}:${_ZSH_UI_GLYPH_TIER:-}:${ZSH_FZF_LAYOUT:-}:${(j:,:)_ZSH_THEME_CUSTOM_COLORS}:${inherited}:${NO_COLOR:-}"
+  _zsh_theme_fzf_preview_window || return 1
+  preview_window=$REPLY
+  signature="${_ZSH_FZF_ACTIVE_THEME:-}:${_ZSH_UI_COLOR_DEPTH:-}:${_ZSH_UI_GLYPH_TIER:-}:${ZSH_FZF_LAYOUT:-}:${(j:,:)_ZSH_THEME_CUSTOM_COLORS}:${preview_window}:${global_inherited}:${ZSH_FZF_EXTRA_OPTS:-}:${inherited}:${NO_COLOR:-}"
   [[ $_ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE == "$signature" ]] && return 0
 
   _zsh_theme_fzf_chrome_opts || return 1
   managed=$REPLY
-  _zsh_theme_fzf_context_args Directories 'Type to filter directories' 'Enter jump  Esc close'
+  _zsh_theme_fzf_context_args Directories 'Type to filter directories' 'Enter jump  Ctrl-P preview  Esc close'
   context_args=( "${reply[@]}" )
-  _zsh_theme_join_shell_args --scheme=path --no-multi "${context_args[@]}"
+  # zoxide replaces FZF_DEFAULT_OPTS with _ZO_FZF_OPTS and then drops its own
+  # picker defaults, so restore them: frecency order, exact matching, and exit
+  # on empty results. The preview runs in fzf's shell; {2..} is the path field.
+  if [[ -n ${NO_COLOR:-} ]]; then
+    preview_command='command ls -Cp --color=never --group-directories-first -- {2..}'
+  else
+    preview_command='command ls -Cp --color=always --group-directories-first -- {2..}'
+  fi
+  args=(
+    --exact --no-sort --keep-right --tabstop=1 --exit-0 --no-multi
+    '--bind=ctrl-z:ignore,btab:up,tab:down,ctrl-p:toggle-preview'
+    "${context_args[@]}"
+    "--preview=$preview_command"
+    "--preview-window=$preview_window"
+    --preview-label=Directory
+  )
+  _zsh_theme_join_shell_args "${args[@]}"
   context=$REPLY
 
+  # Layering matches the shared widgets: managed presentation, then the
+  # inherited global options, ZSH_FZF_EXTRA_OPTS, and inherited zoxide options.
   typeset -gx _ZO_FZF_OPTS="$managed $context"
+  [[ -n $global_inherited ]] && _ZO_FZF_OPTS+=" $global_inherited"
+  [[ -n ${ZSH_FZF_EXTRA_OPTS:-} ]] && _ZO_FZF_OPTS+=" ${ZSH_FZF_EXTRA_OPTS}"
   [[ -n $inherited ]] && _ZO_FZF_OPTS+=" $inherited"
   [[ -n ${NO_COLOR:-} ]] && _ZO_FZF_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
   typeset -g _ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE=$signature
@@ -34,6 +58,7 @@ _zsh_zoxide_cache_file_for_path() {
   emulate -L zsh
 
   local zoxide_path=$1 cache_home
+  integer echo_flag=0 symlinks_flag=0
   local -A file_info
 
   if [[ -n ${XDG_CACHE_HOME:-} && $XDG_CACHE_HOME == /* ]]; then
@@ -46,7 +71,11 @@ _zsh_zoxide_cache_file_for_path() {
 
   zmodload zsh/stat 2>/dev/null || return 1
   zstat -H file_info -- "$zoxide_path" 2>/dev/null || return 1
-  REPLY="${cache_home}/zsh/zoxide/init-${_ZSH_ZOXIDE_CACHE_SCHEMA}-${file_info[device]}-${file_info[inode]}-${file_info[size]}-${file_info[mtime]}-${file_info[ctime]}-zsh-${ZSH_VERSION}.zsh"
+  # zoxide bakes these settings into its generated functions; zoxide enables
+  # each one only for the exact value 1.
+  [[ ${_ZO_ECHO-} == 1 ]] && echo_flag=1
+  [[ ${_ZO_RESOLVE_SYMLINKS-} == 1 ]] && symlinks_flag=1
+  REPLY="${cache_home}/zsh/zoxide/init-${_ZSH_ZOXIDE_CACHE_SCHEMA}-${file_info[device]}-${file_info[inode]}-${file_info[size]}-${file_info[mtime]}-${file_info[ctime]}-echo${echo_flag}-symlinks${symlinks_flag}-zsh-${ZSH_VERSION}.zsh"
 }
 
 _zsh_zoxide_cache_file_is_safe() {
@@ -226,7 +255,7 @@ if (( $+commands[zoxide] )); then
     __zoxide_zi() {
       _zsh_zoxide_refresh_fzf_opts || return 1
       if (( ! $+functions[_fzf_require_ready] )); then
-        print -u2 -r -- 'zsh config: fzf 0.68.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
+        print -u2 -r -- "zsh config: fzf ${_FZF_MIN_VERSION:-0.68.0} or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell."
         return 1
       fi
       _fzf_require_ready || return 1

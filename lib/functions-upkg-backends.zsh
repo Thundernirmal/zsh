@@ -408,13 +408,20 @@ _upkg_run_search_nix() {
   _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
-  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   combined="${output}"$'\n'"${diagnostic}"
+  if (( rc != 1 )) || [[ ${(L)combined} != *'no packages matched'* && ${(L)combined} != *'no results for'* ]]; then
+    [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  fi
   _upkg_check_interrupt "$rc" || return $?
 
   if (( rc != 0 )); then
     output_lower=${(L)combined}
     if (( rc == 1 )) && [[ $output_lower == *'no packages matched'* || $output_lower == *'no results for'* ]]; then
+      # The summary reports no matches once; keep only unrelated native warnings.
+      for line in ${(f)diagnostic}; do
+        [[ ${(L)line} == *'no packages matched'* || ${(L)line} == *'no results for'* ]] && continue
+        print -u2 -r -- "$line"
+      done
       _upkg_finish_search_results nix
       return 0
     fi

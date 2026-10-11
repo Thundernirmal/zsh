@@ -781,6 +781,8 @@ completion=0
 [[ $FZF_COMPLETION_OPTS == *Completions* && $FZF_COMPLETION_PATH_OPTS == *Paths* && $FZF_COMPLETION_DIR_OPTS == *Directories* ]] && completion=1
 preserved=0
 [[ $FZF_DEFAULT_OPTS == *--user-default* && $FZF_DEFAULT_OPTS == *--tabstop=4* && $FZF_CTRL_T_OPTS == *--user-files* && $FZF_COMPLETION_PATH_OPTS == *--user-paths* && $_ZO_FZF_OPTS == *--user-zoxide* ]] && preserved=1
+zoxide_layers=0
+[[ $_ZO_FZF_OPTS == *--exact* && $_ZO_FZF_OPTS == *--no-sort* && $_ZO_FZF_OPTS == *--exit-0* && $_ZO_FZF_OPTS == *--preview=* && $_ZO_FZF_OPTS == *--user-default*--tabstop=4*--user-zoxide* ]] && zoxide_layers=1
 
 first_default=$FZF_DEFAULT_OPTS
 ZSH_UI_THEME=nord
@@ -818,7 +820,7 @@ preview_keys=0
 source "$HOME/.config/zsh/40-fzf.zsh"
 duplicates=0
 [[ $FZF_DEFAULT_OPTS == *--user-default*--user-default* || $FZF_COMPLETION_PATH_OPTS == *--user-paths*--user-paths* || $_ZO_FZF_OPTS == *--user-zoxide*--user-zoxide* ]] && duplicates=1
-print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain preview_keys=$preview_keys duplicates=$duplicates"' > "$script_file"
+print -r -- "structured=$structured contexts=$contexts completion=$completion preserved=$preserved zoxide_layers=$zoxide_layers refreshed=$refreshed custom_refreshed=$custom_refreshed nocolor=$nocolor preview_plain=$preview_plain preview_keys=$preview_keys duplicates=$duplicates"' > "$script_file"
 
   HOME="$tmp_home" \
     XDG_CACHE_HOME="$case_dir/cache" \
@@ -834,7 +836,7 @@ print -r -- "structured=$structured contexts=$contexts completion=$completion pr
   diagnostics=$(file_contents "$stderr_file")
 
   assert_status "$cmd_status" 0 'theme-aware fzf option fixture completes' || return 1
-  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 preview_keys=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
+  assert_equals "$output" 'structured=1 contexts=1 completion=1 preserved=1 zoxide_layers=1 refreshed=1 custom_refreshed=1 nocolor=1 preview_plain=1 preview_keys=1 duplicates=0' 'fzf options refresh by signature while preserving each user layer once' || return 1
   assert_equals "$diagnostics" '' 'theme-aware fzf option refresh stays quiet' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 1 'theme/layout/no-color refresh does not repeat version validation' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 1 'theme/layout/no-color refresh does not regenerate integration' || return 1
@@ -1071,6 +1073,20 @@ printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }
   assert_matching_lines "$(file_contents "$log_file")" 'init zsh' 1 'warm startup does not regenerate zoxide integration' || return 1
   cache_files=( "$cache_root"/zsh/zoxide/init-*.zsh(N) )
   assert_equals "${#cache_files[@]}" 1 'cold startup creates one validated zoxide cache file' || return 1
+
+  # zoxide bakes _ZO_ECHO and _ZO_RESOLVE_SYMLINKS into its generated code.
+  for phase in echo resolve; do
+    ZOXIDE_TEST_LOG="$log_file" XDG_CACHE_HOME="$cache_root" \
+      _ZO_ECHO=$([[ $phase == echo ]] && print 1) _ZO_RESOLVE_SYMLINKS=$([[ $phase == resolve ]] && print 1) \
+      PATH="$fakebin:${zsh_bin:h}" "$zsh_bin" -fc '
+        source "$1/25-theme.zsh"
+        source "$1/30-zoxide.zsh"
+      ' zsh "$repo_dir" >/dev/null 2>&1
+    assert_status "$?" 0 "zoxide $phase setting startup exits cleanly" || return 1
+  done
+  assert_matching_lines "$(file_contents "$log_file")" 'init zsh' 3 'zoxide init settings select separate caches' || return 1
+  cache_files=( "$cache_root"/zsh/zoxide/init-*.zsh(N) )
+  assert_equals "${#cache_files[@]}" 3 'each zoxide init setting combination has its own cache file' || return 1
 }
 
 test_fzf_partial_integration_rollback() {

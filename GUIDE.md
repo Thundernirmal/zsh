@@ -399,11 +399,11 @@ It is on demand and installs no prompt or command-cycle hook. Its fixed reposito
 ```zsh
 zdoctor              # local checks only
 zdoctor --network    # also probe the myip and weather endpoints
-zdoctor --secrets    # also check secret-tool (values are never retrieved)
+zdoctor --secrets    # also ping Secret Service over D-Bus (values are never retrieved)
 zdoctor --help
 ```
 
-It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. The exit status is nonzero while any failure is present; warnings alone keep it zero.
+It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. `--secrets` sends only a D-Bus `Peer.Ping` through `gdbus`, which cannot unlock, search, or read credentials; it fails when Secret Service does not answer and warns when `gdbus` is missing. The exit status is nonzero while any failure is present; warnings alone keep it zero.
 
 A recorded blocked fzf integration is a failure even when its binary version is supported; the diagnostic preserves the block reason. Repair that problem and restart the shell. Ready integration passes. An unchecked integration is reported as a note: command-mode shells intentionally skip prompt integration, so run `zdoctor` in a normal interactive shell to check it. Diagnosis never initializes fzf, regenerates integration, edits its cache, or changes widgets.
 
@@ -490,9 +490,9 @@ zi projects
 
 Zoxide initialization supports `NO_UNSET` even before `precmd_functions` or `chpwd_functions` exist. If integration loading fails, existing hooks are restored and previously absent hook arrays remain unset. Startup leaves the caller's `NO_UNSET` setting unchanged.
 
-The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets without replacing zoxide's scoring or candidate generation.
+The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets. Because zoxide replaces `FZF_DEFAULT_OPTS` with that value and then omits its own picker defaults, the managed value restores them: `--exact` matching, `--no-sort` so frecency order survives typing, `--keep-right`, `--exit-0` for empty results, Tab/Shift-Tab movement, and a directory listing preview (Ctrl-P toggles it). Inherited `FZF_DEFAULT_OPTS`, then `ZSH_FZF_EXTRA_OPTS`, then inherited `_ZO_FZF_OPTS` follow the managed layer, matching the order used by the shared widgets.
 
-Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata and Zsh version, so warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead. A rejected cache directory is never used for publication or failure cleanup; private fallback files are removed after activation.
+Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata, the `_ZO_ECHO` and `_ZO_RESOLVE_SYMLINKS` settings that zoxide writes into its generated functions, and the Zsh version, so changing either setting selects a fresh integration and warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead. A rejected cache directory is never used for publication or failure cleanup; private fallback files are removed after activation.
 
 ### fzf requirement and startup
 
@@ -508,7 +508,7 @@ The cache is stored below `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` and is keye
 
 Failed integration activation restores prior fzf functions, widgets, keymaps, aliases, and finder options, leaving no partial entry points. Restart the shell after fixing a blocked build. Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows and print an actionable diagnostic. Non-interactive sourcing and `zsh -i -c ...` remain silent and do not initialize ZLE bindings.
 
-Finder presentation is compiled separately from the trusted integration cache. Changing theme, layout, glyph mode, terminal width class, or `NO_COLOR` refreshes future launches without rerunning `fzf --version` or regenerating `fzf --zsh`. Existing `FZF_DEFAULT_OPTS`, widget options, completion options, and `_ZO_FZF_OPTS` are captured once and appended after managed presentation. `ZSH_FZF_EXTRA_OPTS` follows the inherited global layer; `--no-color` is always final when requested.
+Finder presentation is compiled separately from the trusted integration cache. Changing theme, layout, glyph mode, terminal width class, or `NO_COLOR` refreshes future launches without rerunning `fzf --version` or regenerating `fzf --zsh`. Existing `FZF_DEFAULT_OPTS`, widget options, completion options, and `_ZO_FZF_OPTS` are captured once and appended after managed presentation. `ZSH_FZF_EXTRA_OPTS` follows the inherited global layer, including for `zi`; `--no-color` is always final when requested.
 
 ### Keybindings
 
@@ -554,7 +554,7 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 
 #### extract
 
-Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. Empty or missing destination values are rejected before extraction. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression and refuse existing paths. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Input symlinks are passed to the native unpacker without resolving their targets; gzip refuses them for default in-place or `--keep` extraction. Destination streaming can read a compressed input link, retains its target, and names the output from the supplied link filename. Use `--` before a leading-dash filename.
+Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. Empty or missing destination values are rejected before extraction. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression, refuse existing paths, and keep the compressed input's permissions as the native in-place decompressors do. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Input symlinks are passed to the native unpacker without resolving their targets; gzip refuses them for default in-place or `--keep` extraction. Destination streaming can read a compressed input link, retains its target, and names the output from the supplied link filename. Use `--` before a leading-dash filename.
 
 #### ff and ft
 
@@ -726,7 +726,7 @@ upkg search ripgrep --only=nix
 upkg search ripgrep viewer --only=brew,npm
 ```
 
-Results are normalized into one table with manager, package, available version, and a cheap native description when available. Search parsers use stdout records only; native warnings and errors stay on stderr and never become package rows or descriptions. Flatpak empty tab-separated fields keep their position. npm search recognizes publication dates and versions across layouts with omitted descriptions/authors or empty keywords. Arch search disables color, and npm search explicitly selects uncolored parseable output regardless of inherited JSON settings. DNF search keeps the native no-match diagnostic enabled (no `-q`) and runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. A no-match result is summarized once. Search summaries count attempted managers, including failures and cancellations, and retain earlier results when interrupted. Managers not started after cancellation are not counted. Backend failures name the affected managers, and other managers continue.
+Results are normalized into one table with manager, package, available version, and a cheap native description when available. Search parsers use stdout records only; native warnings and errors stay on stderr and never become package rows or descriptions. Flatpak empty tab-separated fields keep their position. npm search recognizes publication dates and versions across layouts with omitted descriptions/authors or empty keywords. Arch search disables color, and npm search explicitly selects uncolored parseable output regardless of inherited JSON settings. DNF search keeps the native no-match diagnostic enabled (no `-q`) and runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. Nix's native no-results error is likewise not repeated, while its other warnings stay on stderr. A no-match result is summarized once. Search summaries count attempted managers, including failures and cancellations, and retain earlier results when interrupted. Managers not started after cancellation are not counted. Backend failures name the affected managers, and other managers continue.
 
 Nix search uses native `--quiet` to suppress evaluation progress while preserving warnings and errors. See the [Nix logging options](https://nix.dev/manual/nix/2.34/command-ref/new-cli/nix3-search.html#logging-related-options). Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
 
@@ -765,7 +765,7 @@ Tab completion describes `--dry-run` as an update inventory or cleanup preview, 
 
 Search progress is cleared when each query finishes, before diagnostics, cancellation returns, or the final summary.
 
-Multi-manager runs continue after an ordinary backend failure. Cancellation stops the remaining managers and cleanup phases, preserving status `130` (INT), `143` (TERM), or `129` (HUP):
+Multi-manager runs continue after an ordinary backend failure. Cancellation stops the remaining managers and cleanup phases, preserving status `130` (INT), `143` (TERM), or `129` (HUP). Pressing Ctrl-C while a native upgrade or cleanup command runs still prints the cancelled summary before `upkg` returns `130`:
 
 | State | Meaning |
 |---|---|
@@ -828,7 +828,7 @@ upkg clean --sudo --only=apt
 | `npkg upgrade [pkg ...]` / `up` / `update` | Upgrade all or selected elements |
 | `npkg help` | Show help |
 
-Bare install names become `nixpkgs#<name>`. Flake references, paths, and arguments beginning with `-` pass through without that expansion. Use `nix` directly for advanced flags not represented by the wrapper.
+Bare install names become `nixpkgs#<name>`. Flake references and paths pass through without that expansion. When any `add` argument begins with `-`, every argument passes to `nix profile add` unchanged, because options such as `--file`, `--expr`, and `--priority <n>` change how the other operands are read; write full installables such as `nixpkgs#bat` in that form. Use `nix` directly for advanced flags not represented by the wrapper.
 
 `refresh`, `outdated`/`check`/`diff`, and `find`/`pick`/`fzf` handle `-h` or `--help` before any Nix query, cache access, or picker launch. Help returns zero. Refresh and outdated aliases accept no operands or profile flags; unsupported arguments fail before work. Picker aliases preserve query words, including leading dashes; `--` ends help recognition and is removed from the query, so `npkg find -- --help` searches for the literal word `--help`. A help word before `--` shows usage, even after other query words.
 

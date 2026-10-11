@@ -630,7 +630,7 @@ _zdoctor_usage() {
   print ''
   print 'Network endpoints and Secret Service are probed only with:'
   print '  --network   Check the myip and weather endpoints (curl, 8s timeout)'
-  print '  --secrets   Check secret-tool without retrieving any value'
+  print '  --secrets   Ping Secret Service over D-Bus without retrieving any value'
 }
 
 # On-demand setup and integration diagnosis. Reads local state only unless
@@ -639,8 +639,8 @@ zdoctor() {
   emulate -L zsh
 
   local arg repo_dir install_base module failures=0 warnings=0
-  local fzf_version fzf_major fzf_minor fzf_patch current_user
-  local -a modules missing_modules
+  local fzf_version fzf_minimum current_user
+  local -a modules missing_modules fzf_parts minimum_parts
   local -i check_network=0 check_secrets=0
 
   for arg in "$@"; do
@@ -723,24 +723,25 @@ zdoctor() {
       _zdoctor_report fail "required tool missing: $module (see scripts/check-deps.sh for install hints)"
     fi
   done
+  fzf_minimum=${_FZF_MIN_VERSION:-0.68.0}
   if command -v fzf >/dev/null 2>&1; then
     fzf_version=$(command fzf --version 2>/dev/null) || fzf_version=''
     fzf_version=${${fzf_version%% *}:-}
     if [[ $fzf_version == <->.<-> || $fzf_version == <->.<->.<-> ]]; then
-      fzf_major=${fzf_version%%.*}
-      fzf_minor=${${fzf_version#*.}%%.*}
-      fzf_patch=0
-      [[ $fzf_version == *.*.* ]] && fzf_patch=${fzf_version##*.}
-      if (( fzf_major > 0 || fzf_minor > 68 || ( fzf_minor == 68 && fzf_patch >= 0 ) )); then
-        _zdoctor_report ok "required tool: fzf $fzf_version (minimum 0.68.0)"
+      fzf_parts=( "${(@s:.:)fzf_version}" 0 )
+      minimum_parts=( "${(@s:.:)fzf_minimum}" 0 0 )
+      if (( fzf_parts[1] != minimum_parts[1] ? fzf_parts[1] > minimum_parts[1] :
+            fzf_parts[2] != minimum_parts[2] ? fzf_parts[2] > minimum_parts[2] :
+            fzf_parts[3] >= minimum_parts[3] )); then
+        _zdoctor_report ok "required tool: fzf $fzf_version (minimum $fzf_minimum)"
       else
-        _zdoctor_report fail "fzf $fzf_version is older than the 0.68.0 minimum"
+        _zdoctor_report fail "fzf $fzf_version is older than the $fzf_minimum minimum"
       fi
     else
-      _zdoctor_report fail 'fzf version is unparseable (minimum 0.68.0)'
+      _zdoctor_report fail "fzf version is unparseable (minimum $fzf_minimum)"
     fi
   else
-    _zdoctor_report fail 'required tool missing: fzf (minimum 0.68.0)'
+    _zdoctor_report fail "required tool missing: fzf (minimum $fzf_minimum)"
   fi
 
   for module in bat tree jq secret-tool nix; do
@@ -829,10 +830,17 @@ zdoctor() {
   fi
 
   if (( check_secrets )); then
-    if command -v secret-tool >/dev/null 2>&1; then
-      _zdoctor_report ok 'secret-tool is installed; zdoctor never retrieves credential values'
-    else
+    if ! command -v secret-tool >/dev/null 2>&1; then
       _zdoctor_report fail 'secret-tool is not installed'
+    elif ! command -v gdbus >/dev/null 2>&1; then
+      _zdoctor_report warn 'gdbus is missing, so Secret Service reachability cannot be checked'
+    # Peer.Ping reaches the service without unlocking, searching, or reading items.
+    elif command gdbus call --session --dest org.freedesktop.secrets \
+        --object-path /org/freedesktop/secrets \
+        --method org.freedesktop.DBus.Peer.Ping --timeout 5 >/dev/null 2>&1; then
+      _zdoctor_report ok 'Secret Service is reachable; no credential values were retrieved'
+    else
+      _zdoctor_report fail 'Secret Service is unreachable; no credential values were requested'
     fi
   else
     print -r -- 'note: Secret Service not contacted (pass --secrets to check secret-tool)'

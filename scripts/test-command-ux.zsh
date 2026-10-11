@@ -192,8 +192,13 @@ test_extract_stream_safety() {
   command mkdir -p -- "$root/dest" "$fakebin"
   print -r -- payload > "$root/input"
   command gzip -c -- "$root/input" > "$root/input.gz"
+  command chmod 644 -- "$root/input.gz"
   extract --destination "$root/dest" "$root/input.gz" || return 1
   assert_file_contains "$root/dest/input" payload 'bare compressed destination contains decompressed bytes' || return 1
+  local -a output_mode
+  zmodload -F zsh/stat b:zstat
+  zstat -A output_mode +mode -- "$root/dest/input" || return 1
+  assert_status "$(( output_mode[1] & 8#777 ))" "$(( 8#644 ))" 'destination output keeps the input permissions' || return 1
   [[ -f $root/input.gz ]] || return 1
   print -r -- keep > "$root/dest/input"
   extract --destination "$root/dest" "$root/input.gz" >/dev/null 2>&1; rc=$?
@@ -311,6 +316,10 @@ test_npkg_helper_arguments() (
   : > "$log_file"
   npkg add bat 'github:example/flake#pkg' || return 1
   [[ $(<"$log_file") == 'native:profile|add|nixpkgs#bat|github:example/flake#pkg' ]] || return 1
+  : > "$log_file"
+  npkg add hello --file default.nix || return 1
+  [[ $(<"$log_file") == 'native:profile|add|hello|--file|default.nix' ]] || return 1
+  print 'ok: npkg add passes every argument through when any option is present'
   : > "$log_file"
   npkg list --profile '/fixture/two words' || return 1
   [[ $(<"$log_file") == 'native:profile|list|--profile|/fixture/two words' ]] || return 1

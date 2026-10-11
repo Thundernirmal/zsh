@@ -226,7 +226,7 @@ _zsh_help_palette() {
   example=$selection
   [[ -n $example ]] || return 0
 
-  print -z -- "$example"
+  print -rz -- "$example"
 }
 
 _zsh_help_close_matches() {

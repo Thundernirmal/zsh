@@ -70,7 +70,10 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
   )
 
   if (( $+commands[zoxide] )); then
-    _zsh_tip_pool+=("Use zi to select a remembered directory interactively")
+    _zsh_tip_pool+=(
+      "Use zi to select a remembered directory interactively"
+      "Press Ctrl+P in zi to preview a directory; typing keeps zoxide's ranking"
+    )
   fi
 fi
 
@@ -86,12 +89,14 @@ if (( $+functions[cgm] )); then
     "Run cgm list to show saved names without retrieving values"
     "Run cgm status to check which saved names are exported in this shell"
     "Run cgm check to ping Secret Service without retrieving values"
+    "Run zdoctor --secrets to include a Secret Service ping in the diagnosis"
   )
 fi
 
 if (( $+commands[nix] )); then
   _zsh_tip_pool+=(
     "Run npkg add bat to add a package to the current Nix profile"
+    "Use nixpkgs#bat with npkg add when also passing a nix option like --priority"
     "Run npkg search ripgrep to search nixpkgs"
     "Run npkg list to show the current Nix profile"
   )

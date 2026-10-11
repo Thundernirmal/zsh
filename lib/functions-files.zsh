@@ -11,7 +11,8 @@ _extract_usage() {
 _extract_stream_to() {
   emulate -L zsh
 
-  local output=$1 source=$2 tool=$3 temp rc
+  local output=$1 source=$2 tool=$3 temp rc permissions
+  local -a source_mode
 
   temp=$(command mktemp "${output}.partial.XXXXXX") || {
     print -u2 -r -- "extract: cannot create a temporary output beside '$output'"
@@ -19,6 +20,15 @@ _extract_stream_to() {
   }
   {
     command "$tool" -c "$source" >| "$temp" || return $?
+    # mktemp creates 0600 files; keep the input's permissions like the native
+    # in-place decompressors do.
+    zmodload -F zsh/stat b:zstat 2>/dev/null &&
+      zstat -A source_mode +mode -- "$source" 2>/dev/null &&
+      printf -v permissions '%o' $(( source_mode[1] & 8#777 )) &&
+      command chmod -- "$permissions" "$temp" || {
+        print -u2 -r -- "extract: cannot apply the input permissions to '$output'"
+        return 1
+      }
     # Same-directory hard-link publication refuses every existing destination,
     # including a dangling symlink, without a check-then-overwrite race.
     command ln -T -- "$temp" "$output" || {

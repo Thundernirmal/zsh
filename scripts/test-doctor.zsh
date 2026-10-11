@@ -71,6 +71,10 @@ exit 0' >"$fakebin/fzf"
 printf "%s\n" "$*" >> "$ZDOCTOR_CURL_LOG"
 exit ${ZDOCTOR_CURL_STATUS:-0}' >"$fakebin/curl"
   command chmod +x -- "$fakebin/curl"
+  print -r -- '#!/bin/sh
+[ -z "${ZDOCTOR_GDBUS_LOG:-}" ] || printf "%s\n" "$*" >> "$ZDOCTOR_GDBUS_LOG"
+exit ${ZDOCTOR_GDBUS_STATUS:-0}' >"$fakebin/gdbus"
+  command chmod +x -- "$fakebin/gdbus"
 }
 
 test_usage() {
@@ -167,9 +171,17 @@ test_explicit_probes() {
   assert_status "$rc" 1 'zdoctor fails unreachable endpoints' || return 1
   assert_contains "$output" 'myip endpoint is unreachable' 'zdoctor reports endpoint failures' || return 1
 
-  output=$(HOME="$fixture_home" zdoctor --secrets 2>&1); rc=$?
-  assert_status "$rc" 0 'zdoctor checks secrets without failing a healthy fixture' || return 1
-  assert_contains "$output" 'never retrieves credential values' 'zdoctor never retrieves secret values' || { PATH=$old_path; rehash; return 1; }
+  local gdbus_log="$tmp_dir/doctor-gdbus.log"
+  output=$(HOME="$fixture_home" ZDOCTOR_GDBUS_LOG=$gdbus_log zdoctor 2>&1)
+  [[ ! -e $gdbus_log ]] || { print -u2 -- 'not ok: zdoctor contacts Secret Service only with --secrets'; PATH=$old_path; rehash; return 1; }
+  print -- 'ok: zdoctor contacts Secret Service only with --secrets'
+  output=$(HOME="$fixture_home" ZDOCTOR_GDBUS_LOG=$gdbus_log zdoctor --secrets 2>&1); rc=$?
+  assert_status "$rc" 0 'zdoctor checks secrets without failing a healthy fixture' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'Secret Service is reachable; no credential values were retrieved' 'zdoctor never retrieves secret values' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$(<"$gdbus_log")" 'org.freedesktop.DBus.Peer.Ping' 'zdoctor probes Secret Service with Peer.Ping only' || { PATH=$old_path; rehash; return 1; }
+  output=$(HOME="$fixture_home" ZDOCTOR_GDBUS_STATUS=1 zdoctor --secrets 2>&1); rc=$?
+  assert_status "$rc" 1 'zdoctor fails an unreachable Secret Service' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'Secret Service is unreachable' 'zdoctor reports an unreachable Secret Service' || { PATH=$old_path; rehash; return 1; }
   PATH=$old_path
   rehash
 }
