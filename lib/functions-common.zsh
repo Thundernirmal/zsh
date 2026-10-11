@@ -2,7 +2,7 @@
 
 _zsh_require_fzf() {
   if (( ! $+functions[_fzf_require_ready] )); then
-    print -u2 -r -- 'zsh config: fzf 0.68.0 or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell.'
+    print -u2 -r -- "zsh config: fzf ${_FZF_MIN_VERSION:-0.68.0} or newer is required (found: configuration guard unavailable). Upgrade fzf and restart the shell."
     return 1
   fi
   _fzf_require_ready

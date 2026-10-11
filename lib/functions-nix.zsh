@@ -29,7 +29,7 @@
     print '  npkg upgrade'
     print ''
     print 'Notes:'
-    print '  - Bare install names are expanded to nixpkgs#<name>'
+    print '  - Bare install names become nixpkgs#<name>; any option passes all add arguments to nix unchanged'
     print '  - npkg find searches a cached list of nixpkgs attribute names'
     print '  - npkg refresh and outdated need jq'
     print '  - Interactive add/find/remove needs jq and fzf 0.68.0+'
@@ -935,7 +935,9 @@
           return
         fi
 
-        if [[ $1 == -* ]]; then
+        # Options change how operands are read (for example --file, --expr, or
+        # option values), so any option selects native passthrough.
+        if (( ${@[(I)-*]} )); then
           _npkg_nix profile add "$@"
           return
         fi

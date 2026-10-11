@@ -774,9 +774,10 @@ done
   assert_contains "$output" 'Search summary: 0 result(s) across 1 manager(s).' 'no-match search prints compact summary' || return 1
   assert_matching_lines "$output" 'No matches found' 1 'no-match search prints one no-match message' || return 1
 
-  output=$(upkg search nomatch --only=nix)
+  output=$(upkg search nomatch --only=nix 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 0 'nix lowercase no-result search succeeds' || return 1
+  assert_not_contains "$output" 'error: no results' 'nix no-result search does not repeat the native error' || return 1
   assert_contains "$output" 'No matches found across selected managers.' 'nix lowercase no-result search reports no matches' || return 1
 
   output=$(upkg search broad --only=brew 2>&1)
@@ -1097,6 +1098,20 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 130 'npm cancellation propagates through manager loop' || return 1
   assert_not_contains "$output" '==> Homebrew' 'npm cancellation stops subsequent managers' || return 1
+
+  # Ctrl-C reaches the shell itself, not only the backend exit status.
+  local saved_flatpak_fake
+  saved_flatpak_fake=$(<"$fakebin/flatpak")
+  write_fake flatpak '
+kill -INT "$PPID"
+exit 0
+'
+  output=$(run_upkg_with_managers 'flatpak brew' upgrade --only=flatpak,brew 2>&1)
+  cmd_status=$?
+  print -r -- "$saved_flatpak_fake" >"$fakebin/flatpak"
+  assert_status "$cmd_status" 130 'shell-level Ctrl-C during upgrade returns 130' || return 1
+  assert_contains "$output" 'flatpak: cancelled' 'shell-level Ctrl-C during upgrade is summarized' || return 1
+  assert_not_contains "$output" '==> Homebrew' 'shell-level Ctrl-C stops subsequent managers' || return 1
 
   output=$(upkg --dry-run --only=flatpak)
   assert_contains "$output" 'org.example.App stable' 'bare dry-run previews selected managers' || return 1

@@ -8,5 +8,6 @@ zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
 zstyle ':completion:*' squeeze-slashes true
 
 # Better kill completion (show process info)
-zstyle ':completion:*:*:*:*:processes' command "ps -u $USER -o pid,user,comm,cmd -w -w"
+# EUID is always set by zsh, unlike USER in minimal containers.
+zstyle ':completion:*:*:*:*:processes' command "ps -u $EUID -o pid,user,comm,cmd -w -w"
 zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#) ([0-9a-z-]#)*=01;34=0=01'

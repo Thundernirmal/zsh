@@ -458,6 +458,10 @@ _upkg_capture_query() {
 
 # Ordinary backend failures may continue; cancellation must stop orchestration.
 _upkg_check_interrupt() {
+  local interrupt_status=$1
+  # upkg's INT trap records Ctrl-C even when a backend exits cleanly.
+  (( ${_UPKG_TRAPPED_INT:-0} )) && interrupt_status=130
+  set -- "$interrupt_status"
   case $1 in
     129|130|143)
       _UPKG_INTERRUPTED_STATUS=$1
@@ -992,7 +996,7 @@ upkg() {
   local -A selected_map skipped_map alternate_map display_seen
 
   local _UPKG_THEME_MODE=''
-  local -i _UPKG_INTERRUPTED_STATUS=0
+  local -i _UPKG_INTERRUPTED_STATUS=0 _UPKG_TRAPPED_INT=0
 
   while (( $# > 0 )); do
     case $1 in
@@ -1276,6 +1280,10 @@ upkg() {
 
   run_order=( "${_UPKG_SELECTED_MANAGERS[@]}" )
 
+  # An interactive shell aborts the whole function when a foreground child dies
+  # from Ctrl-C. A local INT trap keeps control here so cancellation is summarized.
+  trap '_UPKG_TRAPPED_INT=1' INT
+
   for manager in "${run_order[@]}"; do
     case "${cmd}:${manager}" in
       outdated:apt) _upkg_run_outdated_apt ;;
@@ -1325,6 +1333,8 @@ upkg() {
         ;;
     esac
 
+    # A backend that returned without checking its status still stops here.
+    (( _UPKG_TRAPPED_INT && ! _UPKG_INTERRUPTED_STATUS )) && _upkg_check_interrupt 130
     _upkg_record_summary "$manager" "$_UPKG_LAST_STATE" "$_UPKG_LAST_DETAIL"
     if (( _UPKG_INTERRUPTED_STATUS )); then
       exit_code=$_UPKG_INTERRUPTED_STATUS
