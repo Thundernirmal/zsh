@@ -52,6 +52,8 @@ _zsh_theme_is_builtin() {
 _zsh_theme_load_registry() {
   (( _ZSH_THEME_REGISTRY_LOADED )) && return 0
   [[ -r $_ZSH_THEME_MODULE_DIR/lib/theme-registry.zsh ]] || return 1
+  # Parse trusted helpers without user or global alias expansion.
+  setopt localoptions no_aliases
   source "$_ZSH_THEME_MODULE_DIR/lib/theme-registry.zsh" || return 1
   typeset -gi _ZSH_THEME_REGISTRY_LOADED=1
 }
@@ -135,6 +137,8 @@ _zsh_theme_ansi_code() {
 _zsh_theme_load_color_helpers() {
   (( _ZSH_THEME_COLOR_HELPERS_LOADED )) && return 0
   [[ -r $_ZSH_THEME_MODULE_DIR/lib/theme-color.zsh ]] || return 1
+  # Parse trusted helpers without user or global alias expansion.
+  setopt localoptions no_aliases
   source "$_ZSH_THEME_MODULE_DIR/lib/theme-color.zsh" || return 1
   typeset -gi _ZSH_THEME_COLOR_HELPERS_LOADED=1
 }

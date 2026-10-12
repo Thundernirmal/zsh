@@ -193,7 +193,7 @@ test_static_values() {
   assert_equals "${(j: :)values}" 'set list status check env unset delete help' 'cgm commands match the public interface' || return 1
   assert_unique 'cgm command values are unique' "${values[@]}" || return 1
 
-  assert_equals "${(j: :)_ZSH_EXTRACT_EXTENSIONS}" 'tar.bz2 tar.gz tar.xz tar.zst bz2 rar gz tar tbz2 tgz tzst zip Z 7z' 'extract completion covers every supported extension' || return 1
+  assert_equals "${(j: :)_ZSH_EXTRACT_EXTENSIONS}" 'tar.bz2 tar.gz tar.xz tar.zst tar.lzma tar.lz bz2 rar gz xz lzma zst tar tbz tbz2 tgz txz tzst zip Z 7z' 'extract completion covers every supported extension' || return 1
   assert_unique 'extract extensions are unique' "${_ZSH_EXTRACT_EXTENSIONS[@]}" || return 1
 }
 

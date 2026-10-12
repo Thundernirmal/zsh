@@ -47,6 +47,13 @@ zsh ./scripts/test-query-launcher.zsh
 zsh ./scripts/test-completions.zsh
 zsh ./scripts/test-help.zsh
 zsh ./scripts/test-doctor.zsh
+# CI also runs the real-fzf PTY suite against each supported fzf release.
+if (( $+commands[python3] && $+commands[fzf] )); then
+  python3 ./scripts/test-fzf-pty.py >/dev/null
+  print -- 'ok: real fzf PTY checks'
+else
+  print -- 'skip: real fzf PTY checks require python3 and fzf'
+fi
 
 if [[ $repo_dir == ${HOME:-}/.config/zsh ]]; then
   zsh -fc 'source "$HOME/.config/zsh/init.zsh"'

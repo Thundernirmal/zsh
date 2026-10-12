@@ -353,7 +353,7 @@ _fzf_cache_file_for_path() {
 
   if [[ -n ${XDG_CACHE_HOME:-} && ${XDG_CACHE_HOME} == /* ]]; then
     cache_home=$XDG_CACHE_HOME
-  elif [[ -n ${HOME:-} ]]; then
+  elif [[ -n ${HOME:-} && $HOME == /* ]]; then
     cache_home=$HOME/.cache
   else
     return 1
@@ -407,8 +407,8 @@ _fzf_activate_integration_file() {
     FZF_COMPLETION_OPTS FZF_COMPLETION_PATH_OPTS FZF_COMPLETION_DIR_OPTS
     fzf_default_completion _ZO_FZF_OPTS _ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE
   )
-  for name in ${(k)functions}; do
-    [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
+  # Subscript filtering keeps startup flat when many plugin functions exist.
+  for name in ${(k)functions[(I)(_fzf_*|__fzf*|fzf-*)]}; do
     saved_functions[$name]=${functions[$name]}
   done
   for name in "${option_names[@]}"; do
@@ -435,8 +435,7 @@ _fzf_activate_integration_file() {
         saved_maps[$map]=$backup
         backup_maps[$backup]=1
       done
-      for name in ${(k)widgets}; do
-        [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
+      for name in ${(k)widgets[(I)(_fzf_*|__fzf*|fzf-*)]}; do
         # Bindings can create placeholder names that are not defined widgets.
         [[ -n ${widgets[$name]-} ]] || continue
         backup="_zsh_fzf_widget_${$}_${RANDOM}_${name}"
@@ -461,7 +460,7 @@ _fzf_activate_integration_file() {
     committed=1
   } always {
     if (( ! committed )); then
-      names=( ${(k)functions} ${(k)saved_functions} )
+      names=( ${(k)functions[(I)(_fzf_*|__fzf*|fzf-*)]} ${(k)saved_functions} )
       for name in ${(u)names}; do
         [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
         if (( ${+saved_functions[$name]} )); then
@@ -489,7 +488,7 @@ _fzf_activate_integration_file() {
       fi
       _fzf_set_state "$old_path" "$old_state" "$old_found"
       if [[ -o interactive ]]; then
-        names=( ${(k)widgets} ${(k)saved_widgets} )
+        names=( ${(k)widgets[(I)(_fzf_*|__fzf*|fzf-*)]} ${(k)saved_widgets} )
         for name in ${(u)names}; do
           [[ $name == (_fzf_*|__fzf*|fzf-*) ]] || continue
           if (( ${+saved_widgets[$name]} )); then
@@ -631,6 +630,9 @@ _fzf_initialize_zsh() {
   if (( persistent )) && command mv -f -- "$temp_file" "$cache_file" 2>/dev/null; then
     integration_file=$cache_file
     temp_file=''
+    # 30-zoxide.zsh owns the shared pruning helper.
+    (( $+functions[_zsh_prune_stale_cache_files] )) &&
+      _zsh_prune_stale_cache_files "$cache_dir" 'integration-*.zsh'
   fi
 
   if ! _fzf_activate_integration_file "$integration_file" "$fzf_path" "$_FZF_FOUND"; then

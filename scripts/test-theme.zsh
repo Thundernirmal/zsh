@@ -267,7 +267,7 @@ print -r -- "${(j:|:)reply}"')
     )
     assert_status "$?" 0 'installed fzf accepts shared arguments and projects stable result fields' || return 1
 
-    if (( $+commands[script] )); then
+    if (( $+commands[script] || $+commands[python3] )); then
       (
       local fixture_dir="$test_tmp/fzf-placeholder"
       local helper="$fixture_dir/capture" result="$fixture_dir/result" marker="$fixture_dir/injected" candidate="$fixture_dir/candidate"
@@ -281,12 +281,17 @@ printf "%s" "$1" > "$FZF_PLACEHOLDER_RESULT"' >"$helper"
       # --sync makes fzf filter the initial list before firing start; without
       # it start races the asynchronous input reader and the bound helper is
       # skipped intermittently, leaving $result uncreated.
-      command script -qefc 'fzf --sync --bind="start:execute-silent($FZF_PLACEHOLDER_HELPER {})+accept" < "$FZF_PLACEHOLDER_CANDIDATE"' /dev/null >/dev/null
+      local pty_command='fzf --sync --bind="start:execute-silent($FZF_PLACEHOLDER_HELPER {})+accept" < "$FZF_PLACEHOLDER_CANDIDATE"'
+      if (( $+commands[script] )); then
+        command script -qefc "$pty_command" /dev/null >/dev/null
+      else
+        command python3 -c 'import pty, sys; sys.exit(1 if pty.spawn(["sh", "-c", sys.argv[1]]) else 0)' "$pty_command" </dev/null >/dev/null
+      fi
       [[ $(<"$result") == "$hostile" && ! -e $marker ]]
       )
       assert_status "$?" 0 'fzf selection placeholders quote hostile arguments without shell execution' || return 1
     else
-      print -- 'skip: fzf placeholder fixture requires script(1) for a pseudo-terminal'
+      print -- 'skip: fzf placeholder fixture requires script(1) or python3 for a pseudo-terminal'
     fi
   fi
 }

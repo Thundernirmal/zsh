@@ -250,9 +250,9 @@
             meta_json=$(command nix --extra-experimental-features "nix-command flakes" \
               eval --json --apply "p: { v = p.version or \"\"; d = p.meta.description or \"\"; h = p.meta.homepage or \"\"; }" "nixpkgs#$attr" 2>/dev/null || echo "{}")
 
-            desc=$(echo "$meta_json" | command jq -r ".d | select(. != \"\") // empty")
-            ver=$(echo "$meta_json" | command jq -r ".v | select(. != \"\") // empty")
-            hp=$(echo "$meta_json" | command jq -r ".h | select(. != \"\") // empty")
+            desc=$(printf "%s\n" "$meta_json" | command jq -r ".d | select(. != \"\") // empty")
+            ver=$(printf "%s\n" "$meta_json" | command jq -r ".v | select(. != \"\") // empty")
+            hp=$(printf "%s\n" "$meta_json" | command jq -r ".h | select(. != \"\") // empty")
 
             if [ -n "$desc" ]; then
               printf "${_c_muted}Description:${_c0}\n%s\n\n" "$desc"

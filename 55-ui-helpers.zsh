@@ -214,6 +214,7 @@ _ui_char_width() {
     return 0
   fi
   if (( ! ${_ZSH_UI_WIDTH_DATA_LOADED:-0} )); then
+    setopt localoptions no_aliases
     source "$_ZSH_UI_HELPERS_DIR/lib/ui-width-data.zsh" || return 1
   fi
   low=1
