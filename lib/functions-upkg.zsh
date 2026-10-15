@@ -344,7 +344,9 @@ _upkg_timing_start() {
 # earlier durations stay valid. The common all-valid case takes a fast path.
 # Runs only inside upkg's emulated scope, so it skips emulate -L.
 _upkg_timing_finish() {
-  local -F 6 elapsed
+  # Nine decimals match the clock's nanoseconds, so rounding happens only
+  # when a duration is formatted.
+  local -F 9 elapsed
   local -a samples invalid
   integer i
 
@@ -443,11 +445,14 @@ _upkg_timing_texts() {
   reply=( "${(@)reply/#/elapsed }" "${(@)_UPKG_SUMMARY_ORDER[${#reply} + 1,-1]/*/not run}" )
 }
 
-# Width for wrapping timing suffixes; pipes and files never wrap.
+# Width for wrapping timing suffixes; pipes and files never wrap. Reads the
+# shell's COLUMNS in-process, without a subshell or tput, falling back to the
+# UI helpers' 80-column default when it is unset or invalid.
 _upkg_timing_wrap_width() {
   REPLY=0
   [[ -t 1 ]] || return 0
-  REPLY=$(_ui_term_width)
+  REPLY=${COLUMNS-}
+  [[ $REPLY == <1-> ]] || REPLY=80
 }
 
 # Print a plain "row | timing" line, moving the timing to an indented

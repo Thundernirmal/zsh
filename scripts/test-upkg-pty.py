@@ -5,7 +5,10 @@ Shell fixtures inject deterministic clock samples.  This test keeps the real
 clock and terminal boundary: a fake native prompt must read its answer from the
 TTY, the wait before answering must be included in the elapsed time, and a
 terminal Ctrl-C must keep the interrupted manager's time and a partial total.
-Only stdlib modules are used, and no package manager is executed.
+A terminal with unset or invalid COLUMNS must still wrap long rows without
+running tput. A child that outlives the deadline is terminated and reaped, so
+a regression fails instead of hanging. Only stdlib modules are used, and no
+package manager is executed.
 """
 
 from __future__ import annotations
@@ -26,6 +29,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT_DELAY = 1.5
 CANCEL_DELAY = 1.0
+RUN_DEADLINE = 30.0
+REAP_GRACE = 5.0
+LONG_DETAIL = "npm upgrade failed: " + "x" * 70
 
 CHILD_SCRIPT = textwrap.dedent(
     r'''
@@ -42,7 +48,15 @@ CHILD_SCRIPT = textwrap.dedent(
     _upkg_run_upgrade_npm() {
       local rc
       _upkg_print_section npm
-      if [[ $UPKG_PTY_CASE == prompt ]]; then
+      if [[ $UPKG_PTY_CASE == wrap ]]; then
+        print -r -- 'NATIVE DONE'
+        _upkg_set_last_result 'failed' "$UPKG_PTY_DETAIL"
+        return 1
+      fi
+      if [[ $UPKG_PTY_CASE == hidden ]]; then
+        # A regression that hides the prompt leaves the native read waiting.
+        command sh -c 'read answer'
+      elif [[ $UPKG_PTY_CASE == prompt ]]; then
         command sh -c 'printf "Proceed? [y/N] "; read answer; printf "answer=%s\n" "$answer"; [ "$answer" = y ]'
       else
         print -r -- 'NATIVE SLEEPING'
@@ -57,13 +71,48 @@ CHILD_SCRIPT = textwrap.dedent(
       _upkg_set_last_result 'upgraded' ''
     }
 
+    # Zsh sets COLUMNS from the terminal at startup, so clear it here.
+    case ${UPKG_PTY_COLUMNS_MODE:-} in
+      unset) unset COLUMNS ;;
+      invalid) COLUMNS=0 ;;
+    esac
     upkg upgrade
     print -r -- "UPKG_STATUS=$?"
     '''
 )
 
 
-def run_case(case: str, env_overrides: dict[str, str]) -> str:
+def reap(pid: int, grace: float) -> tuple[int, bool]:
+    """Wait up to grace seconds, then terminate the child's session.
+
+    Returns the wait status and whether the child had to be killed. The PTY
+    child leads its own session, so signalling its process group also stops a
+    native command it is waiting on.
+    """
+    deadline = time.monotonic() + grace
+    while True:
+        done, status = os.waitpid(pid, os.WNOHANG)
+        if done:
+            return status, False
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.05)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(pid, sig)
+        except ProcessLookupError:
+            pass
+        stop = time.monotonic() + 2.0
+        while time.monotonic() < stop:
+            done, status = os.waitpid(pid, os.WNOHANG)
+            if done:
+                return status, True
+            time.sleep(0.05)
+    _, status = os.waitpid(pid, 0)
+    return status, True
+
+
+def run_case(case: str, env_overrides: dict[str, str | None], *, deadline_seconds: float = RUN_DEADLINE) -> str:
     with tempfile.TemporaryDirectory(prefix="upkg-pty-") as tmp:
         script = Path(tmp) / "child.zsh"
         script.write_text(CHILD_SCRIPT)
@@ -71,24 +120,32 @@ def run_case(case: str, env_overrides: dict[str, str]) -> str:
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": tmp,
             "UPKG_PTY_CASE": case,
+            "UPKG_PTY_DETAIL": LONG_DETAIL,
             "COLUMNS": "100",
             "LINES": "30",
         }
-        env.update(env_overrides)
+        for key, value in env_overrides.items():
+            if value is None:
+                env.pop(key, None)
+            else:
+                env[key] = value
         pid, fd = pty.fork()
         if pid == 0:
             os.execvpe("zsh", ["zsh", "-f", str(script), str(REPO_ROOT)], env)
 
         buffer = ""
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + deadline_seconds
         sent = False
-        marker = "Proceed? [y/N]" if case == "prompt" else "NATIVE SLEEPING"
-        delay = PROMPT_DELAY if case == "prompt" else CANCEL_DELAY
+        markers = {"prompt": "Proceed? [y/N]", "cancel": "NATIVE SLEEPING", "wrap": "NATIVE DONE"}
+        marker = markers[case]
+        delay = {"prompt": PROMPT_DELAY, "cancel": CANCEL_DELAY}.get(case)
         seen_at = None
+        eof = False
         try:
             while time.monotonic() < deadline:
                 if seen_at is None and marker in buffer:
                     seen_at = time.monotonic()
+                    sent = delay is None
                 if seen_at is not None and not sent and time.monotonic() - seen_at >= delay:
                     os.write(fd, b"y\r" if case == "prompt" else b"\x03")
                     sent = True
@@ -98,16 +155,17 @@ def run_case(case: str, env_overrides: dict[str, str]) -> str:
                 try:
                     chunk = os.read(fd, 4096)
                 except OSError:
+                    eof = True
                     break
                 if not chunk:
+                    eof = True
                     break
                 buffer += chunk.decode("utf-8", "replace")
         finally:
-            try:
-                _, status = os.waitpid(pid, 0)
-            except ChildProcessError:
-                status = 0
+            status, killed = reap(pid, REAP_GRACE if eof else 0.0)
             os.close(fd)
+        if killed:
+            raise AssertionError(f"{case}: child still running after {deadline_seconds:g}s; terminated\n{buffer}")
         if not sent:
             raise AssertionError(f"{case}: marker {marker!r} never appeared\n{buffer}")
         if os.WIFSIGNALED(status):
@@ -151,6 +209,39 @@ def main() -> int:
     check(manager is not None, "rich cancelled row keeps its elapsed time", output)
     check(seconds(manager.group(1)) >= CANCEL_DELAY, "interrupted manager is timed through teardown", output)
     check(total is not None, "rich cancelled run prints the elapsed total so far", output)
+
+    # Plain terminal output without a usable COLUMNS wraps at 80 in-process.
+    for label in ("unset", "invalid"):
+        with tempfile.TemporaryDirectory(prefix="upkg-pty-tput-") as fakebin:
+            log = Path(fakebin) / "tput.log"
+            tput = Path(fakebin) / "tput"
+            tput.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\nprintf "100\\n"\n')
+            tput.chmod(0o755)
+            output = run_case("wrap", {
+                "TERM": "xterm-256color",
+                "LANG": "C",
+                "LC_ALL": "C",
+                "UPKG_PTY_COLUMNS_MODE": label,
+                "PATH": f"{fakebin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+            })
+            row = f"  npm: failed - {LONG_DETAIL}"
+            check(f"{row}\n    elapsed " in output, f"{label} COLUMNS wraps a long row at 80 columns", output)
+            check("  brew: upgraded | elapsed " in output, f"{label} COLUMNS keeps short rows on one line", output)
+            check(not log.exists(), f"{label} COLUMNS timing never runs tput", output)
+
+    # A hidden prompt must fail within the deadline instead of hanging.
+    started = time.monotonic()
+    try:
+        run_case("prompt", {"TERM": "dumb", "LANG": "C", "UPKG_PTY_CASE": "hidden"}, deadline_seconds=2.0)
+    except AssertionError as error:
+        hidden_error = str(error)
+    else:
+        hidden_error = ""
+    check(
+        "child still running" in hidden_error and time.monotonic() - started < 2.0 + 10.0,
+        "a stuck child is terminated after the deadline instead of hanging",
+        hidden_error,
+    )
     return 0
 
 

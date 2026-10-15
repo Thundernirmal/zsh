@@ -576,6 +576,11 @@ test_upkg_timing() {
       assert_contains "$output" $'| elapsed 0.8s\nTotal elapsed' "timed upkg '$invocation' shows the second manager duration before the total" || return 1
     fi
   done
+  # Durations keep full precision until formatting, so values just under a
+  # rounding boundary are not pushed across it first.
+  output=$(run_timed_upkg 'brew npm' '1000 1000 1000.0999999 1000.0999999 1000.2499998 1000.3')
+  assert_contains "$output" 'brew: up to date | elapsed <0.1s' 'a duration just under 0.1s stays below the threshold' || return 1
+  assert_contains "$output" 'npm: up to date | elapsed 0.1s' 'a duration just under 0.15s rounds down' || return 1
   output=$(run_timed_upkg 'brew npm' "$two")
   assert_contains "$output" $'Summary:\n  brew: up to date | elapsed 2.4s\n  npm: up to date | elapsed 0.8s\nTotal elapsed (outdated): 3.4s' 'plain summary keeps manager order and appends elapsed time' || return 1
 
@@ -773,7 +778,7 @@ test_upkg_timing() {
 
   # Sampling, bookkeeping, and formatting stay in-process around fixed dispatch.
   _zsh_functions_load upkg
-  for fn in _upkg_timing_clock_ready _upkg_timing_start _upkg_timing_finish _upkg_format_elapsed _upkg_print_timed_line _upkg_print_timing_total; do
+  for fn in _upkg_timing_clock_ready _upkg_timing_start _upkg_timing_finish _upkg_format_elapsed _upkg_timing_texts _upkg_timing_wrap_width _upkg_print_timed_line _upkg_print_timing_suffix_rich _upkg_print_timing_total; do
     assert_not_contains "${functions[$fn]}" '$(' "$fn creates no command substitution" || return 1
     assert_not_contains "${functions[$fn]}" 'command ' "$fn runs no external command" || return 1
     assert_not_contains "${functions[$fn]}" 'trap' "$fn installs no signal trap" || return 1
