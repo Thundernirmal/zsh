@@ -9,6 +9,8 @@ zsh -fc '
   source "$1/55-ui-helpers.zsh"
   source "$1/60-functions.zsh"
   (( ! $+functions[_upkg_usage] && ! $+functions[_ui_safe_text] )) || exit 1
+  # upkg timing loads its clock only inside a package action.
+  ! zmodload -e zsh/datetime || exit 13
   mkcd "$2/new" || exit 2
   [[ $PWD == "$2/new" ]] || exit 3
   (( ${_ZSH_FUNCTION_DOMAINS_LOADED[files]:-0} && ! ${_ZSH_FUNCTION_DOMAINS_LOADED[system]:-0} && ! $+functions[_upkg_usage] )) || exit 4
@@ -18,6 +20,7 @@ zsh -fc '
   (( ${_ZSH_FUNCTION_DOMAINS_LOADED[git]:-0} && ! $+functions[_upkg_usage] )) || exit 8
   upkg --help >/dev/null || exit 9
   (( ${_ZSH_FUNCTION_DOMAINS_LOADED[upkg]:-0} && $+functions[_upkg_run_search_apt] && ! $+functions[_npkg_usage] )) || exit 10
+  ! zmodload -e zsh/datetime || exit 14
   _zsh_functions_load ../../unexpected && exit 11
   source "$1/60-functions.zsh"
   path >/dev/null || exit 12
