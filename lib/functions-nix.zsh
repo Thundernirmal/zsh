@@ -751,8 +751,8 @@
         :
       ) &
       job_pids+=("$!")
-      if [[ -r /proc/${job_pids[-1]}/stat ]]; then
-        worker_stat=$(</proc/${job_pids[-1]}/stat)
+      if [[ -r /proc/${job_pids[-1]}/stat ]] &&
+          { worker_stat=$(</proc/${job_pids[-1]}/stat); } 2>/dev/null; then
         worker_fields=( ${=${worker_stat##*\) }} )
         job_identities[${job_pids[-1]}]=${worker_fields[20]-}
       fi

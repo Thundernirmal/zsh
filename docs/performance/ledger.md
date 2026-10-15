@@ -90,3 +90,14 @@ Stage 7 final validation: the fourth full runner passed (1,987 `ok:` lines), inc
 - Documentation/website: internal conversion only; palette policy, helper interfaces and locations, guide anchors, literal registrations, and documented behavior remain unchanged. Companion snapshot verification remains pending.
 
 Stage 8 final validation: full `zsh scripts/run-tests.zsh` passed, including the corrected real-fzf PTY synchronization, RGB reference comparisons, theme output digest, and ownership/launcher suites. `git diff --check` passed. Prior performance content remains intact; only this ledger was extended and a new result artifact added.
+
+## Stage 9 — process-read race correction before C08
+
+- Previous stage commit: `89e5577` (C07b). Parent: `89e5577`; commit subject: `fix: handle disappearing process records during query cleanup`.
+- Evidence: C08 full-command byte comparison repeatedly found extra `_npkg_outdated: error when reading /proc/.../stat: no such process` diagnostics from immediate evaluation workers. The eligibility/read gap also explains the specific supervisor read diagnostic recorded in stage 7; it does not prove that every intermittent signal or npm-classification observation had this cause.
+- Change: check each fallible read of another process's stat record, suppress only that internal read diagnostic, and take the existing absent-process path on failure. This covers worker bookkeeping/liveness, group-stop identity checks, launcher identity capture, and supervisor child/owner checks. Parent/start/group identity requirements and signal targets are unchanged; no missing identity authorizes a new signal.
+- Scope: pause C08 and commit this correction independently. Native stderr and exit statuses remain observable; only vanished-process bookkeeping is handled quietly. No timing claim. The documented ownership boundary remains unchanged.
+- Coverage: three 100-entry inventories with immediately exiting workers assert successful totals and empty stderr. Existing query ownership, launcher failure, PID identity, owner-death, descendant, cancellation, and unrelated-process tests remain the gate.
+- Website: internal process bookkeeping only; no source relocation, command registration, guide structure, or public interface changes. Companion snapshot checks remain pending.
+
+Stage 9 validation: the complete runner passed on the first run after this correction, including all process ownership/launcher/cancellation checks, immediate-worker stderr assertions, and real-fzf PTY tests. `git diff --check` passed. This corrects the reproducible process-read diagnostic; other intermittent observations remain recorded rather than retrospectively declared fixed.

@@ -157,3 +157,14 @@ for count in 129 130 143; do
   assert test "$?" -eq "$count"
 done
 print 'ok: cancellation in refilled Nix workers retains HUP/INT/TERM exit statuses'
+
+# Immediate worker exits can remove /proc records between eligibility and read.
+fixture=$("$jq_binary" -nc '{elements: [range(100) | {name:("pkg"+tostring),attrPath:"pkg",originalUrl:"current",storePaths:["/store/a"]}]}') || exit 1
+_npkg_eval_installable_record() { print -r -- '{"paths":["/store/a"],"version":"1"}'; }
+for count in 1 2 3; do
+  _npkg_outdated > "$scratch/output" 2> "$scratch/error"
+  assert test "$?" -eq 0
+  assert test "$_NPKG_OUTDATED_TOTAL" -eq 100
+  assert test ! -s "$scratch/error"
+done
+print 'ok: immediate Nix worker exits retain status and do not leak process-read diagnostics'
