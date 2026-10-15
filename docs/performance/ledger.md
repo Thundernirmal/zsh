@@ -57,3 +57,12 @@ Stage 5 validation: focused completion tests passed. The first full run failed i
 - Documentation: README, GUIDE, and tips-loader notes retain fresh checks and explicit unknown/error boundaries. The new private helper remains in the existing Nix source file; companion extraction/snapshot verification is pending.
 
 Stage 6a validation: full runner passed (1,982 `ok:` lines, real-fzf PTY included), with focused Nix and package fixtures. Three interleaved 0/20/100-entry calls matched complete stdout, status, and totals; median baseline/current times 11.32/14.31 ms, 552.16/40.91 ms, 2748.84/136.75 ms; [raw C05a samples](./C05a-results.json). Two jq calls are asserted independently of timing. `git diff --check` passed. C05 evaluation-result work remains next, before worker scheduling.
+
+## Stage 6b — C05 evaluation-result decoding
+
+- Previous stage commit: `3f618ff` (C05a). Parent: `3f618ff`; commit subject: `perf(C05b): combine Nix evaluation result decoding`.
+- Change: normal current/locked records each use one jq pass for validation, version extraction, and (current) normalized path-set comparison, replacing four/two passes. Records and installed sets travel on stdin, avoiding argv size limits. Escaped fields reuse the tested decoder. Multi-record JSON streams explicitly retain the original decode path, including joined-version behavior.
+- Coverage: exact jq invocation counts, reordered/duplicate paths, missing/invalid versions, malformed/empty paths, NUL/control/backslash version text, trailing-newline compatibility, and a multi-record fallback. Existing package/cancellation fixtures remain active.
+- Scope: no scheduler changes, no cached native inventory, no mutation changes, no new dependency. Documentation semantics from C05a remain unchanged. The additional private helper stays in the existing Nix file; companion checks remain pending.
+
+Stage 6b validation: full runner passed (1,984 `ok:` lines); focused package and decoder tests passed. Three interleaved 20/100-entry current+locked fixtures matched stdout/status/state; median C05a/C05b times 526.62/286.73 ms, 2577.95/1372.55 ms; [raw C05b samples](./C05b-results.json). C05 initial and result decoding are complete; explicit-output evaluation selection retains its existing validation. `git diff --check` passed.

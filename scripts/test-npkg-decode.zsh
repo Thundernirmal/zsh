@@ -59,3 +59,37 @@ _npkg_outdated > "$scratch/output" 2> "$scratch/error"
 assert test "$?" -eq 1
 assert test "$_NPKG_OUTDATED_STATE" = partial
 print 'ok: Nix decoded rows preserve visible escaping and trailing-newline compatibility; malformed profiles fail'
+
+# Valid single-record current/locked results need one jq pass each.
+fixture='{"elements":[{"name":"sample","attrPath":"pkg","originalUrl":"current","uri":"locked","storePaths":["/store/b","/store/a","/store/a"]}]}'
+_npkg_eval_installable_record() {
+  if [[ $1 == locked ]]; then
+    print -r -- '{"version":"old\n\n"}'
+  else
+    print -r -- '{"paths":["/store/a","/store/b"],"version":"new\tline\u0000\\n\n"}'
+  fi
+}
+: > "$NPKG_JQ_LOG"
+_npkg_outdated > "$scratch/output"
+assert test "$?" -eq 0
+assert test "$_NPKG_OUTDATED_STATE" = current
+fields=( "${(@f)$(<"$NPKG_JQ_LOG")}" )
+assert test "${#fields}" -eq 4
+[[ $(<"$scratch/output") == *'new\tline\x00\n'* ]] || exit 1
+print 'ok: single evaluation records combine validation, versions and normalized path comparison in one jq pass each'
+
+for record in '{}' '{"paths":[]}' '{"paths":["/store/a"],"version":false}' 'not-json'; do
+  encoded=$(_npkg_eval_summary current '["/store/a"]' "$record") || encoded=invalid
+  [[ $encoded == invalid ]] || exit 1
+done
+encoded=$(_npkg_eval_summary current '["/store/a"]' $'{"paths":["/store/a"],"version":"1"}\n{"paths":["/store/b"],"version":"2"}') || exit 1
+[[ $encoded == stream ]] || exit 1
+# The legacy stream path remains visible as a changed result, with joined versions.
+_npkg_eval_installable_record() {
+  print -r -- '{"paths":["/store/a"],"version":"1"}' '{"paths":["/store/b"],"version":"2"}'
+}
+_npkg_outdated > "$scratch/output"
+assert test "$?" -eq 0
+assert test "$_NPKG_OUTDATED_STATE" = changed
+[[ $(<"$scratch/output") == *'1\n2'* ]] || exit 1
+print 'ok: invalid evaluation records stay unknown and multi-record streams preserve legacy decoding'
