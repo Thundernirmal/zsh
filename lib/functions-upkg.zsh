@@ -338,7 +338,7 @@ _upkg_timing_start() {
 }
 
 # Validate the samples in order: total start, each attempted manager's start
-# and end, then the total end. Managers are passed in attempted order. An
+# and end, then the total end, into one duration per attempted manager. An
 # invalid sample makes only its own duration unavailable; a backward sample
 # makes that duration, every later one, and the total unavailable while
 # earlier durations stay valid. The common all-valid case takes a fast path.
@@ -348,10 +348,10 @@ _upkg_timing_finish() {
   local -a samples invalid
   integer i
 
+  # One duration slot per attempted manager; empty slots are unavailable.
+  _UPKG_ELAPSED=( "${(@)_UPKG_TIMING_MARKS[1,${#_UPKG_TIMING_MARKS} / 2]//*/}" )
   (( _UPKG_TIMING_CLOCK )) || return 0
   samples=( "$_UPKG_TIMING_TOTAL_START" "${_UPKG_TIMING_MARKS[@]}" "$EPOCHREALTIME" )
-  # Only the first ${#_UPKG_TIMING_MARKS} / 2 managers were attempted.
-  argv=( "${(@)argv[1,${#_UPKG_TIMING_MARKS} / 2]}" )
 
   # Quoted (@) keeps an empty sample, which counts as invalid. More than 12
   # integer digits is invalid too, which keeps arithmetic from overflowing.
@@ -359,16 +359,16 @@ _upkg_timing_finish() {
   if (( ! ${#invalid} )); then
     # Each manager's start must follow the previous sample and its end must
     # follow its start; anything else takes the slow path below.
-    for (( i = 1; i <= $#; i++ )); do
+    for (( i = 1; i <= ${#_UPKG_ELAPSED}; i++ )); do
       (( samples[2 * i] >= samples[2 * i - 1] && (elapsed = samples[2 * i + 1] - samples[2 * i]) >= 0 )) || break
-      _UPKG_ELAPSED[${argv[i]}]=$elapsed
+      _UPKG_ELAPSED[i]=$elapsed
     done
-    if (( i > $# && samples[-1] >= samples[-2] )); then
+    if (( i > ${#_UPKG_ELAPSED} && samples[-1] >= samples[-2] )); then
       (( elapsed = samples[-1] - samples[1] ))
       _UPKG_TIMING_TOTAL=$elapsed
       return 0
     fi
-    _UPKG_ELAPSED=()
+    _UPKG_ELAPSED=( "${(@)_UPKG_ELAPSED//*/}" )
   fi
 
   local sample last=''
@@ -393,7 +393,7 @@ _upkg_timing_finish() {
     elif (( manager_valid && valid )); then
       (( manager_index = (i - 1) / 2 ))
       (( elapsed = sample - samples[i - 1] ))
-      _UPKG_ELAPSED[${argv[manager_index]}]=$elapsed
+      _UPKG_ELAPSED[manager_index]=$elapsed
     fi
   done
   (( backward || ! total_valid )) && return 0
@@ -402,30 +402,45 @@ _upkg_timing_finish() {
   return 0
 }
 
-# Format seconds as 2.4s, 1m 02.4s, or 1h 02m 03.4s after an optional prefix.
-# Integer tenths keep rounding carry and output independent of the numeric
-# locale. Runs under default options, so renderers avoid an emulate per row.
+# Format each argument in seconds as 2.4s, 1m 02.4s, or 1h 02m 03.4s into
+# reply, with REPLY holding the last result; status 1 means a value was
+# unavailable. Integer tenths keep rounding carry and output independent of
+# the numeric locale. Formatting every row in one call keeps rendering cheap.
 _upkg_format_elapsed() {
-  local -i tenths hours minutes seconds
+  local value
+  local -i tenths hours minutes seconds unavailable=0
 
-  if [[ $1 != <->(|.<->) || ${#${1%%.*}} -gt 12 ]]; then
-    REPLY="${2-}unavailable"
-    return 1
-  fi
-  if (( $1 < 0.1 )); then
-    REPLY="${2-}<0.1s"
-    return 0
-  fi
+  reply=()
+  for value; do
+    if [[ $value != <->(|.<->) || ${#${value%%.*}} -gt 12 ]]; then
+      reply+=( unavailable )
+      unavailable=1
+      continue
+    fi
+    if (( value < 0.1 )); then
+      reply+=( '<0.1s' )
+      continue
+    fi
+    (( tenths = value * 10 + 0.5, hours = tenths / 36000, tenths %= 36000,
+       minutes = tenths / 600, tenths %= 600, seconds = tenths / 10, tenths %= 10 ))
+    if (( hours > 0 )); then
+      printf -v value '%dh %02dm %02d.%ds' "$hours" "$minutes" "$seconds" "$tenths"
+    elif (( minutes > 0 )); then
+      printf -v value '%dm %02d.%ds' "$minutes" "$seconds" "$tenths"
+    else
+      printf -v value '%d.%ds' "$seconds" "$tenths"
+    fi
+    reply+=( "$value" )
+  done
+  REPLY=${reply[-1]-unavailable}
+  return unavailable
+}
 
-  (( tenths = $1 * 10 + 0.5, hours = tenths / 36000, tenths %= 36000,
-     minutes = tenths / 600, tenths %= 600, seconds = tenths / 10, tenths %= 10 ))
-  if (( hours > 0 )); then
-    printf -v REPLY '%s%dh %02dm %02d.%ds' "${2-}" "$hours" "$minutes" "$seconds" "$tenths"
-  elif (( minutes > 0 )); then
-    printf -v REPLY '%s%dm %02d.%ds' "${2-}" "$minutes" "$seconds" "$tenths"
-  else
-    printf -v REPLY '%s%d.%ds' "${2-}" "$seconds" "$tenths"
-  fi
+# Set reply to each summary row's timing text in summary order. Attempted
+# managers precede filtered ones there, so durations line up by position.
+_upkg_timing_texts() {
+  _upkg_format_elapsed "${_UPKG_ELAPSED[@]}"
+  reply=( "${(@)reply/#/elapsed }" "${(@)_UPKG_SUMMARY_ORDER[${#reply} + 1,-1]/*/not run}" )
 }
 
 # Width for wrapping timing suffixes; pipes and files never wrap.
@@ -505,6 +520,8 @@ _upkg_print_summary() {
   local manager detail state role title metadata bucket family glyph fallback
   local line
   local cleanup_summary=0 timed=${_UPKG_TIMING_ENABLED:-0} wrap_width=0 icon_width=2 used_width
+  local -a timings reply
+  integer i=0
   local -A status_counts=(
     ok 0
     updates 0
@@ -534,6 +551,8 @@ _upkg_print_summary() {
     if (( timed )); then
       _upkg_timing_wrap_width && wrap_width=$REPLY
       _ui_ascii_mode && icon_width=1
+      _upkg_timing_texts
+      timings=( "${reply[@]}" )
     fi
 
     _ui_section_break
@@ -615,8 +634,8 @@ _upkg_print_summary() {
         # Status and manager icons may occupy two cells outside ASCII mode.
         _ui_display_width "$title [$state]${detail:+ ($detail)}"
         used_width=$(( REPLY + 4 + 2 * icon_width ))
-        if [[ $state == skipped ]]; then REPLY='not run'; else _upkg_format_elapsed "${_UPKG_ELAPSED[$manager]-}" 'elapsed '; fi
-        _upkg_print_timing_suffix_rich "$REPLY" "$used_width" "$wrap_width"
+        (( i++ ))
+        _upkg_print_timing_suffix_rich "${timings[i]}" "$used_width" "$wrap_width"
       fi
       print ''
     done
@@ -631,10 +650,11 @@ _upkg_print_summary() {
       done
       return 0
     fi
-    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-      state=${_UPKG_SUMMARY_STATE[$manager]}
-      if [[ $state == skipped ]]; then REPLY='not run'; else _upkg_format_elapsed "${_UPKG_ELAPSED[$manager]-}" 'elapsed '; fi
-      line="  ${manager}: $state${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}} | $REPLY"
+    _upkg_timing_texts
+    timings=( "${reply[@]}" )
+    for (( i = 1; i <= ${#_UPKG_SUMMARY_ORDER}; i++ )); do
+      manager=${_UPKG_SUMMARY_ORDER[i]}
+      line="  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}} | ${timings[i]}"
       (( wrap_width )) && _upkg_print_timed_line "$line" "$wrap_width" || print -r -- "$line"
     done
     _upkg_print_timing_total 0
@@ -1054,7 +1074,9 @@ _upkg_print_search_summary() {
   local result_count=${#_UPKG_SEARCH_ROWS[@]}
   local manager_count=0
   local failed_count=0 cancelled_count=0
-  local timed=${_UPKG_TIMING_ENABLED:-0} wrap_width=0 icon_width=2 used_width
+  local timed=${_UPKG_TIMING_ENABLED:-0} wrap_width=0 icon_width=2 used_width line
+  local -a timings reply
+  integer i=0
 
   for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
     state=${_UPKG_SUMMARY_STATE[$manager]}
@@ -1123,6 +1145,8 @@ _upkg_print_search_summary() {
     (( timed )) || return 0
     _upkg_timing_wrap_width && wrap_width=$REPLY
     _ui_ascii_mode && icon_width=1
+    _upkg_timing_texts
+    timings=( "${reply[@]}" )
     print -nr -- '  '
     _ui_color muted
     print -nr -- 'Elapsed by manager:'
@@ -1144,8 +1168,8 @@ _upkg_print_search_summary() {
       _ui_badge "$state" "$role"
       _ui_display_width "$manager [$state]"
       (( used_width = REPLY + 5 + icon_width ))
-      if [[ $state == skipped ]]; then REPLY='not run'; else _upkg_format_elapsed "${_UPKG_ELAPSED[$manager]-}" 'elapsed '; fi
-      _upkg_print_timing_suffix_rich "$REPLY" "$used_width" "$wrap_width"
+      (( i++ ))
+      _upkg_print_timing_suffix_rich "${timings[i]}" "$used_width" "$wrap_width"
       print ''
     done
     _upkg_print_timing_total 1
@@ -1155,10 +1179,12 @@ _upkg_print_search_summary() {
     (( timed )) || return 0
     _upkg_timing_wrap_width && wrap_width=$REPLY
     print 'Elapsed by manager:'
-    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-      state=${_UPKG_SUMMARY_STATE[$manager]}
-      if [[ $state == skipped ]]; then REPLY='not run'; else _upkg_format_elapsed "${_UPKG_ELAPSED[$manager]-}" 'elapsed '; fi
-      (( wrap_width )) && _upkg_print_timed_line "  ${manager}: $state | $REPLY" "$wrap_width" || print -r -- "  ${manager}: $state | $REPLY"
+    _upkg_timing_texts
+    timings=( "${reply[@]}" )
+    for (( i = 1; i <= ${#_UPKG_SUMMARY_ORDER}; i++ )); do
+      manager=${_UPKG_SUMMARY_ORDER[i]}
+      line="  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]} | ${timings[i]}"
+      (( wrap_width )) && _upkg_print_timed_line "$line" "$wrap_width" || print -r -- "$line"
     done
     _upkg_print_timing_total 0
   fi
@@ -1252,8 +1278,8 @@ upkg() {
   local -i _UPKG_INTERRUPTED_STATUS=0 _UPKG_TRAPPED_INT=0
   # Invocation-local elapsed state shared with timing helpers by dynamic scope.
   local -i _UPKG_TIMING_ENABLED=0 _UPKG_TIMING_CLOCK=0
-  local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL='' _UPKG_TIMING_MARKS=() _UPKG_ELAPSED
-  typeset -A _UPKG_ELAPSED
+  local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL=''
+  local -a _UPKG_TIMING_MARKS _UPKG_ELAPSED
 
   while (( $# > 0 )); do
     case $1 in
@@ -1620,12 +1646,12 @@ upkg() {
 
   if [ "$cmd" = 'search' ]; then
     _upkg_format_search_rows "${_UPKG_SEARCH_ROWS[@]}"
-    _upkg_timing_finish "${run_order[@]}"
+    _upkg_timing_finish
     _upkg_print_search_summary
     return $exit_code
   fi
 
-  _upkg_timing_finish "${run_order[@]}"
+  _upkg_timing_finish
   _upkg_print_summary
   return $exit_code
 }
