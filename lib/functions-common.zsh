@@ -25,6 +25,11 @@ _ui_safe_text_reply() {
   setopt MULTIBYTE
 
   local value=$1
+  local non_ascii_pattern='*[^ -~]*'
+  if [[ $value != ${~non_ascii_pattern} ]]; then
+    REPLY=$value
+    return 0
+  fi
   local char escaped output=''
   integer index code
 

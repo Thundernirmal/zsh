@@ -20,3 +20,12 @@ Stage 1 validation: full `zsh scripts/run-tests.zsh` passed (1,963 `ok:` lines, 
 - Documentation: README summary, GUIDE preview boundary, and tips-loader ownership note updated together. No guide heading or command registration changes. Website snapshot/semantic checks are pending; no remote push.
 
 Stage 2 validation: full runner passed (1,964 `ok:` lines, UI and real-fzf PTY included). FIFO bounded-read and both exported preview branches passed. Five interleaved 256 MB runs measured median **255.69 → 1.64 ms**; [raw C02 samples](./C02-results.json). Missing/unreadable-file diagnostics and statuses match the previous sed command. `git diff --check` passed.
+
+## Stage 3 — C03 printable ASCII sanitization
+
+- Previous stage commit: `e14f1a0` (C02). Parent: `e14f1a0`; commit subject: `perf(C03): fast-path printable ASCII sanitization`.
+- Change: `_ui_safe_text_reply` returns printable ASCII unchanged using the same range as display-width calculation. All other input retains the existing character loop, escape spellings, and MULTIBYTE handling. No truncation or canonical-ref changes.
+- Coverage: C0/C1/DEL and named controls in UTF-8, printable Unicode, combining text, invalid byte, empty/short/4 KiB ASCII in C and UTF-8; a printf counter proves ASCII skips per-character conversion. Existing hostile-path and full fbr row/canonical-ref regressions remain active. This internal optimization does not change the documented escaping policy.
+- Website: source location/helper interface unchanged; no snapshot sync or compatibility claim.
+
+Stage 3 validation: full runner passed (1,965 `ok:` lines, real-fzf PTY included); focused function regressions passed. Three interleaved batches at 100/1,000/3,000 rows measured baseline/current medians 150.95/71.09 ms, 1645.54/715.68 ms, 4703.37/2196.76 ms; [raw C03 samples](./C03-results.json). `git diff --check` passed.
