@@ -858,6 +858,8 @@ Explicitly inactive profile elements are excluded from outdated checks and the r
 | `change available` | The sets differ |
 | `unknown` | Profile data or evaluation is incomplete |
 
+Profile labels keep visible control-character escaping, including embedded tabs and NULs; malformed profile JSON is an error, not an empty successful inventory.
+
 A change is not necessarily an upgrade. It can be a downgrade, rebuild, changed input, output-selection change, or packaging change. Display versions are informational and never determine state.
 
 A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active elements is a complete zero-count result. Active store-path-only entries or entries without an evaluable flake source/attribute are reported as unknown instead of being silently excluded. Pinned flake references remain pinned: `npkg upgrade` cannot advance their revision, and their evaluated identity can correctly remain current. Reinstall from an unlocked reference only when changing that pin is intentional.

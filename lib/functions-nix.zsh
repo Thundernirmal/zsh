@@ -464,6 +464,34 @@
     job_pids=()
   }
 
+  # Decode jq @tsv fields plus our explicit NUL escape. No eval or locale-dependent
+  # byte conversion; literal backslashes remain distinct from encoded controls.
+  _npkg_decode_field() {
+    emulate -L zsh
+    local value=$1 char output=''
+    integer index
+    if [[ $value != *\\* ]]; then
+      REPLY=$value
+      return 0
+    fi
+    for (( index=1; index<=${#value}; index++ )); do
+      char=${value[$index]}
+      if [[ $char == \\ ]]; then
+        (( index++ ))
+        case ${value[$index]-} in
+          \\) char='\' ;;
+          n) char=$'\n' ;;
+          r) char=$'\r' ;;
+          t) char=$'\t' ;;
+          0) char=$'\0' ;;
+          *) return 1 ;;
+        esac
+      fi
+      output+=$char
+    done
+    REPLY=$output
+  }
+
   _npkg_outdated() {
     emulate -L zsh
     local IFS=$' \t\n'
@@ -478,6 +506,9 @@
 
     local profile_json profile_error_file profile_capture_dir profile_error entry_data entry_json name attr_path source locked_uri
     local store_paths_json outputs_json structural_value
+    local REPLY
+    local -a entry_fields
+    integer field_index
     local tmp_dir current_record locked_record installed_paths available_paths
     local installed_version available_version package_state display_state marker role detail error_output
     local width name_width version_width visible_count more
@@ -530,7 +561,7 @@
     }
 
     entry_data=$(
-      print -r -- "$profile_json" | command jq -c '
+      print -r -- "$profile_json" | command jq -r '
         def text: if type == "string" then . else "" end;
         def manifest_entries:
           if (.elements | type) == "object" then
@@ -573,24 +604,7 @@
             storePaths: $stores,
             outputs: ($value.outputs // null)
           }
-      '
-    ) || {
-      print -u2 -r -- 'Failed to parse Nix profile elements.'
-      return 1
-    }
-
-    while IFS= read -r entry_json; do
-      [[ -n $entry_json ]] || continue
-
-      name=$(print -r -- "$entry_json" | command jq -r '.displayName') || return 1
-      attr_path=$(print -r -- "$entry_json" | command jq -r '.attrPath') || return 1
-      source=$(print -r -- "$entry_json" | command jq -r '.originalUrl') || return 1
-      locked_uri=$(print -r -- "$entry_json" | command jq -r '.lockedUri') || return 1
-      store_paths_json=$(print -r -- "$entry_json" | command jq -c '.storePaths') || return 1
-      outputs_json=$(print -r -- "$entry_json" | command jq -c '.outputs') || return 1
-
-      if print -r -- "$entry_json" | command jq -e '
-        (.displayName | type == "string" and length > 0)
+        | ((.displayName | type == "string" and length > 0)
         and (.attrPath | type == "string" and length > 0)
         and (.originalUrl | type == "string" and length > 0)
         and (.lockedUri | type == "string")
@@ -603,12 +617,40 @@
             and all(.outputs[]; type == "string" and (. == "*" or test("^[A-Za-z0-9+._?=-]+$")))
             and (([.outputs[] | select(. == "*")] | length) == 0 or ((.outputs | length) == 1 and .outputs[0] == "*"))
           )
-        )
-      ' >/dev/null 2>&1; then
-        structural_value=1
-      else
-        structural_value=0
-      fi
+        )) as $valid
+        | [ .displayName, .attrPath, .originalUrl, .lockedUri,
+            (.storePaths | tojson), (.outputs | tojson),
+            (if $valid then "1" else "0" end) ]
+        | @tsv | gsub("\u0000"; "\\0")
+      '
+    ) || {
+      print -u2 -r -- 'Failed to parse Nix profile elements.'
+      return 1
+    }
+
+    while IFS= read -r entry_json; do
+      [[ -n $entry_json ]] || continue
+
+      entry_fields=( "${(@ps:\t:)entry_json}" )
+      (( ${#entry_fields} == 7 )) || {
+        print -u2 -r -- 'Failed to decode Nix profile fields.'
+        return 1
+      }
+      for (( field_index=1; field_index<=7; field_index++ )); do
+        _npkg_decode_field "${entry_fields[$field_index]}" || return 1
+        entry_fields[$field_index]=$REPLY
+        # Previous jq command substitutions stripped trailing newlines.
+        while [[ ${entry_fields[$field_index]} == *$'\n' ]]; do
+          entry_fields[$field_index]=${entry_fields[$field_index]%$'\n'}
+        done
+      done
+      name=$entry_fields[1]
+      attr_path=$entry_fields[2]
+      source=$entry_fields[3]
+      locked_uri=$entry_fields[4]
+      store_paths_json=$entry_fields[5]
+      outputs_json=$entry_fields[6]
+      structural_value=$entry_fields[7]
 
       names+=("$(_ui_safe_text "$name")")
       attrs+=("$attr_path")

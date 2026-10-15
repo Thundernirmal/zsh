@@ -41,6 +41,7 @@ zsh ./scripts/test-command-ux.zsh
 zsh ./scripts/test-domains.zsh
 zsh ./scripts/test-cgm.zsh
 zsh ./scripts/test-upkg.zsh
+zsh ./scripts/test-npkg-decode.zsh
 zsh ./scripts/test-package-audit.zsh
 zsh ./scripts/test-query-ownership.zsh
 zsh ./scripts/test-query-launcher.zsh

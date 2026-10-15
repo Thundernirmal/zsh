@@ -32,3 +32,5 @@ fi
 # Ctrl+T plain file previews stop at line 200; full-file inspection is a separate action.
 
 # Nix Tab completion reuses unchanged cached candidates without refreshing the index.
+
+# Nix outdated keeps incomplete entries visible as unknown and reports malformed profiles as errors.
