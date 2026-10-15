@@ -811,14 +811,16 @@ Summary:
 Total elapsed (upgrade): 1m 47.2s
 ```
 
-| Invocation | Total label | Timed work |
-|---|---|---|
-| `upkg`, `outdated`, `check`, `list` | `outdated` | Each manager's update inventory |
-| `upkg plan`, `--dry-run`, `upgrade --dry-run` | `plan` | The inventory actually run; never an estimate of a future upgrade |
-| `upkg upgrade`, `up`, `update` | `upgrade` | Each manager's complete upgrade, such as APT refresh plus `full-upgrade` |
-| `upkg clean` | `clean` | Each manager's cleanup phases together |
-| `upkg clean --dry-run` | `clean preview` | The cleanup preview actually run |
-| `upkg search <query>` | `search` | Each manager's search, including metadata lookups |
+| Invocation | Total label |
+|---|---|
+| `upkg`, `outdated`, `check`, `list` | `outdated` |
+| `upkg plan`, `--dry-run`, `upgrade --dry-run` | `plan` |
+| `upkg upgrade`, `up`, `update` | `upgrade` |
+| `upkg clean` | `clean` |
+| `upkg clean --dry-run` | `clean preview` |
+| `upkg search <query>` | `search` |
+
+Plans and cleanup previews time the inventory or preview actually run; they never estimate a future upgrade or cleanup. An upgrade row covers every native step, such as APT refresh plus `full-upgrade`, a cleanup row covers all of that manager's phases, and a search row includes metadata lookups.
 
 A manager's time runs from its dispatch until its backend returns, so it includes its section output, preflight checks, network waits, native confirmation prompts, password entry, and output processing. The total is measured separately from detection through result rendering, just before the summary prints. It is not the sum of the rows, and rounded values may not appear to add up. It excludes argument parsing and the first-use load of the package functions, so an external stopwatch reads slightly longer.
 
