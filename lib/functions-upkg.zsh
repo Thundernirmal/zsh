@@ -310,10 +310,11 @@ _upkg_summary_managers_by_state() {
 }
 
 # Elapsed timing reads and writes upkg's invocation-local _UPKG_TIMING_* and
-# _UPKG_ELAPSED state through dynamic scope. Helpers run in the current shell,
-# never fail the action, and leave unavailable values empty instead of zero.
-# Sampling helpers run only inside upkg's emulated scope, so they skip
-# emulate -L to keep the per-manager cost to a few function calls.
+# _UPKG_ELAPSED state through dynamic scope. The dispatch loop appends raw
+# EPOCHREALTIME samples inline, so a manager costs two array appends; the
+# finish step ignores them when the clock is unavailable and otherwise
+# validates them once. Helpers never fail the action and leave unavailable
+# values empty instead of zero.
 _upkg_timing_clock_ready() {
   emulate -L zsh
 
@@ -325,64 +326,79 @@ _upkg_timing_clock_ready() {
   [[ ${(t)EPOCHREALTIME} == *special* ]]
 }
 
-_upkg_timing_sample() {
-  REPLY=$EPOCHREALTIME
-}
-
-_upkg_timing_note() {
-  [[ -n $_UPKG_TIMING_NOTE ]] || _UPKG_TIMING_NOTE=$1
-}
-
-# Store a validated sample in the empty parameter named by $1, or leave it
-# empty. A backward sample disables every later sample in this invocation.
-_upkg_timing_take() {
-  (( _UPKG_TIMING_CLOCK )) || return 1
-  _upkg_timing_sample
-  if [[ $REPLY != <->(|.<->) || ${#${REPLY%%.*}} -gt 12 ]]; then
-    _upkg_timing_note 'Timing unavailable: invalid clock sample.'
-    return 1
-  fi
-  if (( REPLY < ${_UPKG_TIMING_LAST:-0} )); then
-    _UPKG_TIMING_CLOCK=0
-    _UPKG_TIMING_NOTE='Timing unavailable: clock moved backward.'
-    return 1
-  fi
-  _UPKG_TIMING_LAST=$REPLY
-  : ${(P)1::=$REPLY}
-}
-
 _upkg_timing_start() {
   _UPKG_TIMING_ENABLED=1
   _UPKG_TIMING_LABEL=$1
   if _upkg_timing_clock_ready; then
     _UPKG_TIMING_CLOCK=1
+    _UPKG_TIMING_TOTAL_START=$EPOCHREALTIME
   else
-    _upkg_timing_note 'Timing unavailable: the zsh/datetime clock could not be enabled.'
+    _UPKG_TIMING_NOTE='Timing unavailable: the zsh/datetime clock could not be enabled.'
   fi
-  _upkg_timing_take _UPKG_TIMING_TOTAL_START
   return 0
 }
 
-_upkg_timing_end() {
-  local finish
-  local -F 6 elapsed
-
-  if _upkg_timing_take finish && [[ -n $_UPKG_TIMING_MANAGER_START ]]; then
-    (( elapsed = finish - _UPKG_TIMING_MANAGER_START ))
-    _UPKG_ELAPSED[$1]=$elapsed
-  fi
-  _UPKG_TIMING_MANAGER_START=''
-  return 0
-}
-
+# Validate the samples in order: total start, each attempted manager's start
+# and end, then the total end. Managers are passed in attempted order. An
+# invalid sample makes only its own duration unavailable; a backward sample
+# makes that duration, every later one, and the total unavailable while
+# earlier durations stay valid. The common all-valid case takes a fast path.
+# Runs only inside upkg's emulated scope, so it skips emulate -L.
 _upkg_timing_finish() {
-  local finish
   local -F 6 elapsed
+  local -a samples invalid
+  local sample last=''
+  integer i manager_index valid total_valid=1 manager_valid backward=0
 
-  if _upkg_timing_take finish && [[ -n $_UPKG_TIMING_TOTAL_START ]]; then
-    (( elapsed = finish - _UPKG_TIMING_TOTAL_START ))
-    _UPKG_TIMING_TOTAL=$elapsed
+  (( _UPKG_TIMING_CLOCK )) || return 0
+  samples=( "$_UPKG_TIMING_TOTAL_START" "${_UPKG_TIMING_MARKS[@]}" "$EPOCHREALTIME" )
+  # Only the first ${#_UPKG_TIMING_MARKS} / 2 managers were attempted.
+  argv=( "${(@)argv[1,${#_UPKG_TIMING_MARKS} / 2]}" )
+
+  # Quoted (@) keeps an empty sample, which counts as invalid. More than 12
+  # integer digits is invalid too, which keeps arithmetic from overflowing.
+  invalid=( "${(@)samples:#<->(|.<->)}" "${(@M)samples:#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*}" )
+  if (( ! ${#invalid} )); then
+    # Each manager's start must follow the previous sample and its end must
+    # follow its start; anything else takes the slow path below.
+    for (( i = 1; i <= $#; i++ )); do
+      (( samples[2 * i] >= samples[2 * i - 1] && (elapsed = samples[2 * i + 1] - samples[2 * i]) >= 0 )) || break
+      _UPKG_ELAPSED[${argv[i]}]=$elapsed
+    done
+    if (( i > $# && samples[-1] >= samples[-2] )); then
+      (( elapsed = samples[-1] - samples[1] ))
+      _UPKG_TIMING_TOTAL=$elapsed
+      return 0
+    fi
+    _UPKG_ELAPSED=()
   fi
+
+  for (( i = 1; i <= ${#samples}; i++ )); do
+    sample=${samples[i]}
+    valid=1
+    if [[ $sample != <->(|.<->) || ${#${sample%%.*}} -gt 12 ]]; then
+      valid=0
+      [[ -n $_UPKG_TIMING_NOTE ]] || _UPKG_TIMING_NOTE='Timing unavailable: invalid clock sample.'
+    elif [[ -n $last ]] && (( sample < last )); then
+      backward=1
+      _UPKG_TIMING_NOTE='Timing unavailable: clock moved backward.'
+      break
+    else
+      last=$sample
+    fi
+    if (( i == 1 || i == ${#samples} )); then
+      (( valid )) || total_valid=0
+    elif (( i % 2 == 0 )); then
+      manager_valid=$valid
+    elif (( manager_valid && valid )); then
+      (( manager_index = (i - 1) / 2 ))
+      (( elapsed = sample - samples[i - 1] ))
+      _UPKG_ELAPSED[${argv[manager_index]}]=$elapsed
+    fi
+  done
+  (( backward || ! total_valid )) && return 0
+  (( elapsed = samples[-1] - samples[1] ))
+  _UPKG_TIMING_TOTAL=$elapsed
   return 0
 }
 
@@ -390,27 +406,25 @@ _upkg_timing_finish() {
 # Integer tenths keep rounding carry and output independent of the numeric
 # locale. Runs under default options, so renderers avoid an emulate per row.
 _upkg_format_elapsed() {
-  local value=$1 prefix=${2-}
   local -i tenths hours minutes seconds
 
-  REPLY="${prefix}unavailable"
-  [[ $value == <->(|.<->) && ${#${value%%.*}} -le 12 ]] || return 1
-  if (( value < 0.1 )); then
-    REPLY="${prefix}<0.1s"
+  if [[ $1 != <->(|.<->) || ${#${1%%.*}} -gt 12 ]]; then
+    REPLY="${2-}unavailable"
+    return 1
+  fi
+  if (( $1 < 0.1 )); then
+    REPLY="${2-}<0.1s"
     return 0
   fi
 
-  (( tenths = value * 10 + 0.5 ))
-  (( hours = tenths / 36000, tenths %= 36000 ))
-  (( minutes = tenths / 600, tenths %= 600 ))
-  (( seconds = tenths / 10, tenths %= 10 ))
-
+  (( tenths = $1 * 10 + 0.5, hours = tenths / 36000, tenths %= 36000,
+     minutes = tenths / 600, tenths %= 600, seconds = tenths / 10, tenths %= 10 ))
   if (( hours > 0 )); then
-    printf -v REPLY '%s%dh %02dm %02d.%ds' "$prefix" "$hours" "$minutes" "$seconds" "$tenths"
+    printf -v REPLY '%s%dh %02dm %02d.%ds' "${2-}" "$hours" "$minutes" "$seconds" "$tenths"
   elif (( minutes > 0 )); then
-    printf -v REPLY '%s%dm %02d.%ds' "$prefix" "$minutes" "$seconds" "$tenths"
+    printf -v REPLY '%s%dm %02d.%ds' "${2-}" "$minutes" "$seconds" "$tenths"
   else
-    printf -v REPLY '%s%d.%ds' "$prefix" "$seconds" "$tenths"
+    printf -v REPLY '%s%d.%ds' "${2-}" "$seconds" "$tenths"
   fi
 }
 
@@ -459,9 +473,8 @@ _upkg_print_timing_suffix_rich() {
   _ui_reset
 }
 
+# Called from the emulated summary renderers.
 _upkg_print_timing_total() {
-  emulate -L zsh
-
   local rich=$1 duration qualifier=''
 
   _upkg_format_elapsed "$_UPKG_TIMING_TOTAL"
@@ -616,13 +629,8 @@ _upkg_print_summary() {
     print ''
     print 'Summary:'
     for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-      detail=${_UPKG_SUMMARY_DETAIL[$manager]}
       state=${_UPKG_SUMMARY_STATE[$manager]}
-      if [ -n "$detail" ]; then
-        line="  ${manager}: $state - $detail"
-      else
-        line="  ${manager}: $state"
-      fi
+      line="  ${manager}: $state${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}}"
       if (( ! timed )); then
         print -r -- "$line"
         continue
@@ -1253,8 +1261,8 @@ upkg() {
   local -i _UPKG_INTERRUPTED_STATUS=0 _UPKG_TRAPPED_INT=0
   # Invocation-local elapsed state shared with timing helpers by dynamic scope.
   local -i _UPKG_TIMING_ENABLED=0 _UPKG_TIMING_CLOCK=0
-  local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_LAST=''
-  local _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL='' _UPKG_TIMING_MANAGER_START=''
+  local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL=''
+  local -a _UPKG_TIMING_MARKS
   local -A _UPKG_ELAPSED
 
   while (( $# > 0 )); do
@@ -1551,7 +1559,7 @@ upkg() {
   trap '_UPKG_TRAPPED_INT=1' INT
 
   for manager in "${run_order[@]}"; do
-    _upkg_timing_take _UPKG_TIMING_MANAGER_START
+    _UPKG_TIMING_MARKS+=( "$EPOCHREALTIME" )
     case "${cmd}:${manager}" in
       outdated:apt) _upkg_run_outdated_apt ;;
       outdated:dnf) _upkg_run_outdated_dnf ;;
@@ -1599,7 +1607,7 @@ upkg() {
         _upkg_set_last_result 'failed' 'missing handler'
         ;;
     esac
-    _upkg_timing_end "$manager"
+    _UPKG_TIMING_MARKS+=( "$EPOCHREALTIME" )
 
     # A backend that returned without checking its status still stops here.
     (( _UPKG_TRAPPED_INT && ! _UPKG_INTERRUPTED_STATUS )) && _upkg_check_interrupt 130
@@ -1622,12 +1630,12 @@ upkg() {
 
   if [ "$cmd" = 'search' ]; then
     _upkg_format_search_rows "${_UPKG_SEARCH_ROWS[@]}"
-    _upkg_timing_finish
+    _upkg_timing_finish "${run_order[@]}"
     _upkg_print_search_summary
     return $exit_code
   fi
 
-  _upkg_timing_finish
+  _upkg_timing_finish "${run_order[@]}"
   _upkg_print_summary
   return $exit_code
 }

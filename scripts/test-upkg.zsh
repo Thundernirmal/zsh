@@ -414,6 +414,7 @@ timing_backend() {
   shift 2
   spec=${(P)spec_name-}
 
+  timing_tick
   print -r -- "backend:$action:$manager"
   [[ -n ${UPKG_TIMING_DIAGNOSTIC-} ]] && print -u2 -r -- "$UPKG_TIMING_DIAGNOSTIC"
   case $spec in
@@ -441,30 +442,49 @@ timing_backend() {
   esac
 }
 
-timing_fixture() {
+# Advance the fake clock to the next queued sample, if any. Stubs tick at
+# the points between upkg's clock reads: clock initialization, detection,
+# each backend, and each summary record.
+timing_tick() {
+  (( ${#UPKG_TIMING_TEST_SAMPLES} )) || return 0
+  EPOCHREALTIME=${UPKG_TIMING_TEST_SAMPLES[1]}
+  shift UPKG_TIMING_TEST_SAMPLES
+}
+
+# Stub detection and backends only; the clock stays real.
+timing_stubs() {
   local managers=$1 action manager
-  shift
 
   typeset -g -a UPKG_TIMING_TEST_SAMPLES
-  UPKG_TIMING_TEST_SAMPLES=( "$@" )
+  UPKG_TIMING_TEST_SAMPLES=()
   # Earlier cases stub rich mode globally; run_upkg_rich re-enables it.
   functions[_ui_is_rich_terminal]='return 1'
   functions[_ui_plain_mode]='return 0'
   functions[_upkg_detect_managers]="
+    timing_tick
     typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
     _UPKG_ACTIVE_MANAGERS=($managers)
     _UPKG_ALTERNATE_MANAGERS=()
   "
-  functions[_upkg_timing_sample]='
-    REPLY=${UPKG_TIMING_TEST_SAMPLES[1]-}
-    (( ${#UPKG_TIMING_TEST_SAMPLES} )) && shift UPKG_TIMING_TEST_SAMPLES
-    return 0
-  '
   for action in outdated search upgrade clean; do
     for manager in apt brew npm; do
       functions[_upkg_run_${action}_$manager]="timing_backend $action $manager \"\$@\""
     done
   done
+}
+
+# Replace the module clock with a plain EPOCHREALTIME fed from a queue.
+timing_fixture() {
+  local managers=$1
+  shift
+
+  timing_stubs "$managers"
+  zmodload -u zsh/datetime 2>/dev/null
+  typeset -g EPOCHREALTIME=''
+  UPKG_TIMING_TEST_SAMPLES=( "$@" )
+  functions[_upkg_timing_clock_ready]='print -r -- clock-initialized; timing_tick; return 0'
+  (( ${+functions[timing_record_summary]} )) || functions[timing_record_summary]=${functions[_upkg_record_summary]}
+  functions[_upkg_record_summary]='timing_tick; timing_record_summary "$@"'
 }
 
 # Run upkg with fixture samples; prints output followed by unused samples.
@@ -516,7 +536,7 @@ test_upkg_timing() {
     _upkg_format_elapsed "$value"
     assert_equals "$REPLY" "$expected" "elapsed $value formats as $expected" || return 1
   done
-  for value in '' 'abc' '-1' '1e5' '1,5' '1.5s' '9999999999999.0'; do
+  for value in '' 'abc' '-1' '1e5' '1,5' '1.5s' '9999999999999.0' '99999999999999999999'; do
     _upkg_format_elapsed "$value"
     cmd_status=$?
     assert_equals "$cmd_status:$REPLY" '1:unavailable' "invalid elapsed '$value' is unavailable, never zero" || return 1
@@ -565,11 +585,22 @@ test_upkg_timing() {
     assert_not_contains "$output" 'Total elapsed' "upkg '$invocation' has no timing total" || return 1
     assert_not_contains "$output" '| elapsed' "upkg '$invocation' has no manager timing" || return 1
     if [[ $invocation != --(only|skip)\ * ]]; then
-      assert_contains "$output" 'remaining-samples=6' "upkg '$invocation' never samples the clock" || return 1
+      assert_not_contains "$output" 'clock-initialized' "upkg '$invocation' never initializes the clock" || return 1
     fi
   done
-  output=$(run_timed_upkg 'brew npm' "$two" managers 2>&1)
-  assert_contains "$output" 'remaining-samples=6' 'upkg managers never samples the clock' || return 1
+  output=$(
+    (
+      timing_stubs 'brew npm'
+      zmodload -u zsh/datetime 2>/dev/null
+      upkg help >/dev/null
+      upkg managers >/dev/null
+      zmodload -e zsh/datetime && print -r -- 'clock-loaded'
+      upkg >/dev/null
+      zmodload -e zsh/datetime && print -r -- 'clock-loaded-by-action'
+    ) 2>&1
+  )
+  assert_not_contains "$output" $'clock-loaded\n' 'help and managers never load the clock module' || return 1
+  assert_contains "$output" 'clock-loaded-by-action' 'a package action loads the clock module on demand' || return 1
   output=$(run_timed_upkg 'brew npm' "$two" --only apt 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'unavailable selection keeps its early failure' || return 1
@@ -643,17 +674,12 @@ test_upkg_timing() {
   assert_contains "$output" 'apt: up to date | elapsed unavailable' 'later durations are unavailable after a backward sample' || return 1
   assert_contains "$output" 'Total elapsed (outdated): unavailable' 'total is unavailable after a backward sample' || return 1
   assert_matching_lines "$output" 'Timing unavailable: clock moved backward.' 1 'backward clock adds a single note' || return 1
-  assert_contains "$output" 'remaining-samples=4' 'backward clock stops further sampling' || return 1
   assert_contains "$output" 'backend:outdated:apt' 'backward clock keeps running remaining managers' || return 1
 
   # Real clock: shadowed, caller-disabled, and preexisting parameters are not clocks.
   output=$(
     (
-      timing_fixture 'npm'
-      unfunction _upkg_timing_sample
-      _zsh_functions_load upkg
-      timing_fixture 'npm'
-      functions[_upkg_timing_sample]='REPLY=$EPOCHREALTIME'
+      timing_stubs 'npm'
       upkg
       shadowed() { local EPOCHREALTIME=5; upkg; }
       shadowed
@@ -663,8 +689,7 @@ test_upkg_timing() {
   assert_contains "$output" $'npm: up to date | elapsed unavailable\nTiming unavailable: the zsh/datetime clock could not be enabled.' 'a shadowing local EPOCHREALTIME is not used as a clock' || return 1
   output=$(
     (
-      timing_fixture 'npm'
-      functions[_upkg_timing_sample]='REPLY=$EPOCHREALTIME'
+      timing_stubs 'npm'
       zmodload zsh/datetime
       zmodload -F zsh/datetime -p:EPOCHREALTIME
       upkg
@@ -675,8 +700,7 @@ test_upkg_timing() {
   assert_contains "$output" '-p:EPOCHREALTIME' 'upkg does not re-enable a caller-disabled clock feature' || return 1
   output=$(
     (
-      timing_fixture 'npm'
-      functions[_upkg_timing_sample]='REPLY=$EPOCHREALTIME'
+      timing_stubs 'npm'
       zmodload -u zsh/datetime 2>/dev/null
       typeset -g EPOCHREALTIME=7
       upkg
@@ -749,13 +773,13 @@ test_upkg_timing() {
 
   # Sampling, bookkeeping, and formatting stay in-process around fixed dispatch.
   _zsh_functions_load upkg
-  for fn in _upkg_timing_clock_ready _upkg_timing_sample _upkg_timing_note _upkg_timing_take _upkg_timing_start _upkg_timing_end _upkg_timing_finish _upkg_format_elapsed _upkg_print_timed_line _upkg_print_timing_total; do
+  for fn in _upkg_timing_clock_ready _upkg_timing_start _upkg_timing_finish _upkg_format_elapsed _upkg_print_timed_line _upkg_print_timing_total; do
     assert_not_contains "${functions[$fn]}" '$(' "$fn creates no command substitution" || return 1
     assert_not_contains "${functions[$fn]}" 'command ' "$fn runs no external command" || return 1
     assert_not_contains "${functions[$fn]}" 'trap' "$fn installs no signal trap" || return 1
   done
-  assert_contains "${functions[upkg]}" $'_upkg_timing_take _UPKG_TIMING_MANAGER_START\n\t\tcase "${cmd}:${manager}" in' 'manager timing starts immediately before dispatch' || return 1
-  assert_contains "${functions[upkg]}" $'\t\tesac\n\t\t_upkg_timing_end "$manager"' 'manager timing stops immediately after dispatch' || return 1
+  assert_contains "${functions[upkg]}" $'_UPKG_TIMING_MARKS+=("$EPOCHREALTIME") \n\t\tcase "${cmd}:${manager}" in' 'manager timing samples inline immediately before dispatch' || return 1
+  assert_contains "${functions[upkg]}" $'\t\tesac\n\t\t_UPKG_TIMING_MARKS+=("$EPOCHREALTIME") \n' 'manager timing samples inline immediately after dispatch' || return 1
 }
 
 main() {
