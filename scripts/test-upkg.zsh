@@ -673,6 +673,16 @@ test_upkg_timing() {
   assert_contains "$output" 'Timing unavailable: invalid clock sample.' 'invalid sample adds a note' || return 1
   assert_contains "$output" 'Total elapsed (outdated): 4.0s' 'invalid manager sample keeps a valid total' || return 1
 
+  output=$(
+    (
+      timing_fixture 'brew npm' 1000 1000 '' 1003 1003.8 1004
+      upkg
+    ) 2>&1
+  )
+  assert_contains "$output" 'brew: up to date | elapsed unavailable' 'an empty sample keeps its attempted-manager duration slot' || return 1
+  assert_contains "$output" 'npm: up to date | elapsed 0.8s' 'an empty sample does not shift later manager timings' || return 1
+  assert_not_contains "$output" 'not run' 'missing measurements never label attempted managers as skipped' || return 1
+
   output=$(run_timed_upkg 'brew npm apt' '1000 1000 1002 1001 1003 1003.5 1003.6 1004' 2>&1)
   assert_contains "$output" 'brew: up to date | elapsed 2.0s' 'completed duration stays valid after the clock moves backward' || return 1
   assert_contains "$output" 'npm: up to date | elapsed unavailable' 'active duration is unavailable after a backward sample' || return 1
