@@ -436,30 +436,44 @@
 
   # Reap only the caller's recorded workers; a cancelled worker stops its peers.
   _npkg_wait_workers() {
-    local pid worker_status
+    local pid worker_status wait_mode=${1:-all}
+    integer reaped
+    # Optional builtin sleep; retain the existing full drain if unavailable.
+    if [[ $wait_mode == available ]]; then
+      zmodload zsh/zselect 2>/dev/null || wait_mode=all
+    fi
     while (( ${#job_pids} )); do
-      pid=$job_pids[1]
-      while true; do
-        wait "$pid" 2>/dev/null
-        worker_status=$?
-        # A wrapper signal interrupts wait before the worker finishes cleanup.
+      reaped=0
+      for pid in "${job_pids[@]}"; do
+        if [[ $wait_mode == available ]] && _zsh_owned_job_is_running "$pid"; then
+          continue
+        fi
+        while true; do
+          wait "$pid" 2>/dev/null
+          worker_status=$?
+          # A wrapper signal interrupts wait before the worker finishes cleanup.
+          case $worker_status in
+            129|130|143)
+              (( interrupted )) && _zsh_owned_job_is_running "$pid" && continue
+              ;;
+          esac
+          break
+        done
+        job_pids=( "${(@)job_pids:#$pid}" )
+        unset "job_identities[$pid]"
+        reaped=1
         case $worker_status in
           129|130|143)
-            (( interrupted )) && _zsh_owned_job_is_running "$pid" && continue
+            if (( ! interrupted )); then
+              interrupted=$worker_status
+              _zsh_stop_owned_jobs "${job_pids[@]}"
+            fi
             ;;
         esac
-        break
       done
-      job_pids[1]=()
-      unset "job_identities[$pid]"
-      case $worker_status in
-        129|130|143)
-          if (( ! interrupted )); then
-            interrupted=$worker_status
-            _zsh_stop_owned_jobs "${job_pids[@]}"
-          fi
-          ;;
-      esac
+      [[ $wait_mode == available ]] && (( reaped )) && return 0
+      # Poll only owned workers, at most eight, without spawning sleep processes.
+      (( ${#job_pids} )) && zselect -t 1 2>/dev/null
     done
     job_pids=()
   }
@@ -749,7 +763,7 @@
       fi
 
       if (( ${#job_pids[@]} >= max_jobs )); then
-        _npkg_wait_workers
+        _npkg_wait_workers available
         (( interrupted )) && break
       fi
     done

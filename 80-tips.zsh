@@ -34,3 +34,5 @@ fi
 # Nix Tab completion reuses unchanged cached candidates without refreshing the index.
 
 # Nix outdated keeps incomplete entries visible as unknown and reports malformed profiles as errors.
+
+# Nix outdated refills up to eight evaluation slots; result order remains stable.

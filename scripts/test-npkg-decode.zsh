@@ -93,3 +93,67 @@ assert test "$?" -eq 0
 assert test "$_NPKG_OUTDATED_STATE" = changed
 [[ $(<"$scratch/output") == *'1\n2'* ]] || exit 1
 print 'ok: invalid evaluation records stay unknown and multi-record streams preserve legacy decoding'
+
+# A slow first worker must not hold the next batch behind it.
+fixture=$("$jq_binary" -nc '{elements: [range(1;17) | {name:("pkg"+tostring),attrPath:tostring,originalUrl:"current",storePaths:["/store/a"]}]}') || exit 1
+_npkg_eval_installable_record() {
+  print -r -- "start $2" >> "$scratch/events"
+  if [[ $2 == 1 ]]; then
+    integer attempts=0
+    while [[ ! -e $scratch/refilled ]] && (( attempts++ < 300 )); do
+      command sleep 0.01
+    done
+    [[ -e $scratch/refilled ]] || return 99
+  elif [[ $2 == 9 ]]; then
+    : > "$scratch/refilled"
+  fi
+  print -r -- "end $2" >> "$scratch/events"
+  print -r -- '{"paths":["/store/a"],"version":"1"}'
+}
+_npkg_outdated > "$scratch/output"
+assert test "$?" -eq 0
+assert test "$_NPKG_OUTDATED_STATE" = current
+assert test "$_NPKG_OUTDATED_TOTAL" -eq 16
+integer active=0 peak=0 finished=0
+for field in "${(@f)$(<"$scratch/events")}"; do
+  if [[ $field == start* ]]; then
+    (( active++ ))
+    (( active > peak )) && peak=$active
+  else
+    (( active--, finished++ ))
+  fi
+  (( active >= 0 && active <= 8 )) || exit 1
+done
+assert test "$active" -eq 0
+assert test "$finished" -eq 16
+print 'ok: Nix refills slots before the slow first worker finishes and retains the eight-worker bound'
+
+# Missing optional polling module retains the portable batch-drain fallback.
+zmodload() {
+  [[ $1 == zsh/zselect ]] && return 1
+  builtin zmodload "$@"
+}
+_npkg_outdated > "$scratch/output"
+assert test "$?" -eq 0
+assert test "$_NPKG_OUTDATED_STATE" = current
+unfunction zmodload
+print 'ok: missing zselect falls back to complete batch draining'
+
+for count in 129 130 143; do
+  command rm -f "$scratch/refilled"
+  _npkg_eval_installable_record() {
+    if [[ $2 == 1 ]]; then
+      integer attempts=0
+      while [[ ! -e $scratch/refilled ]] && (( attempts++ < 300 )); do
+        command sleep 0.01
+      done
+    elif [[ $2 == 9 ]]; then
+      : > "$scratch/refilled"
+      return "$count"
+    fi
+    print -r -- '{"paths":["/store/a"],"version":"1"}'
+  }
+  _npkg_outdated > "$scratch/output"
+  assert test "$?" -eq "$count"
+done
+print 'ok: cancellation in refilled Nix workers retains HUP/INT/TERM exit statuses'
