@@ -126,6 +126,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Run upkg plan to inventory updates; review the native upgrade transaction"
     "Run upkg clean --dry-run before package cleanup"
     "Use Ctrl+C during upkg to stop remaining managers and cleanup phases"
+    "Run upkg plan and compare per-manager elapsed times in the summary"
   )
 fi
 

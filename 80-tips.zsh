@@ -3,7 +3,7 @@
 # Doctor reminders cover blocked integration failures, restarting after repair, and the Secret Service ping.
 # Zoxide reminders cover the zi preview and its retained ranking; Nix reminders cover option passthrough.
 # The catalogue checks matching tool capabilities when it loads on first use.
-# Package reminders follow the current workflows and ownership boundaries in GUIDE.md.
+# Package reminders include automatic elapsed summaries and follow GUIDE.md ownership boundaries.
 
 typeset -g _ZSH_TIPS_MODULE_DIR=${${(%):-%N}:A:h}
 typeset -gi _ZSH_TIPS_CATALOGUE_LOADED=${_ZSH_TIPS_CATALOGUE_LOADED:-0}

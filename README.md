@@ -48,7 +48,7 @@ Fuzzy pickers share one themed, responsive frame. Use Ctrl+P to toggle a preview
 - Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning.
 - Guarded `zoxide` and `fzf` integration with validated caches and Ctrl+R, Ctrl+T, Alt+C, and `zi` pickers.
 - File, content search, Git, network, disk-usage, and process helpers with pipe-friendly output. Native `mkdir`, `cp`, `mv`, and `rm` behavior is left unchanged.
-- `upkg` for update inventories, upgrades, search, and cleanup across detected package managers, plus optional `npkg` for Nix profiles.
+- `upkg` for update inventories, upgrades, search, and cleanup across detected package managers, with per-manager and total [elapsed time](./GUIDE.md#elapsed-time) including native prompt waits, plus optional `npkg` for Nix profiles.
 - Optional `cgm` credential storage through Linux Secret Service.
 - Shared themes for dashboards and every fzf entry point through `ztheme`, with plain-text fallbacks.
 - On-demand `tips` that only mention tools you have installed.

@@ -345,6 +345,8 @@ test_tip_capabilities() (
     print -r -- '#!/bin/sh' > "$fixture_dir/$manager"
     command chmod +x "$fixture_dir/$manager"
     output=$(PATH=$fixture_dir "$zsh_bin" -dfc 'source "$1"; print -rl -- "${_zsh_tip_pool[@]}"' zsh "$repo_dir/lib/tips-catalogue.zsh") || return 1
+    assert_contains "$output" 'Run upkg plan and compare per-manager elapsed times' "elapsed tip works with $manager alone" || return 1
+    assert_not_contains "$output" '--only=brew,npm' "elapsed tip does not require missing managers with $manager alone" || return 1
     [[ $output != *'plain scalars with cgm'* ]] || return 1
     case $manager in
       dnf) [[ $output == *'--only=dnf'* && $output == *'--only dnf'* ]] || return 1 ;;
@@ -374,6 +376,9 @@ test_tip_capabilities() (
   done
   output=$(PATH=$fixture_dir "$zsh_bin" -dfc 'source "$1"; print -rl -- "${_zsh_tip_pool[@]}"' zsh "$repo_dir/lib/tips-catalogue.zsh") || return 1
   [[ $output == *'Run checkupdates'* ]] || return 1
+  command rm -f -- "$fixture_dir"/*(N)
+  output=$(PATH=$fixture_dir "$zsh_bin" -dfc 'source "$1"; print -rl -- "${_zsh_tip_pool[@]}"' zsh "$repo_dir/lib/tips-catalogue.zsh") || return 1
+  assert_not_contains "$output" 'per-manager elapsed times' 'elapsed tip is absent without a supported manager' || return 1
   print 'ok: manager and credential tips require their own capabilities'
 )
 

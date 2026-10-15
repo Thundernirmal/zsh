@@ -370,12 +370,47 @@ test_npkg_helper_completion() (
   done
 )
 
+# Completing upkg must not load the package domain, start timing, or run tools.
+test_upkg_completion_isolation() {
+  local fakebin="$tmp_dir/upkg-completion-fakebin"
+  local invocation_log="$tmp_dir/upkg-completion-invocations"
+  local tool
+
+  command mkdir -p -- "$fakebin"
+  for tool in apt dnf pacman paru brew flatpak nix npm tput; do
+    print -r -- '#!/bin/sh
+printf "%s\n" "$0" >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/$tool"
+    command chmod +x "$fakebin/$tool"
+  done
+
+  _ZSH_COMPLETION_LOG=$invocation_log PATH=$fakebin "$zsh_bin" -f -c '
+    source "$1/55-ui-helpers.zsh" || exit 10
+    source "$1/60-functions.zsh" || exit 11
+    compdef() { :; }
+    source "$1/66-compdefs.zsh" || exit 12
+    _arguments() { return 0; }
+    _values() { return 0; }
+    local -a words
+    local spec
+    for spec in "upkg" "upkg upgrade" "upkg --only=" "upkg search rip"; do
+      words=( ${=spec} "" )
+      _zsh_upkg || exit 13
+    done
+    _zsh_upkg_managers || exit 14
+    ! zmodload -e zsh/datetime || exit 15
+    (( ! ${_ZSH_FUNCTION_DOMAINS_LOADED[upkg]:-0} && ! $+functions[_upkg_timing_start] )) || exit 16
+  ' zsh "$repo_dir"
+  assert_status "$?" 0 'upkg completion leaves the package domain and clock unloaded' || return 1
+  assert_equals "$(file_contents "$invocation_log")" '' 'upkg completion invokes no package manager or tput' || return 1
+}
+
 main() {
   test_without_compinit || return 1
   test_registration || return 1
   test_zhelp_values || return 1
   test_static_values || return 1
   test_upkg_live_dry_run_description || return 1
+  test_upkg_completion_isolation || return 1
   test_npkg_helper_completion || return 1
   test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1

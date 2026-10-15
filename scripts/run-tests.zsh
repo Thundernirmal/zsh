@@ -54,6 +54,12 @@ if (( $+commands[python3] && $+commands[fzf] )); then
 else
   print -- 'skip: real fzf PTY checks require python3 and fzf'
 fi
+if (( $+commands[python3] )); then
+  python3 ./scripts/test-upkg-pty.py >/dev/null
+  print -- 'ok: upkg timing PTY checks'
+else
+  print -- 'skip: upkg timing PTY checks require python3'
+fi
 
 if [[ $repo_dir == ${HOME:-}/.config/zsh ]]; then
   zsh -fc 'source "$HOME/.config/zsh/init.zsh"'

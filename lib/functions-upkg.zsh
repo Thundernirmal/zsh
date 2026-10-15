@@ -20,6 +20,7 @@ _upkg_usage() {
     _ui_panel_kv '--sudo' 'Authorize privileged upgrade and cleanup backends' muted text
     _ui_panel_kv '--dry-run' 'Inventory updates or preview cleanup without changing packages' muted text
     _ui_section_break
+    _ui_panel_kv 'Timing' 'Summaries show elapsed time per manager and in total' muted text
     _ui_panel_kv 'Managers' 'apt, dnf, pacman, paru, brew, flatpak, nix, npm' muted text
     _ui_panel_kv 'Preview' 'upkg plan --only brew,npm' muted text
     _ui_panel_kv 'Upgrade' 'upkg upgrade --sudo --only apt' muted text
@@ -68,6 +69,7 @@ _upkg_usage() {
   print '  - plan and upgrade --dry-run inventory updates without installing packages'
   print '  - queries and previews may contact the network and write caches'
   print '  - clean mutates manager state; clean --dry-run previews without removing packages or caches'
+  print '  - summaries show elapsed time per manager and in total, including prompt waits'
   print '  - upgrades never inject sudo automatically'
   print '  - paru upgrades require explicit --sudo opt-in but still run unprefixed'
   print '  - brew upgrades run unprefixed and stay in Homebrew user space'
@@ -307,11 +309,224 @@ _upkg_summary_managers_by_state() {
   print -r -- "${(j:, :)matching}"
 }
 
+# Elapsed timing reads and writes upkg's invocation-local _UPKG_TIMING_* and
+# _UPKG_ELAPSED state through dynamic scope. The dispatch loop appends raw
+# EPOCHREALTIME samples inline, so a manager costs two array appends; the
+# finish step ignores them when the clock is unavailable and otherwise
+# validates them once. Helpers never fail the action and leave unavailable
+# values empty instead of zero.
+# Runs inside upkg's emulated scope.
+_upkg_timing_clock_ready() {
+  # Respect a loaded module whose clock feature the caller disabled.
+  if ! zmodload -e zsh/datetime; then
+    zmodload zsh/datetime 2>/dev/null || return 1
+  fi
+  # A caller-created or shadowing EPOCHREALTIME is not a working clock.
+  [[ ${(t)EPOCHREALTIME} == *special* ]]
+}
+
+_upkg_timing_start() {
+  _UPKG_TIMING_ENABLED=1
+  _UPKG_TIMING_LABEL=$1
+  if _upkg_timing_clock_ready; then
+    _UPKG_TIMING_CLOCK=1
+    _UPKG_TIMING_TOTAL_START=$EPOCHREALTIME
+  else
+    _UPKG_TIMING_NOTE='Timing unavailable: the zsh/datetime clock could not be enabled.'
+  fi
+  return 0
+}
+
+# Validate the samples in order: total start, each attempted manager's start
+# and end, then the total end, into one duration per attempted manager. An
+# invalid sample makes only its own duration unavailable; a backward sample
+# makes that duration, every later one, and the total unavailable while
+# earlier durations stay valid. The common all-valid case takes a fast path.
+# Runs only inside upkg's emulated scope, so it skips emulate -L.
+_upkg_timing_finish() {
+  # Nine decimals match the clock's nanoseconds, so rounding happens only
+  # when a duration is formatted.
+  local -F 9 elapsed
+  local -a samples invalid
+  integer i
+
+  # One duration slot per attempted manager; empty slots are unavailable.
+  _UPKG_ELAPSED=( "${(@)_UPKG_TIMING_MARKS[1,${#_UPKG_TIMING_MARKS} / 2]//*/}" )
+  (( _UPKG_TIMING_CLOCK )) || return 0
+  samples=( "$_UPKG_TIMING_TOTAL_START" "${_UPKG_TIMING_MARKS[@]}" "$EPOCHREALTIME" )
+
+  # Quoted (@) keeps an empty sample, which counts as invalid. More than 12
+  # integer digits is invalid too, which keeps arithmetic from overflowing.
+  invalid=( "${(@)samples:#<->(|.<->)}" "${(@M)samples:#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*}" )
+  if (( ! ${#invalid} )); then
+    # Each manager's start must follow the previous sample and its end must
+    # follow its start; anything else takes the slow path below.
+    for (( i = 1; i <= ${#_UPKG_ELAPSED}; i++ )); do
+      (( samples[2 * i] >= samples[2 * i - 1] && (elapsed = samples[2 * i + 1] - samples[2 * i]) >= 0 )) || break
+      _UPKG_ELAPSED[i]=$elapsed
+    done
+    if (( i > ${#_UPKG_ELAPSED} && samples[-1] >= samples[-2] )); then
+      (( elapsed = samples[-1] - samples[1] ))
+      _UPKG_TIMING_TOTAL=$elapsed
+      return 0
+    fi
+    _UPKG_ELAPSED=( "${(@)_UPKG_ELAPSED//*/}" )
+  fi
+
+  local sample last=''
+  integer manager_index valid total_valid=1 manager_valid backward=0
+  for (( i = 1; i <= ${#samples}; i++ )); do
+    sample=${samples[i]}
+    valid=1
+    if [[ $sample != <->(|.<->) || ${#${sample%%.*}} -gt 12 ]]; then
+      valid=0
+      [[ -n $_UPKG_TIMING_NOTE ]] || _UPKG_TIMING_NOTE='Timing unavailable: invalid clock sample.'
+    elif [[ -n $last ]] && (( sample < last )); then
+      backward=1
+      _UPKG_TIMING_NOTE='Timing unavailable: clock moved backward.'
+      break
+    else
+      last=$sample
+    fi
+    if (( i == 1 || i == ${#samples} )); then
+      (( valid )) || total_valid=0
+    elif (( i % 2 == 0 )); then
+      manager_valid=$valid
+    elif (( manager_valid && valid )); then
+      (( manager_index = (i - 1) / 2 ))
+      (( elapsed = sample - samples[i - 1] ))
+      _UPKG_ELAPSED[manager_index]=$elapsed
+    fi
+  done
+  (( backward || ! total_valid )) && return 0
+  (( elapsed = samples[-1] - samples[1] ))
+  _UPKG_TIMING_TOTAL=$elapsed
+  return 0
+}
+
+# Format each argument in seconds as 2.4s, 1m 02.4s, or 1h 02m 03.4s into
+# reply, with REPLY holding the last result; status 1 means a value was
+# unavailable. Integer tenths keep rounding carry and output independent of
+# the numeric locale. Formatting every row in one call keeps rendering cheap.
+_upkg_format_elapsed() {
+  local value
+  local -i tenths hours minutes seconds unavailable=0
+
+  reply=()
+  for value; do
+    if [[ $value != <->(|.<->) || ${#${value%%.*}} -gt 12 ]]; then
+      reply+=( unavailable )
+      unavailable=1
+      continue
+    fi
+    if (( value < 0.1 )); then
+      reply+=( '<0.1s' )
+      continue
+    fi
+    (( tenths = value * 10 + 0.5, hours = tenths / 36000, tenths %= 36000,
+       minutes = tenths / 600, tenths %= 600, seconds = tenths / 10, tenths %= 10 ))
+    if (( hours > 0 )); then
+      printf -v value '%dh %02dm %02d.%ds' "$hours" "$minutes" "$seconds" "$tenths"
+    elif (( minutes > 0 )); then
+      printf -v value '%dm %02d.%ds' "$minutes" "$seconds" "$tenths"
+    else
+      printf -v value '%d.%ds' "$seconds" "$tenths"
+    fi
+    reply+=( "$value" )
+  done
+  REPLY=${reply[-1]-unavailable}
+  return unavailable
+}
+
+# Set reply to each summary row's timing text in summary order. Attempted
+# managers precede filtered ones there, so durations line up by position.
+_upkg_timing_texts() {
+  _upkg_format_elapsed "${_UPKG_ELAPSED[@]}"
+  reply=( "${(@)reply/#/elapsed }" "${(@)_UPKG_SUMMARY_ORDER[${#reply} + 1,-1]/*/not run}" )
+}
+
+# Width for wrapping timing suffixes; pipes and files never wrap. Reads the
+# shell's COLUMNS in-process, without a subshell or tput, falling back to the
+# UI helpers' 80-column default when it is unset or invalid.
+_upkg_timing_wrap_width() {
+  REPLY=0
+  [[ -t 1 ]] || return 0
+  REPLY=${COLUMNS-}
+  [[ $REPLY == <1-> ]] || REPLY=80
+}
+
+# Print a plain "row | timing" line, moving the timing to an indented
+# continuation line when the row would overflow the terminal width.
+_upkg_print_timed_line() {
+  emulate -L zsh
+
+  local line=$1 wrap_width=$2
+
+  _ui_display_width "$line"
+  if (( REPLY > wrap_width )); then
+    print -r -- "${line% | *}"
+    print -r -- "    ${line##* | }"
+  else
+    print -r -- "$line"
+  fi
+}
+
+# Finish a rich row whose visible width is used_width with its timing suffix.
+_upkg_print_timing_suffix_rich() {
+  local timing=$1 used_width=$2 wrap_width=$3 lead=' | '
+
+  _ui_display_width " | $timing"
+  if (( wrap_width > 0 && used_width + REPLY > wrap_width )); then
+    print ''
+    lead='    '
+  fi
+  _ui_color muted
+  if [[ $timing == 'elapsed '* ]]; then
+    print -nr -- "${lead}elapsed "
+    _ui_color text
+    print -nr -- "${timing#elapsed }"
+  else
+    print -nr -- "$lead$timing"
+  fi
+  _ui_reset
+}
+
+# Called from the emulated summary renderers.
+_upkg_print_timing_total() {
+  local duration qualifier=''
+
+  _upkg_format_elapsed "$_UPKG_TIMING_TOTAL" && (( ${_UPKG_INTERRUPTED_STATUS:-0} )) && qualifier=' so far'
+  duration=$REPLY
+
+  if (( $1 )); then
+    if [[ -n $_UPKG_TIMING_NOTE ]]; then
+      _ui_color muted
+      print -nr -- "  $_UPKG_TIMING_NOTE"
+      _ui_reset
+      print ''
+    fi
+    _ui_color muted
+    print -nr -- "  Total elapsed ($_UPKG_TIMING_LABEL): "
+    _ui_color text
+    print -nr -- "$duration"
+    _ui_color muted
+    print -nr -- "$qualifier"
+    _ui_reset
+    print ''
+  else
+    [[ -n $_UPKG_TIMING_NOTE ]] && print -r -- "$_UPKG_TIMING_NOTE"
+    print -r -- "Total elapsed ($_UPKG_TIMING_LABEL): $duration$qualifier"
+  fi
+}
+
 _upkg_print_summary() {
   emulate -L zsh
 
   local manager detail state role title metadata bucket family glyph fallback
-  local cleanup_summary=0
+  local line
+  local cleanup_summary=0 timed=${_UPKG_TIMING_ENABLED:-0} wrap_width=0 icon_width=2 used_width
+  local -a timings reply
+  integer i=0
   local -A status_counts=(
     ok 0
     updates 0
@@ -337,6 +552,13 @@ _upkg_print_summary() {
       (( status_counts[$bucket]++ ))
       [ "$family" = 'cleanup' ] && cleanup_summary=1
     done
+
+    if (( timed )); then
+      _upkg_timing_wrap_width && wrap_width=$REPLY
+      _ui_ascii_mode && icon_width=1
+      _upkg_timing_texts
+      timings=( "${reply[@]}" )
+    fi
 
     _ui_section_break
     _ui_color muted
@@ -413,20 +635,36 @@ _upkg_print_summary() {
         print -nr -- "($detail)"
         _ui_reset
       fi
+      if (( timed )); then
+        # Status and manager icons may occupy two cells outside ASCII mode.
+        _ui_display_width "$title [$state]${detail:+ ($detail)}"
+        used_width=$(( REPLY + 4 + 2 * icon_width ))
+        (( i++ ))
+        _upkg_print_timing_suffix_rich "${timings[i]}" "$used_width" "$wrap_width"
+      fi
       print ''
     done
+    (( timed )) && _upkg_print_timing_total 1
   else
+    (( timed )) && _upkg_timing_wrap_width && wrap_width=$REPLY
     print ''
     print 'Summary:'
-    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
-      detail=${_UPKG_SUMMARY_DETAIL[$manager]}
-      if [ -n "$detail" ]; then
-        print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]} - $detail"
-      else
-        print "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}"
-      fi
+    if (( ! timed )); then
+      for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+        print -r -- "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}}"
+      done
+      return 0
+    fi
+    _upkg_timing_texts
+    timings=( "${reply[@]}" )
+    for (( i = 1; i <= ${#_UPKG_SUMMARY_ORDER}; i++ )); do
+      manager=${_UPKG_SUMMARY_ORDER[i]}
+      line="  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}} | ${timings[i]}"
+      (( wrap_width )) && _upkg_print_timed_line "$line" "$wrap_width" || print -r -- "$line"
     done
+    _upkg_print_timing_total 0
   fi
+  return 0
 }
 
 # Capture query data separately from diagnostics; never use this for prompts.
@@ -837,10 +1075,13 @@ _upkg_format_search_rows() {
 _upkg_print_search_summary() {
   emulate -L zsh
 
-  local manager state suffix failed_managers cancelled_managers
+  local manager state suffix failed_managers cancelled_managers role metadata bucket family glyph fallback
   local result_count=${#_UPKG_SEARCH_ROWS[@]}
   local manager_count=0
   local failed_count=0 cancelled_count=0
+  local timed=${_UPKG_TIMING_ENABLED:-0} wrap_width=0 icon_width=2 used_width line
+  local -a timings reply
+  integer i=0
 
   for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
     state=${_UPKG_SUMMARY_STATE[$manager]}
@@ -906,10 +1147,53 @@ _upkg_print_search_summary() {
       _ui_reset
       print ''
     fi
+    (( timed )) || return 0
+    _upkg_timing_wrap_width && wrap_width=$REPLY
+    _ui_ascii_mode && icon_width=1
+    _upkg_timing_texts
+    timings=( "${reply[@]}" )
+    print -nr -- '  '
+    _ui_color muted
+    print -nr -- 'Elapsed by manager:'
+    _ui_reset
+    print ''
+    for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+      state=${_UPKG_SUMMARY_STATE[$manager]}
+      metadata=$(_ui_status_metadata "$state")
+      IFS=$'\t' read -r role bucket family glyph fallback <<< "$metadata"
+      print -nr -- '    '
+      _ui_color "$role"
+      _ui_status_icon "$state"
+      _ui_reset
+      print -nr -- ' '
+      _ui_color text
+      print -nr -- "$manager"
+      _ui_reset
+      print -nr -- ' '
+      _ui_badge "$state" "$role"
+      _ui_display_width "$manager [$state]"
+      (( used_width = REPLY + 5 + icon_width ))
+      (( i++ ))
+      _upkg_print_timing_suffix_rich "${timings[i]}" "$used_width" "$wrap_width"
+      print ''
+    done
+    _upkg_print_timing_total 1
   else
     print ''
-    print "Search summary: $result_count result(s) across $manager_count manager(s)$suffix"
+    print -r -- "Search summary: $result_count result(s) across $manager_count manager(s)$suffix"
+    (( timed )) || return 0
+    _upkg_timing_wrap_width && wrap_width=$REPLY
+    print 'Elapsed by manager:'
+    _upkg_timing_texts
+    timings=( "${reply[@]}" )
+    for (( i = 1; i <= ${#_UPKG_SUMMARY_ORDER}; i++ )); do
+      manager=${_UPKG_SUMMARY_ORDER[i]}
+      line="  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]} | ${timings[i]}"
+      (( wrap_width )) && _upkg_print_timed_line "$line" "$wrap_width" || print -r -- "$line"
+    done
+    _upkg_print_timing_total 0
   fi
+  return 0
 }
 
 _upkg_search_progress() {
@@ -997,6 +1281,10 @@ upkg() {
 
   local _UPKG_THEME_MODE=''
   local -i _UPKG_INTERRUPTED_STATUS=0 _UPKG_TRAPPED_INT=0
+  # Invocation-local elapsed state shared with timing helpers by dynamic scope.
+  local -i _UPKG_TIMING_ENABLED=0 _UPKG_TIMING_CLOCK=0
+  local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL=''
+  local -a _UPKG_TIMING_MARKS _UPKG_ELAPSED
 
   while (( $# > 0 )); do
     case $1 in
@@ -1123,6 +1411,13 @@ upkg() {
   if [ "$cmd" = 'help' ]; then
     _upkg_usage
     return 0
+  fi
+
+  # Total elapsed starts before detection; manager listing is not an action.
+  if [[ $cmd == clean ]] && (( dry_run )); then
+    _upkg_timing_start 'clean preview'
+  elif [[ $cmd != managers ]]; then
+    _upkg_timing_start "$cmd"
   fi
 
   if ! _ui_plain_mode; then
@@ -1285,6 +1580,7 @@ upkg() {
   trap '_UPKG_TRAPPED_INT=1' INT
 
   for manager in "${run_order[@]}"; do
+    _UPKG_TIMING_MARKS+=( "$EPOCHREALTIME" )
     case "${cmd}:${manager}" in
       outdated:apt) _upkg_run_outdated_apt ;;
       outdated:dnf) _upkg_run_outdated_dnf ;;
@@ -1332,6 +1628,7 @@ upkg() {
         _upkg_set_last_result 'failed' 'missing handler'
         ;;
     esac
+    _UPKG_TIMING_MARKS+=( "$EPOCHREALTIME" )
 
     # A backend that returned without checking its status still stops here.
     (( _UPKG_TRAPPED_INT && ! _UPKG_INTERRUPTED_STATUS )) && _upkg_check_interrupt 130
@@ -1354,10 +1651,12 @@ upkg() {
 
   if [ "$cmd" = 'search' ]; then
     _upkg_format_search_rows "${_UPKG_SEARCH_ROWS[@]}"
+    _upkg_timing_finish
     _upkg_print_search_summary
     return $exit_code
   fi
 
+  _upkg_timing_finish
   _upkg_print_summary
   return $exit_code
 }

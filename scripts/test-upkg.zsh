@@ -407,6 +407,396 @@ esac'
   fi
 }
 
+# Deterministic upkg timing fixtures: stub detection, backends, and clock
+# samples inside a subshell so no package manager or wall clock is involved.
+timing_backend() {
+  local action=$1 manager=$2 spec_name="UPKG_TIMING_RESULT_$2" spec
+  shift 2
+  spec=${(P)spec_name-}
+
+  timing_tick
+  print -r -- "backend:$action:$manager"
+  [[ -n ${UPKG_TIMING_DIAGNOSTIC-} ]] && print -u2 -r -- "$UPKG_TIMING_DIAGNOSTIC"
+  case $spec in
+    cancel)
+      _upkg_check_interrupt 130
+      return 130
+      ;;
+    ?*)
+      _upkg_set_last_result "${spec%%|*}" "${spec#*|}"
+      [[ $spec == failed* || $spec == partial* || $spec == blocked* ]] && return 1
+      return 0
+      ;;
+  esac
+  case $action in
+    search) _upkg_finish_search_results "$manager" "$manager-match"$'\t1.0\tfixture' ;;
+    outdated) _upkg_set_last_result 'up to date' '' ;;
+    upgrade) _upkg_set_last_result 'upgraded' '' ;;
+    clean)
+      if (( _UPKG_DRY_RUN )); then
+        _upkg_set_last_result 'planned' ''
+      else
+        _upkg_set_last_result 'cleaned' ''
+      fi
+      ;;
+  esac
+}
+
+# Advance the fake clock to the next queued sample, if any. Stubs tick at
+# the points between upkg's clock reads: clock initialization, detection,
+# each backend, and each summary record.
+timing_tick() {
+  (( ${#UPKG_TIMING_TEST_SAMPLES} )) || return 0
+  EPOCHREALTIME=${UPKG_TIMING_TEST_SAMPLES[1]}
+  shift UPKG_TIMING_TEST_SAMPLES
+}
+
+# Stub detection and backends only; the clock stays real.
+timing_stubs() {
+  local managers=$1 action manager
+
+  typeset -g -a UPKG_TIMING_TEST_SAMPLES
+  UPKG_TIMING_TEST_SAMPLES=()
+  # Earlier cases stub rich mode globally; run_upkg_rich re-enables it.
+  functions[_ui_is_rich_terminal]='return 1'
+  functions[_ui_plain_mode]='return 0'
+  functions[_upkg_detect_managers]="
+    timing_tick
+    typeset -g -a _UPKG_ACTIVE_MANAGERS _UPKG_ALTERNATE_MANAGERS
+    _UPKG_ACTIVE_MANAGERS=($managers)
+    _UPKG_ALTERNATE_MANAGERS=()
+  "
+  for action in outdated search upgrade clean; do
+    for manager in apt brew npm; do
+      functions[_upkg_run_${action}_$manager]="timing_backend $action $manager \"\$@\""
+    done
+  done
+}
+
+# Replace the module clock with a plain EPOCHREALTIME fed from a queue.
+timing_fixture() {
+  local managers=$1
+  shift
+
+  timing_stubs "$managers"
+  zmodload -u zsh/datetime 2>/dev/null
+  typeset -g EPOCHREALTIME=''
+  UPKG_TIMING_TEST_SAMPLES=( "$@" )
+  functions[_upkg_timing_clock_ready]='print -r -- clock-initialized; timing_tick; return 0'
+  (( ${+functions[timing_record_summary]} )) || functions[timing_record_summary]=${functions[_upkg_record_summary]}
+  functions[_upkg_record_summary]='timing_tick; timing_record_summary "$@"'
+}
+
+# Run upkg with fixture samples; prints output followed by unused samples.
+run_timed_upkg() {
+  local managers=$1 samples=$2
+  shift 2
+  (
+    timing_fixture "$managers" ${=samples}
+    upkg "$@"
+    local rc=$?
+    print -r -- "remaining-samples=${#UPKG_TIMING_TEST_SAMPLES}"
+    exit $rc
+  )
+}
+
+run_timed_upkg_rich() {
+  local managers=$1 samples=$2
+  shift 2
+  (
+    timing_fixture "$managers" ${=samples}
+    run_upkg_rich "$@"
+  )
+}
+
+test_upkg_timing() {
+  local output cmd_status invocation label expected_backend stderr_file="$tmp_prefix/upkg-timing.stderr"
+  local two='1000 1000.1 1002.5 1002.5 1003.3 1003.4'
+  local fn
+
+  # Duration formatting, rounding carry, and locale independence.
+  local -a format_cases=(
+    '0' '<0.1s'
+    '0.000001' '<0.1s'
+    '0.099999' '<0.1s'
+    '0.1' '0.1s'
+    '2.44' '2.4s'
+    '2.46' '2.5s'
+    '9.96' '10.0s'
+    '59.96' '1m 00.0s'
+    '62.4' '1m 02.4s'
+    '599.99' '10m 00.0s'
+    '3599.95' '1h 00m 00.0s'
+    '3723.4' '1h 02m 03.4s'
+    '90061.2' '25h 01m 01.2s'
+    '7' '7.0s'
+  )
+  local value expected
+  for value expected in "${format_cases[@]}"; do
+    _upkg_format_elapsed "$value"
+    assert_equals "$REPLY" "$expected" "elapsed $value formats as $expected" || return 1
+  done
+  for value in '' 'abc' '-1' '1e5' '1,5' '1.5s' '9999999999999.0' '99999999999999999999'; do
+    _upkg_format_elapsed "$value"
+    cmd_status=$?
+    assert_equals "$cmd_status:$REPLY" '1:unavailable' "invalid elapsed '$value' is unavailable, never zero" || return 1
+  done
+  output=$(LC_ALL=de_DE.UTF-8 LC_NUMERIC=de_DE.UTF-8 zsh -fc 'source "$1/55-ui-helpers.zsh"; source "$1/60-functions.zsh"; _zsh_functions_load upkg; _upkg_format_elapsed 3723.45; print -r -- $REPLY' zsh "$repo_dir" 2>/dev/null)
+  assert_equals "$output" '1h 02m 03.5s' 'elapsed formatting ignores the numeric locale' || return 1
+
+  # Every canonical action and alias reports per-manager and independent totals.
+  local -a action_cases=(
+    '' outdated outdated
+    'outdated' outdated outdated
+    'check' outdated outdated
+    'list' outdated outdated
+    'plan' plan outdated
+    '--dry-run' plan outdated
+    'upgrade --dry-run' plan outdated
+    'up --dry-run' plan outdated
+    'upgrade' upgrade upgrade
+    'up' upgrade upgrade
+    'update' upgrade upgrade
+    'clean' clean clean
+    'clean --dry-run' 'clean preview' clean
+    'search ripgrep' search search
+  )
+  for invocation label expected_backend in "${action_cases[@]}"; do
+    output=$(run_timed_upkg 'brew npm' "$two" ${=invocation} 2>&1)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 "timed upkg '$invocation' succeeds" || return 1
+    assert_contains "$output" "backend:$expected_backend:brew" "timed upkg '$invocation' runs the $expected_backend backend" || return 1
+    assert_contains "$output" "Total elapsed ($label): 3.4s" "timed upkg '$invocation' reports the $label total" || return 1
+    assert_matching_lines "$output" 'Total elapsed' 1 "timed upkg '$invocation' prints one total" || return 1
+    assert_contains "$output" 'remaining-samples=0' "timed upkg '$invocation' samples twice per manager and action" || return 1
+    if [[ $label == search ]]; then
+      assert_contains "$output" $'Search summary: 2 result(s) across 2 manager(s).\nElapsed by manager:\n  brew: matches found | elapsed 2.4s\n  npm: matches found | elapsed 0.8s\nTotal elapsed (search): 3.4s' 'search adds an elapsed-by-manager list after its summary' || return 1
+    else
+      assert_contains "$output" $'| elapsed 2.4s\n' "timed upkg '$invocation' shows the first manager duration" || return 1
+      assert_contains "$output" $'| elapsed 0.8s\nTotal elapsed' "timed upkg '$invocation' shows the second manager duration before the total" || return 1
+    fi
+  done
+  # Durations keep full precision until formatting, so values just under a
+  # rounding boundary are not pushed across it first.
+  output=$(run_timed_upkg 'brew npm' '1000 1000 1000.0999999 1000.0999999 1000.2499998 1000.3')
+  assert_contains "$output" 'brew: up to date | elapsed <0.1s' 'a duration just under 0.1s stays below the threshold' || return 1
+  assert_contains "$output" 'npm: up to date | elapsed 0.1s' 'a duration just under 0.15s rounds down' || return 1
+  output=$(run_timed_upkg 'brew npm' "$two")
+  assert_contains "$output" $'Summary:\n  brew: up to date | elapsed 2.4s\n  npm: up to date | elapsed 0.8s\nTotal elapsed (outdated): 3.4s' 'plain summary keeps manager order and appends elapsed time' || return 1
+
+  # Non-actions and early returns never initialize timing or print a total.
+  for invocation in 'help' '--help' '-h' 'managers' 'managers --only npm' 'bogus' 'search' '--only' 'search --dry-run x' '--only apt' '--skip brew,npm'; do
+    output=$(run_timed_upkg 'brew npm' "$two" ${=invocation} 2>&1)
+    assert_not_contains "$output" 'Total elapsed' "upkg '$invocation' has no timing total" || return 1
+    assert_not_contains "$output" '| elapsed' "upkg '$invocation' has no manager timing" || return 1
+    if [[ $invocation != --(only|skip)\ * ]]; then
+      assert_not_contains "$output" 'clock-initialized' "upkg '$invocation' never initializes the clock" || return 1
+    fi
+  done
+  output=$(
+    (
+      timing_stubs 'brew npm'
+      zmodload -u zsh/datetime 2>/dev/null
+      upkg help >/dev/null
+      upkg managers >/dev/null
+      zmodload -e zsh/datetime && print -r -- 'clock-loaded'
+      upkg >/dev/null
+      zmodload -e zsh/datetime && print -r -- 'clock-loaded-by-action'
+    ) 2>&1
+  )
+  assert_not_contains "$output" $'clock-loaded\n' 'help and managers never load the clock module' || return 1
+  assert_contains "$output" 'clock-loaded-by-action' 'a package action loads the clock module on demand' || return 1
+  output=$(run_timed_upkg 'brew npm' "$two" --only apt 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'unavailable selection keeps its early failure' || return 1
+  assert_contains "$output" 'Selected managers are not available: apt' 'unavailable selection keeps its diagnostic' || return 1
+  output=$(run_timed_upkg 'brew npm' "$two" --skip brew,npm 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'empty selection keeps its early failure' || return 1
+  assert_contains "$output" 'No package managers selected' 'empty selection keeps its diagnostic' || return 1
+  assert_not_contains "$output" 'elapsed' 'empty selection prints no timing' || return 1
+  output=$(run_timed_upkg '' "$two" 2>&1)
+  assert_contains "$output" 'No supported package managers detected.' 'no detected managers keeps its early return' || return 1
+  assert_not_contains "$output" 'Total elapsed' 'no detected managers prints no total' || return 1
+
+  # Failure, blocked, partial, and filtered results keep their details.
+  output=$(UPKG_TIMING_RESULT_brew='failed|brew upgrade failed' run_timed_upkg 'apt brew npm' '1000 1000 1001 1001 1005.7 1005.7 1006 1006.2' upgrade 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'failed manager keeps the aggregate failure status' || return 1
+  assert_contains "$output" 'brew: failed - brew upgrade failed | elapsed 4.7s' 'failed manager keeps its detail and elapsed time' || return 1
+  assert_contains "$output" 'npm: upgraded | elapsed 0.3s' 'later managers continue after a failure' || return 1
+  assert_contains "$output" 'Total elapsed (upgrade): 6.2s' 'failure total is measured independently' || return 1
+  output=$(UPKG_TIMING_RESULT_apt='blocked|requires --sudo' UPKG_TIMING_RESULT_npm='partial|1 completed, 1 failed' run_timed_upkg 'apt npm' '1000 1000 1000.04 1000.04 1002 1002' clean 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'blocked and partial cleanup keep failure status' || return 1
+  assert_contains "$output" 'apt: blocked - requires --sudo | elapsed <0.1s' 'blocked preflight shows a sub-tenth duration' || return 1
+  assert_contains "$output" 'npm: partial - 1 completed, 1 failed | elapsed 2.0s' 'partial cleanup shows elapsed time' || return 1
+  output=$(run_timed_upkg 'brew npm' '1000 1000 1001.5 1001.6' --skip npm 2>&1)
+  assert_contains "$output" 'npm: skipped | not run' 'filtered manager shows not run instead of a number' || return 1
+  assert_contains "$output" 'Total elapsed (outdated): 1.6s' 'filtered run reports its total' || return 1
+  assert_not_contains "$output" 'backend:outdated:npm' 'filtered manager is not run' || return 1
+  output=$(run_timed_upkg 'brew npm' '1000 1000 1001.5 1001.6' search rg --skip npm 2>&1)
+  assert_contains "$output" 'across 1 manager(s).' 'search timing keeps the attempted-manager count' || return 1
+  assert_contains "$output" '  npm: skipped | not run' 'search timing lists skipped managers without a number' || return 1
+
+  # Cancellation keeps finished rows, times the interrupted manager, and omits later ones.
+  output=$(UPKG_TIMING_RESULT_brew=cancel run_timed_upkg 'npm brew apt' '1000 1000 1000.5 1000.5 1001.7 1001.8' upgrade --skip apt 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 130 'cancellation keeps status 130' || return 1
+  assert_contains "$output" 'npm: upgraded | elapsed 0.5s' 'completed manager timing survives cancellation' || return 1
+  assert_contains "$output" 'brew: cancelled - interrupted (status 130) | elapsed 1.2s' 'interrupted manager is timed through its return' || return 1
+  assert_contains "$output" 'Total elapsed (upgrade): 1.8s so far' 'cancelled total is labeled as elapsed so far' || return 1
+  assert_contains "$output" 'apt: skipped | not run' 'filtered rows remain after cancellation' || return 1
+  output=$(UPKG_TIMING_RESULT_npm=cancel run_timed_upkg 'npm brew' '1000 1000 1000.5 1000.6' upgrade 2>&1)
+  assert_not_contains "$output" 'brew:' 'never-started managers stay omitted after cancellation' || return 1
+  assert_not_contains "$output" 'backend:upgrade:brew' 'cancellation stops later managers' || return 1
+
+  # Clock failures never change package work or status.
+  output=$(
+    (
+      timing_fixture 'brew npm'
+      functions[_upkg_timing_clock_ready]='return 1'
+      UPKG_TIMING_RESULT_npm='failed|npm failed' upkg upgrade
+      print -r -- "status=$?"
+    ) 2>&1
+  )
+  assert_contains "$output" 'brew: upgraded | elapsed unavailable' 'unavailable clock keeps the manager row' || return 1
+  assert_contains "$output" 'npm: failed - npm failed | elapsed unavailable' 'unavailable clock keeps failure details' || return 1
+  assert_matching_lines "$output" 'Timing unavailable:' 1 'unavailable clock adds one note' || return 1
+  assert_contains "$output" 'Total elapsed (upgrade): unavailable' 'unavailable clock never fabricates a total' || return 1
+  assert_contains "$output" 'status=1' 'unavailable clock keeps the aggregate status' || return 1
+  assert_not_contains "$output" '0.0s' 'unavailable clock never prints zero' || return 1
+
+  output=$(run_timed_upkg 'brew npm' '1000 1000 garbage 1003 1003.8 1004' 2>&1)
+  assert_contains "$output" 'brew: up to date | elapsed unavailable' 'invalid sample marks only that duration unavailable' || return 1
+  assert_contains "$output" 'npm: up to date | elapsed 0.8s' 'later valid samples still time managers' || return 1
+  assert_contains "$output" 'Timing unavailable: invalid clock sample.' 'invalid sample adds a note' || return 1
+  assert_contains "$output" 'Total elapsed (outdated): 4.0s' 'invalid manager sample keeps a valid total' || return 1
+
+  output=$(
+    (
+      timing_fixture 'brew npm' 1000 1000 '' 1003 1003.8 1004
+      upkg
+    ) 2>&1
+  )
+  assert_contains "$output" 'brew: up to date | elapsed unavailable' 'an empty sample keeps its attempted-manager duration slot' || return 1
+  assert_contains "$output" 'npm: up to date | elapsed 0.8s' 'an empty sample does not shift later manager timings' || return 1
+  assert_not_contains "$output" 'not run' 'missing measurements never label attempted managers as skipped' || return 1
+
+  output=$(run_timed_upkg 'brew npm apt' '1000 1000 1002 1001 1003 1003.5 1003.6 1004' 2>&1)
+  assert_contains "$output" 'brew: up to date | elapsed 2.0s' 'completed duration stays valid after the clock moves backward' || return 1
+  assert_contains "$output" 'npm: up to date | elapsed unavailable' 'active duration is unavailable after a backward sample' || return 1
+  assert_contains "$output" 'apt: up to date | elapsed unavailable' 'later durations are unavailable after a backward sample' || return 1
+  assert_contains "$output" 'Total elapsed (outdated): unavailable' 'total is unavailable after a backward sample' || return 1
+  assert_matching_lines "$output" 'Timing unavailable: clock moved backward.' 1 'backward clock adds a single note' || return 1
+  assert_contains "$output" 'backend:outdated:apt' 'backward clock keeps running remaining managers' || return 1
+
+  # Real clock: shadowed, caller-disabled, and preexisting parameters are not clocks.
+  output=$(
+    (
+      timing_stubs 'npm'
+      upkg
+      shadowed() { local EPOCHREALTIME=5; upkg; }
+      shadowed
+    ) 2>&1
+  )
+  assert_contains "$output" $'npm: up to date | elapsed <0.1s\nTotal elapsed (outdated): <0.1s' 'real clock samples a fast run as sub-tenth' || return 1
+  assert_contains "$output" $'npm: up to date | elapsed unavailable\nTiming unavailable: the zsh/datetime clock could not be enabled.' 'a shadowing local EPOCHREALTIME is not used as a clock' || return 1
+  output=$(
+    (
+      timing_stubs 'npm'
+      zmodload zsh/datetime
+      zmodload -F zsh/datetime -p:EPOCHREALTIME
+      upkg
+      zmodload -lF zsh/datetime
+    ) 2>&1
+  )
+  assert_contains "$output" 'elapsed unavailable' 'a caller-disabled clock feature stays unavailable' || return 1
+  assert_contains "$output" '-p:EPOCHREALTIME' 'upkg does not re-enable a caller-disabled clock feature' || return 1
+  output=$(
+    (
+      timing_stubs 'npm'
+      zmodload -u zsh/datetime 2>/dev/null
+      typeset -g EPOCHREALTIME=7
+      upkg
+      print -r -- "caller=$EPOCHREALTIME"
+    ) 2>&1
+  )
+  assert_contains "$output" 'elapsed unavailable' 'a preexisting EPOCHREALTIME blocks the clock safely' || return 1
+  assert_not_contains "$output" "Can't add module parameter" 'clock load failures stay quiet' || return 1
+  assert_contains "$output" 'caller=7' 'upkg leaves a caller EPOCHREALTIME unchanged' || return 1
+
+  # Rich, ASCII, narrow, and plain wrapping render the same timing data.
+  output=$(run_timed_upkg_rich 'brew npm' "$two")
+  assert_contains "$output" '[up to date] | elapsed 2.4s' 'rich summary appends elapsed time to each row' || return 1
+  assert_contains "$output" '  Total elapsed (outdated): 3.4s' 'rich summary prints the total' || return 1
+  output=$(_ZSH_UI_GLYPH_TIER=unicode run_timed_upkg_rich 'brew npm' "$two" search rg)
+  assert_contains "$output" 'Elapsed by manager:' 'rich search adds the elapsed list' || return 1
+  assert_contains "$output" 'brew [matches found] | elapsed 2.4s' 'rich search rows include manager ID, state, and time' || return 1
+  assert_contains "$output" '  Total elapsed (search): 3.4s' 'rich search prints the total' || return 1
+  output=$(
+    (
+      functions[_upkg_timing_wrap_width]='REPLY=60'
+      UPKG_TIMING_RESULT_brew='failed|a long native diagnostic that must stay intact' run_timed_upkg_rich 'brew npm' "$two"
+    )
+  )
+  assert_contains "$output" $'(a long native diagnostic that must stay intact)\n    elapsed 2.4s' 'narrow rich rows move timing to a continuation line' || return 1
+  assert_contains "$output" '[up to date] | elapsed 0.8s' 'narrow rich rows keep short rows on one line' || return 1
+  output=$(
+    (
+      functions[_upkg_timing_wrap_width]='REPLY=40'
+      UPKG_TIMING_RESULT_brew='failed|a long native diagnostic that must stay intact' run_timed_upkg 'brew npm' "$two"
+    )
+  )
+  assert_contains "$output" $'  brew: failed - a long native diagnostic that must stay intact\n    elapsed 2.4s' 'narrow plain rows move timing to a continuation line' || return 1
+  assert_contains "$output" '  npm: up to date | elapsed 0.8s' 'narrow plain rows keep short rows intact' || return 1
+  output=$(NO_COLOR=1 run_timed_upkg 'brew npm' "$two")
+  assert_contains "$output" '  brew: up to date | elapsed 2.4s' 'NO_COLOR output includes timing' || return 1
+  assert_not_contains "$output" $'\e[' 'piped timing output stays free of escapes' || return 1
+
+  # Timing is summary stdout; native diagnostics remain on stderr.
+  output=$(UPKG_TIMING_DIAGNOSTIC='native warning' run_timed_upkg 'brew npm' "$two" 2>"$stderr_file")
+  assert_contains "$output" 'Total elapsed (outdated): 3.4s' 'timing is written to stdout' || return 1
+  assert_not_contains "$output" 'native warning' 'native diagnostics stay off stdout' || return 1
+  assert_equals "$(<"$stderr_file")" $'native warning\nnative warning' 'stderr carries only native diagnostics' || return 1
+
+  # Renderers tolerate direct calls, and state never leaks between invocations.
+  output=$(
+    (
+      functions[_ui_is_rich_terminal]='return 1'
+      functions[_ui_plain_mode]='return 0'
+      typeset -g -a _UPKG_SUMMARY_ORDER=(npm) _UPKG_SEARCH_ROWS=()
+      typeset -g -A _UPKG_SUMMARY_STATE=([npm]='up to date') _UPKG_SUMMARY_DETAIL=([npm]='')
+      _upkg_print_summary
+      _upkg_print_search_summary
+    ) 2>&1
+  )
+  assert_contains "$output" '  npm: up to date' 'direct summary rendering still works' || return 1
+  assert_not_contains "$output" 'elapsed' 'direct renderer calls print no timing without state' || return 1
+  output=$(
+    (
+      timing_fixture 'brew npm' 1000 1000 1001 1001 1002 1002 2000 2000 2000.2 2000.2 2000.3 2000.4
+      upkg >/dev/null
+      upkg
+      print -r -- "leaked=${+_UPKG_ELAPSED}${+_UPKG_TIMING_TOTAL}${+_UPKG_TIMING_ENABLED}"
+      _upkg_print_summary
+    ) 2>&1
+  )
+  assert_contains "$output" $'brew: up to date | elapsed 0.2s\n  npm: up to date | elapsed 0.1s\nTotal elapsed (outdated): 0.4s' 'repeated invocations report independent timings' || return 1
+  assert_contains "$output" 'leaked=000' 'timing state is local to one invocation' || return 1
+  assert_matching_lines "$output" 'Total elapsed' 1 'later direct rendering cannot reuse a previous total' || return 1
+
+  # Sampling, bookkeeping, and formatting stay in-process around fixed dispatch.
+  _zsh_functions_load upkg
+  for fn in _upkg_timing_clock_ready _upkg_timing_start _upkg_timing_finish _upkg_format_elapsed _upkg_timing_texts _upkg_timing_wrap_width _upkg_print_timed_line _upkg_print_timing_suffix_rich _upkg_print_timing_total; do
+    assert_not_contains "${functions[$fn]}" '$(' "$fn creates no command substitution" || return 1
+    assert_not_contains "${functions[$fn]}" 'command ' "$fn runs no external command" || return 1
+    assert_not_contains "${functions[$fn]}" 'trap' "$fn installs no signal trap" || return 1
+  done
+  assert_contains "${functions[upkg]}" $'_UPKG_TIMING_MARKS+=("$EPOCHREALTIME") \n\t\tcase "${cmd}:${manager}" in' 'manager timing samples inline immediately before dispatch' || return 1
+  assert_contains "${functions[upkg]}" $'\t\tesac\n\t\t_UPKG_TIMING_MARKS+=("$EPOCHREALTIME") \n' 'manager timing samples inline immediately after dispatch' || return 1
+}
+
 main() {
   local output cmd_status route state_role npm_stdout npm_stderr stderr_output
   local parser_stdout="$tmp_prefix/upkg-parser.stdout"
@@ -1111,6 +1501,12 @@ exit 0
   print -r -- "$saved_flatpak_fake" >"$fakebin/flatpak"
   assert_status "$cmd_status" 130 'shell-level Ctrl-C during upgrade returns 130' || return 1
   assert_contains "$output" 'flatpak: cancelled' 'shell-level Ctrl-C during upgrade is summarized' || return 1
+  if [[ $output != *'flatpak: cancelled - '*' | elapsed '(\<0.1|<->.<->)s* || $output != *'Total elapsed (upgrade): '*' so far'* ]]; then
+    print -u2 -r -- "not ok: shell-level Ctrl-C keeps manager and partial total elapsed time"
+    print -u2 -r -- "$output"
+    return 1
+  fi
+  print -r -- 'ok: shell-level Ctrl-C keeps manager and partial total elapsed time'
   assert_not_contains "$output" '==> Homebrew' 'shell-level Ctrl-C stops subsequent managers' || return 1
 
   output=$(upkg --dry-run --only=flatpak)
@@ -1895,6 +2291,8 @@ esac
   assert_contains "$output" 'dnf' 'dnf search records dnf manager label' || return 1
   assert_contains "$output" 'ripgrep.x86_64' 'dnf search shows package name with arch' || return 1
   assert_contains "$output" '14.1.1-1.fc40' 'dnf search shows available version' || return 1
+
+  test_upkg_timing || return 1
 }
 
 main "$@"
