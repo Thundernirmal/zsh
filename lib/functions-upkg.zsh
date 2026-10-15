@@ -315,9 +315,8 @@ _upkg_summary_managers_by_state() {
 # finish step ignores them when the clock is unavailable and otherwise
 # validates them once. Helpers never fail the action and leave unavailable
 # values empty instead of zero.
+# Runs inside upkg's emulated scope.
 _upkg_timing_clock_ready() {
-  emulate -L zsh
-
   # Respect a loaded module whose clock feature the caller disabled.
   if ! zmodload -e zsh/datetime; then
     zmodload zsh/datetime 2>/dev/null || return 1
@@ -347,8 +346,7 @@ _upkg_timing_start() {
 _upkg_timing_finish() {
   local -F 6 elapsed
   local -a samples invalid
-  local sample last=''
-  integer i manager_index valid total_valid=1 manager_valid backward=0
+  integer i
 
   (( _UPKG_TIMING_CLOCK )) || return 0
   samples=( "$_UPKG_TIMING_TOTAL_START" "${_UPKG_TIMING_MARKS[@]}" "$EPOCHREALTIME" )
@@ -373,6 +371,8 @@ _upkg_timing_finish() {
     _UPKG_ELAPSED=()
   fi
 
+  local sample last=''
+  integer manager_index valid total_valid=1 manager_valid backward=0
   for (( i = 1; i <= ${#samples}; i++ )); do
     sample=${samples[i]}
     valid=1
@@ -435,22 +435,20 @@ _upkg_timing_wrap_width() {
   REPLY=$(_ui_term_width)
 }
 
-# Print a plain row with its timing suffix, continuing on an indented line
-# when the combined row would overflow a terminal.
+# Print a plain "row | timing" line, moving the timing to an indented
+# continuation line when the row would overflow the terminal width.
 _upkg_print_timed_line() {
   emulate -L zsh
 
-  local line=$1 timing=$2 wrap_width=$3
+  local line=$1 wrap_width=$2
 
-  if (( wrap_width > 0 )); then
-    _ui_display_width "$line | $timing"
-    if (( REPLY > wrap_width )); then
-      print -r -- "$line"
-      print -r -- "    $timing"
-      return 0
-    fi
+  _ui_display_width "$line"
+  if (( REPLY > wrap_width )); then
+    print -r -- "${line% | *}"
+    print -r -- "    ${line##* | }"
+  else
+    print -r -- "$line"
   fi
-  print -r -- "$line | $timing"
 }
 
 # Finish a rich row whose visible width is used_width with its timing suffix.
@@ -475,13 +473,12 @@ _upkg_print_timing_suffix_rich() {
 
 # Called from the emulated summary renderers.
 _upkg_print_timing_total() {
-  local rich=$1 duration qualifier=''
+  local duration qualifier=''
 
-  _upkg_format_elapsed "$_UPKG_TIMING_TOTAL"
+  _upkg_format_elapsed "$_UPKG_TIMING_TOTAL" && (( ${_UPKG_INTERRUPTED_STATUS:-0} )) && qualifier=' so far'
   duration=$REPLY
-  (( ${_UPKG_INTERRUPTED_STATUS:-0} )) && [[ $duration != unavailable ]] && qualifier=' so far'
 
-  if (( rich )); then
+  if (( $1 )); then
     if [[ -n $_UPKG_TIMING_NOTE ]]; then
       _ui_color muted
       print -nr -- "  $_UPKG_TIMING_NOTE"
@@ -628,21 +625,19 @@ _upkg_print_summary() {
     (( timed )) && _upkg_timing_wrap_width && wrap_width=$REPLY
     print ''
     print 'Summary:'
+    if (( ! timed )); then
+      for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
+        print -r -- "  ${manager}: ${_UPKG_SUMMARY_STATE[$manager]}${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}}"
+      done
+      return 0
+    fi
     for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
       state=${_UPKG_SUMMARY_STATE[$manager]}
-      line="  ${manager}: $state${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}}"
-      if (( ! timed )); then
-        print -r -- "$line"
-        continue
-      fi
       if [[ $state == skipped ]]; then REPLY='not run'; else _upkg_format_elapsed "${_UPKG_ELAPSED[$manager]-}" 'elapsed '; fi
-      if (( wrap_width )); then
-        _upkg_print_timed_line "$line" "$REPLY" "$wrap_width"
-      else
-        print -r -- "$line | $REPLY"
-      fi
+      line="  ${manager}: $state${_UPKG_SUMMARY_DETAIL[$manager]:+ - ${_UPKG_SUMMARY_DETAIL[$manager]}} | $REPLY"
+      (( wrap_width )) && _upkg_print_timed_line "$line" "$wrap_width" || print -r -- "$line"
     done
-    (( timed )) && _upkg_print_timing_total 0
+    _upkg_print_timing_total 0
   fi
   return 0
 }
@@ -1163,11 +1158,7 @@ _upkg_print_search_summary() {
     for manager in "${_UPKG_SUMMARY_ORDER[@]}"; do
       state=${_UPKG_SUMMARY_STATE[$manager]}
       if [[ $state == skipped ]]; then REPLY='not run'; else _upkg_format_elapsed "${_UPKG_ELAPSED[$manager]-}" 'elapsed '; fi
-      if (( wrap_width )); then
-        _upkg_print_timed_line "  ${manager}: $state" "$REPLY" "$wrap_width"
-      else
-        print -r -- "  ${manager}: $state | $REPLY"
-      fi
+      (( wrap_width )) && _upkg_print_timed_line "  ${manager}: $state | $REPLY" "$wrap_width" || print -r -- "  ${manager}: $state | $REPLY"
     done
     _upkg_print_timing_total 0
   fi
@@ -1261,9 +1252,8 @@ upkg() {
   local -i _UPKG_INTERRUPTED_STATUS=0 _UPKG_TRAPPED_INT=0
   # Invocation-local elapsed state shared with timing helpers by dynamic scope.
   local -i _UPKG_TIMING_ENABLED=0 _UPKG_TIMING_CLOCK=0
-  local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL=''
-  local -a _UPKG_TIMING_MARKS
-  local -A _UPKG_ELAPSED
+  local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL='' _UPKG_TIMING_MARKS=() _UPKG_ELAPSED
+  typeset -A _UPKG_ELAPSED
 
   while (( $# > 0 )); do
     case $1 in
