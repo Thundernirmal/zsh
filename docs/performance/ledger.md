@@ -79,3 +79,14 @@ Stage 6b validation: full runner passed (1,984 `ok:` lines); focused package and
 Stage 7 additional validation observation: the third full run stopped in the unchanged npm unsupported-subcommand classification fixture (`npx cache listing failed` instead of the expected unsupported classification). This path does not call the modified Nix scheduler. The separate package-audit retries above passed; the complete runner remains the commit gate.
 
 Stage 7 final validation: the fourth full runner passed (1,987 `ok:` lines), including query ownership, launcher, completion, and real-fzf PTY checks. Focused decode/scheduler and package-audit suites passed. `git diff --check` passed; all pre-existing performance documents are unchanged or extended by append-only text. The intermittent observations above remain follow-up risks, not claimed fixes.
+
+## Stage 8 — C07b closed-form RGB quantization
+
+- Previous stage commit: `2bb1bf7` (C06). Parent: `2bb1bf7`; commit subject: `perf(C07b): replace RGB palette searches with exact arithmetic`.
+- Change: choose the nearest cube channel and gray ramp index arithmetically, retaining lower-index midpoint ties and the final strict gray-versus-cube distance comparison. No memoization, cache growth, validation change, or scratch-output change.
+- Coverage: 3,087 production-Zsh comparisons against the frozen original search, covering a Cartesian cube-boundary grid, all gray values and neighboring diagonals, all built-in role colors in both hex cases, and invalid inputs. Compare return status, REPLY, and reply; existing full-theme output digest and pure-startup checks remain active.
+- Validation repair: the first full run reached real-fzf PTY tests, where the existing branch fixture accepted before asynchronous filtering finished (query shown but 2/2 rows still present). The test now waits for the actual 1/2 result count before toggling/accepting. It retains the same branch/worktree assertions, timeout, real terminal, and native binary; no fixed delay or weakened expectation. The isolated complete PTY suite passed after this repair.
+- Measurement: five interleaved fresh shells with NO_COLOR unset, nord active, and explicit 256 depth; first color build and 50 repeated builds measured separately. First-build median 21.88 → 11.72 ms; warm median 20.91 → 10.09 ms. [Raw C07b samples](./C07b-results.json). No startup-total claim.
+- Documentation/website: internal conversion only; palette policy, helper interfaces and locations, guide anchors, literal registrations, and documented behavior remain unchanged. Companion snapshot verification remains pending.
+
+Stage 8 final validation: full `zsh scripts/run-tests.zsh` passed, including the corrected real-fzf PTY synchronization, RGB reference comparisons, theme output digest, and ownership/launcher suites. `git diff --check` passed. Prior performance content remains intact; only this ledger was extended and a new result artifact added.

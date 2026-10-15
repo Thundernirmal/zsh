@@ -36,6 +36,7 @@ unset _zsh_syntax_file
 sh -n ./scripts/check-deps.sh
 zsh ./scripts/test-init.zsh
 zsh ./scripts/test-theme.zsh
+zsh ./scripts/test-theme-rgb.zsh
 zsh ./scripts/test-functions.zsh
 zsh ./scripts/test-command-ux.zsh
 zsh ./scripts/test-domains.zsh
