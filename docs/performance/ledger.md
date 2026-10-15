@@ -38,3 +38,12 @@ Stage 3 validation: full runner passed (1,965 `ok:` lines, real-fzf PTY included
 - Website: mapping targets, literal registrations, helpers, and documentation behavior unchanged. Snapshot checks remain pending; no remote push.
 
 Stage 4 validation: full runner passed (1,967 `ok:` lines), focused theme tests and byte-for-byte matrix comparison passed. Median per-build times: truecolor 4.582 → 2.227 ms, 256 26.358 → 9.279 ms; [raw C07a samples](./C07a-results.json). `git diff --check` passed.
+
+## Stage 5 — C04 ordered completion union cache
+
+- Previous stage commit: `073ffe9` (C07a). Parent: `073ffe9`; commit subject: `perf(C04): reuse the ordered Nix completion union`.
+- Change: cache the final unique array behind a NUL-framed ordered path/identity signature. Eligibility and identities are still checked on every request. Missing stat identities disable reuse. Bulk array deduplication preserves first occurrence order; the existing cold line reader retains its unterminated-record semantics. Rebuilds retain only current per-file identities/data.
+- Coverage: independent parse/build counters; warm caller-mutation isolation; overlapping files, replacements, additions, empty files, symlinks, readability changes, stat failure, and removal cleanup. Existing tests retain no-Nix/no-refresh assertions.
+- Documentation: README/guide/tips-loader synchronized. The guide states the retained identity/timestamp granularity; completion remains offline. No guide headings or public registration changes. Companion snapshot and interactive host completion-framework timing remain pending; helper measurements do not claim end-to-end Tab latency.
+
+Stage 5 validation: focused completion tests passed. The first full run failed in the existing real-fzf branch picker after Enter arrived while filtering still showed 2/2 candidates; no completion-union failure occurred. An isolated complete PTY retry and then the complete runner passed (1,979 `ok:` lines). No test timing or assertion was weakened. Warm helper medians at 10k/30k/60k names: 134.13 → 3.07 ms, 755.06 → 7.86 ms, 2436.35 → 14.46 ms; [raw C04 samples](./C04-results.json). Cold reading remains unchanged in semantics; bulk deduplication also reduces cold cost. `git diff --check` passed.

@@ -920,7 +920,7 @@ When user-facing behavior changes, update every affected surface without copying
 - Never add a plaintext CGM fallback, value-retrieving completion, or `eval`-based secret export.
 - Treat aliases in `20-aliases.zsh` as high-impact changes.
 
-Nix attribute completion reuses parsed names in the current session while each cache file’s device, inode, size, and modification time match. Replacing, adding, or removing cache files is reflected on the next completion. It never refreshes the index over the network.
+Nix attribute completion reuses parsed names and the final ordered, deduplicated candidate list in the current session while the eligible file set and each file’s device, inode, size, and modification time match. These identities use filesystem timestamp granularity; same-size edits with preserved identities and timestamps are not content-hash checked. Replacing, adding, or removing cache files is reflected on the next completion. It never refreshes the index over the network.
 
 ### Required checks
 

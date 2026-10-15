@@ -45,7 +45,7 @@ Fuzzy pickers share one themed, responsive frame, with file previews limited to 
 
 ## What it provides
 
-- Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning.
+- Shared history, directory-stack navigation, explicit dotfile globbing, and lightweight completion tuning, including offline cached Nix candidates.
 - Guarded `zoxide` and `fzf` integration with validated caches and Ctrl+R, Ctrl+T, Alt+C, and `zi` pickers.
 - File, content search, Git, network, disk-usage, and process helpers with pipe-friendly output. Native `mkdir`, `cp`, `mv`, and `rm` behavior is left unchanged.
 - `upkg` for update inventories, upgrades, search, and cleanup across detected package managers, plus optional `npkg` for Nix profiles.

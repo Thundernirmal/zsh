@@ -314,6 +314,51 @@ printenv _ZSH_COMPLETION_INVOCATION >> "$_ZSH_COMPLETION_LOG"' > "$fakebin/nix"
   unset XDG_CACHE_HOME _ZSH_COMPLETION_LOG _ZSH_COMPLETION_INVOCATION
 }
 
+test_npkg_union_invalidation() (
+  local XDG_CACHE_HOME="$tmp_dir/union-cache" first identity_before
+  integer builds parses
+  command mkdir -p -- "$XDG_CACHE_HOME/npkg"
+  first="$XDG_CACHE_HOME/npkg/nixpkgs-attrs-a.txt"
+  print -rn -- $'c\na\nc\nb\n\nlast' > "$first"
+  _zsh_npkg_cached_attributes
+  assert_equals "${(j: :)reply}" 'c a b' 'union preserves first order, skips empty lines and unterminated final record' || return 1
+  builds=$_ZSH_NPKG_COMPLETION_BUILD_COUNT
+  parses=$_ZSH_NPKG_COMPLETION_PARSE_COUNT
+  reply=(caller-mutation)
+  _zsh_npkg_cached_attributes
+  assert_equals "${(j: :)reply}" 'c a b' 'warm union is independent of caller reply mutations' || return 1
+  assert_equals "$_ZSH_NPKG_COMPLETION_BUILD_COUNT:$_ZSH_NPKG_COMPLETION_PARSE_COUNT" "$builds:$parses" 'warm union avoids both parsing and assembly' || return 1
+  identity_before=${_ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS[$first]}
+  print -l -- d a > "$XDG_CACHE_HOME/new"
+  command mv -- "$XDG_CACHE_HOME/new" "$first"
+  _zsh_npkg_cached_attributes
+  assert_equals "${(j: :)reply}" 'd a' 'same-path replacement invalidates union' || return 1
+  assert_equals "${+_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity_before]}" 0 'replaced identities are discarded' || return 1
+  print -l -- a e > "$XDG_CACHE_HOME/npkg/nixpkgs-attrs-b.txt"
+  : > "$XDG_CACHE_HOME/npkg/nixpkgs-attrs-empty.txt"
+  command ln -s -- "$first" "$XDG_CACHE_HOME/npkg/nixpkgs-attrs-link.txt"
+  _zsh_npkg_cached_attributes
+  assert_equals "${(j: :)reply}" 'd a e' 'added and empty files retain ordered deduplication' || return 1
+  assert_equals "${#_ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS}" 3 'symlinked indexes are excluded from cached membership' || return 1
+  command chmod 000 "$first"
+  if [[ ! -r $first ]]; then
+    _zsh_npkg_cached_attributes
+    assert_equals "${(j: :)reply}" 'a e' 'readability change removes unavailable candidates' || return 1
+  fi
+  command chmod 600 "$first"
+  _zsh_npkg_cache_identity() { return 1; }
+  _zsh_npkg_cached_attributes
+  parses=$_ZSH_NPKG_COMPLETION_PARSE_COUNT
+  builds=$_ZSH_NPKG_COMPLETION_BUILD_COUNT
+  _zsh_npkg_cached_attributes
+  assert_equals "${(j: :)reply}" 'd a e' 'stat failure retains correct offline candidates' || return 1
+  assert_equals "$_ZSH_NPKG_COMPLETION_BUILD_COUNT" "$((builds+1))" 'stat failure disables aggregate reuse' || return 1
+  assert_equals "$_ZSH_NPKG_COMPLETION_PARSE_COUNT" "$((parses+3))" 'stat failure reparses all eligible files' || return 1
+  command rm -- "$XDG_CACHE_HOME/npkg/"*.txt
+  _zsh_npkg_cached_attributes
+  assert_equals "${#reply}:${#_ZSH_NPKG_COMPLETION_CACHE_DATA}:${#_ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS}" '0:0:0' 'removed indexes leave no candidates or obsolete per-file data'
+)
+
 test_source_has_no_subprocesses() {
   local fakebin="$tmp_dir/source-fakebin"
   local invocation_log="$tmp_dir/source-invocations"
@@ -379,6 +424,7 @@ main() {
   test_npkg_helper_completion || return 1
   test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1
+  test_npkg_union_invalidation || return 1
   test_cached_cgm_names || return 1
   test_source_has_no_subprocesses || return 1
 }
