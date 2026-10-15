@@ -30,7 +30,7 @@ if (( $+functions[compdef] )); then
     '--help:Show usage help'
   )
   typeset -ga _ZSH_EXTRACT_EXTENSIONS=(
-    tar.bz2 tar.gz tar.xz tar.zst bz2 rar gz tar tbz2 tgz tzst zip Z 7z
+    tar.bz2 tar.gz tar.xz tar.zst tar.lzma tar.lz bz2 rar gz xz lzma zst tar tbz tbz2 tgz txz tzst zip Z 7z
   )
   typeset -ga _ZSH_ZTHEME_COMMAND_SPECS=(
     'list:List built-in themes'
@@ -334,6 +334,8 @@ if (( $+functions[compdef] )); then
     local -a command_specs
 
     if (( ! $+parameters[_ZSH_HELP_ORDER] )); then
+      # Parse the trusted registry without user or global alias expansion.
+      setopt localoptions no_aliases
       source "$_ZSH_COMPLETION_MODULE_DIR/lib/command-registry.zsh" || {
         _message 'command or search query'
         return 0

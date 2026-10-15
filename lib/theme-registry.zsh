@@ -41,6 +41,7 @@ _zsh_theme_role_hex() {
   else
     if (( ! _ZSH_THEME_BUILTIN_PALETTES_LOADED )); then
       [[ -r $_ZSH_THEME_MODULE_DIR/lib/theme-palettes.zsh ]] || return 1
+      setopt localoptions no_aliases
       source "$_ZSH_THEME_MODULE_DIR/lib/theme-palettes.zsh" || return 1
       typeset -gi _ZSH_THEME_BUILTIN_PALETTES_LOADED=1
     fi

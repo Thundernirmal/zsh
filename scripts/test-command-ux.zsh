@@ -161,6 +161,38 @@ test_extract_destination() {
   print -- 'ok: archive input remains after destination extraction'
 }
 
+test_extract_additional_formats() {
+  local root="$tmp_dir/extract-formats" source_dir="$tmp_dir/extract-formats/source" rc
+
+  command mkdir -p -- "$source_dir" "$root/upper" "$root/txz"
+  print -r -- 'format payload' >"$source_dir/payload.txt"
+  command tar -czf "$root/UPPER.TAR.GZ" -C "$source_dir" payload.txt
+  extract --destination "$root/upper" "$root/UPPER.TAR.GZ" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 0 'extract matches uppercase archive suffixes' || return 1
+  assert_file_contains "$root/upper/payload.txt" 'format payload' 'uppercase suffix extraction writes the payload' || return 1
+
+  if command -v xz >/dev/null 2>&1; then
+    command tar -cJf "$root/payload.txz" -C "$source_dir" payload.txt
+    extract --destination "$root/txz" "$root/payload.txz" >/dev/null 2>&1; rc=$?
+    assert_status "$rc" 0 'extract unpacks .txz archives' || return 1
+    print -r -- 'bare xz' >"$root/bare.txt"
+    command xz -- "$root/bare.txt"
+    extract --keep "$root/bare.txt.xz" >/dev/null 2>&1; rc=$?
+    assert_status "$rc" 0 'extract decompresses bare .xz input' || return 1
+    assert_file_contains "$root/bare.txt" 'bare xz' 'bare .xz extraction writes the payload' || return 1
+    [[ -f $root/bare.txt.xz ]]
+    assert_status "$?" 0 'extract --keep preserves bare .xz input' || return 1
+  fi
+
+  if command -v zstd >/dev/null 2>&1 && command -v unzstd >/dev/null 2>&1; then
+    print -r -- 'bare zstd' >"$root/bare-zst.txt"
+    command zstd -q --rm -- "$root/bare-zst.txt"
+    extract "$root/bare-zst.txt.zst" >/dev/null 2>&1; rc=$?
+    assert_status "$rc" 0 'extract decompresses bare .zst input' || return 1
+    assert_file_contains "$root/bare-zst.txt" 'bare zstd' 'bare .zst extraction writes the payload' || return 1
+  fi
+}
+
 test_extract_empty_destination() {
   local root="$tmp_dir/empty-destination" fakebin="$tmp_dir/empty-destination/bin"
   local option output rc suffix
@@ -340,6 +372,7 @@ main() {
   test_search_options || return 1
   test_network_timeouts || return 1
   test_extract_destination || return 1
+  test_extract_additional_formats || return 1
   test_extract_empty_destination || return 1
   test_extract_stream_safety || return 1
   test_extract_input_symlinks || return 1

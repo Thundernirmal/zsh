@@ -137,7 +137,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 | `gdbus` | Explicit `cgm check` backend health probe | Health check explains the missing GLib tool; storage and loading still work |
 | `nix` | Defines `npkg` and the `upkg` Nix backend | Nix commands are absent |
 | `nix-collect-garbage` | `upkg clean --only nix` | Nix cleanup reports a failure |
-| `unzip`, `unrar`, `7z`, and related tools | Format-specific extraction | `extract` reports the missing tool when used |
+| `unzip`, `unrar`, `7z`/`7zz`/`7za`, `unxz`, `unzstd`, and related tools | Format-specific extraction | `extract` reports the missing tool when used |
 
 `checkupdates` requires `fakeroot`; on Arch, install both with `sudo pacman -S pacman-contrib fakeroot`. The dependency checker reports missing `fakeroot` when Pacman and checkupdates are present. A failed fresh query remains a failure rather than silently switching to cached data.
 
@@ -327,7 +327,7 @@ Because `AUTO_PUSHD` is active, ordinary `cd` participates in this stack.
 
 | Setting | Value or state |
 |---|---|
-| `HISTFILE` | `~/.zsh_history` |
+| `HISTFILE` | `~/.zsh_history`, or `ZSH_HISTFILE` when set |
 | `HISTSIZE` / `SAVEHIST` | `100000` |
 | `APPEND_HISTORY` | on |
 | `SHARE_HISTORY` | on |
@@ -336,7 +336,13 @@ Because `AUTO_PUSHD` is active, ordinary `cd` participates in this stack.
 | `HIST_IGNORE_SPACE` | on |
 | `HIST_REDUCE_BLANKS` | on |
 
-History is shared across open shells. Commands beginning with a space are omitted, duplicate search results are suppressed, and redundant spaces are reduced before saving.
+The module replaces any `HISTFILE` set earlier, for example by Oh My Zsh. To keep history in another location, export `ZSH_HISTFILE` before sourcing `init.zsh`:
+
+```zsh
+export ZSH_HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
+```
+
+Create that file's parent directory first. History is shared across open shells. Commands beginning with a space are omitted, duplicate search results are suppressed, and redundant spaces are reduced before saving.
 
 ## Completion
 
@@ -403,7 +409,7 @@ zdoctor --secrets    # also ping Secret Service over D-Bus (values are never ret
 zdoctor --help
 ```
 
-It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. `--secrets` sends only a D-Bus `Peer.Ping` through `gdbus`, which cannot unlock, search, or read credentials; it fails when Secret Service does not answer and warns when `gdbus` is missing. The exit status is nonzero while any failure is present; warnings alone keep it zero.
+It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. `--network` uses the same `ZSH_HTTP_CONNECT_TIMEOUT` and `ZSH_HTTP_MAX_TIME` budgets as `myip` and `weather`. `--secrets` sends only a D-Bus `Peer.Ping` through `gdbus`, which cannot unlock, search, or read credentials; it fails when Secret Service does not answer and warns when `gdbus` is missing. The exit status is nonzero while any failure is present; warnings alone keep it zero.
 
 A recorded blocked fzf integration is a failure even when its binary version is supported; the diagnostic preserves the block reason. Repair that problem and restart the shell. Ready integration passes. An unchecked integration is reported as a note: command-mode shells intentionally skip prompt integration, so run `zdoctor` in a normal interactive shell to check it. Diagnosis never initializes fzf, regenerates integration, edits its cache, or changes widgets.
 
@@ -492,7 +498,7 @@ Zoxide initialization supports `NO_UNSET` even before `precmd_functions` or `chp
 
 The shared directory theme is exported through zoxide's `_ZO_FZF_OPTS` interface before `zoxide init`, so `zi` and zoxide interactive completion match the generated fzf widgets. Because zoxide replaces `FZF_DEFAULT_OPTS` with that value and then omits its own picker defaults, the managed value restores them: `--exact` matching, `--no-sort` so frecency order survives typing, `--keep-right`, `--exit-0` for empty results, Tab/Shift-Tab movement, and a directory listing preview (Ctrl-P toggles it). Inherited `FZF_DEFAULT_OPTS`, then `ZSH_FZF_EXTRA_OPTS`, then inherited `_ZO_FZF_OPTS` follow the managed layer, matching the order used by the shared widgets.
 
-Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata, the `_ZO_ECHO` and `_ZO_RESOLVE_SYMLINKS` settings that zoxide writes into its generated functions, and the Zsh version, so changing either setting selects a fresh integration and warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead. A rejected cache directory is never used for publication or failure cleanup; private fallback files are removed after activation.
+Zoxide's generated shell integration is never evaluated directly. For a new zoxide executable, the configuration writes the output to a private temporary file, validates it with `zsh -fn`, and only then sources it. A validated, owner-only cache under `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide/` is keyed by the zoxide executable metadata, the `_ZO_ECHO` and `_ZO_RESOLVE_SYMLINKS` settings that zoxide writes into its generated functions, and the Zsh version, so changing either setting selects a fresh integration and warm shells avoid rerunning both generation and validation. If no absolute cache home is available or the cache cannot be created safely, startup uses a temporary validated file instead. A rejected cache directory is never used for publication or failure cleanup; private fallback files are removed after activation. Publishing a new cache also deletes cache files in that directory that are more than 30 days old; the age limit keeps shells with different zoxide or Zsh versions from deleting each other's current caches.
 
 ### fzf requirement and startup
 
@@ -504,7 +510,7 @@ Every fuzzy workflow requires stable `fzf` 0.68.0 or newer. At the first normal 
 4. writes a private integration cache when possible;
 5. loads the validated integration and shared theme.
 
-The cache is stored below `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` and is keyed by the fzf file identity, Zsh version, and cache schema. A matching cache is reused without launching fzf or a validation shell. Cache files and their directory must be regular, user-owned, non-symlink paths that are not group- or world-writable. A changed executable or PATH selection is validated before use. Removing the `zsh/fzf` directory below the active cache home forces a rebuild.
+The cache is stored below `${XDG_CACHE_HOME:-$HOME/.cache}/zsh/fzf/` and is keyed by the fzf file identity, Zsh version, and cache schema. A matching cache is reused without launching fzf or a validation shell. When neither `XDG_CACHE_HOME` nor `HOME` is an absolute path, startup validates a private temporary file instead of writing a persistent cache. Cache files and their directory must be regular, user-owned, non-symlink paths that are not group- or world-writable. A changed executable or PATH selection is validated before use. Removing the `zsh/fzf` directory below the active cache home forces a rebuild. Like the zoxide cache, publishing a new integration removes cache files there that are more than 30 days old, so integrations for replaced executables or Zsh versions do not accumulate.
 
 Failed integration activation restores prior fzf functions, widgets, keymaps, aliases, and finder options, leaving no partial entry points. Restart the shell after fixing a blocked build. Missing, old, prerelease, malformed, or broken builds block only fuzzy workflows and print an actionable diagnostic. Non-interactive sourcing and `zsh -i -c ...` remain silent and do not initialize ZLE bindings.
 
@@ -554,13 +560,13 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 
 #### extract
 
-Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.Z`, `.tar`, `.tbz2`, `.tgz`, and `.tzst`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error. Bare `.gz`, `.bz2`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. Empty or missing destination values are rejected before extraction. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression, refuse existing paths, and keep the compressed input's permissions as the native in-place decompressors do. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Input symlinks are passed to the native unpacker without resolving their targets; gzip refuses them for default in-place or `--keep` extraction. Destination streaming can read a compressed input link, retains its target, and names the output from the supplied link filename. Use `--` before a leading-dash filename.
+Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.tar.lzma`, `.tar.lz`, `.zip`, `.rar`, `.7z`, `.gz`, `.bz2`, `.xz`, `.lzma`, `.zst`, `.Z`, `.tar`, `.tbz`, `.tbz2`, `.tgz`, `.txz`, and `.tzst`. Suffixes match case-insensitively (`ARCHIVE.ZIP` works), except that compress requires the uppercase `.Z`. Format-specific commands are checked when invoked, so a missing unpacker produces a direct error; `.7z` uses the first available of `7z`, `7zz`, and `7za`. Bare `.gz`, `.bz2`, `.xz`, `.lzma`, and `.Z` files retain native in-place behavior by default, which usually removes the compressed input after success. `unzstd` keeps bare `.zst` inputs natively. Use `extract --keep file.gz` to preserve it, or `extract --destination existing-dir archive.tar.gz` to choose an existing destination. Empty or missing destination values are rejected before extraction. A destination implies keep-input for bare compressed files; those outputs are published only after successful decompression, refuse existing paths, and keep the compressed input's permissions as the native in-place decompressors do. Multi-file archives retain the unpacker's native overwrite and archive-path policies. Input symlinks are passed to the native unpacker without resolving their targets; gzip refuses them for default in-place or `--keep` extraction. Destination streaming can read a compressed input link, retains its target, and names the output from the supplied link filename. Use `--` before a leading-dash filename.
 
 #### ff and ft
 
 `ff` prefers `fd`, then `fdfind`, then `find`. It matches a case-insensitive substring glob, includes hidden entries, and follows symlinks by default on every backend. `--no-hidden` and `--no-follow` disable those behaviors; `--hidden` and `--follow` make the defaults explicit. `--no-ignore` includes fd-ignored files. The find fallback has no ignore-file filtering and explains that difference when `--no-ignore` is requested.
 
-`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, and `--fixed-strings` (`-F`) explicitly. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches. Both helpers preserve backend error messages on stderr and the native exit status, so inaccessible paths or invalid patterns cannot silently look like an empty result.
+`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, and `--fixed-strings` (`-F`) explicitly. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, uses extended regular expressions (`grep -E`) so alternation such as `'foo|bar'` works on both backends, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches. Both helpers preserve backend error messages on stderr and the native exit status, so inaccessible paths or invalid patterns cannot silently look like an empty result.
 
 ```zsh
 ff --no-ignore config .
@@ -924,7 +930,7 @@ Run the repository-owned ordered sequence:
 zsh scripts/run-tests.zsh
 ```
 
-The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. Maintainers can regenerate width intervals with `python3 scripts/generate-width-data.py`; review the recorded Unicode version when doing so. A separate CI job runs `python3 scripts/test-fzf-pty.py` against real fzf 0.68.0 and 0.74.3. It covers shared picker arguments and actual `fbr` with one/two branches across all three layouts at 50/80/99/100/101/110/120 columns, including initial row visibility, filtering, preview toggles, and live resizing. Normal selection changes detached HEAD to the chosen branch; worktree selection changes directory; cancellation preserves the starting state. Unicode/ASCII, `NO_COLOR`, multi-selection, and measured frame sizing at 12/16/24 terminal rows are also checked. Preview-free widget/completion frame sizing is exercised through exported defaults; host keybinding and completion wiring remains part of manual QA. Run that command locally with Python 3 and supported fzf installed; set `FZF_BIN` to test another binary. Each PTY case isolates HOME, cache storage, and host finder options, including `FZF_DEFAULT_OPTS_FILE`; a hostile-options self-check covers both harnesses. These checks use fixture rows and perform no package mutations. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
+The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. Maintainers can regenerate width intervals with `python3 scripts/generate-width-data.py`; review the recorded Unicode version when doing so. A separate CI job runs `python3 scripts/test-fzf-pty.py` against real fzf 0.68.0 and 0.74.3. It covers shared picker arguments and actual `fbr` with one/two branches across all three layouts at 50/80/99/100/101/110/120 columns, including initial row visibility, filtering, preview toggles, and live resizing. Normal selection changes detached HEAD to the chosen branch; worktree selection changes directory; cancellation preserves the starting state. Unicode/ASCII, `NO_COLOR`, multi-selection, and measured frame sizing at 12/16/24 terminal rows are also checked. Preview-free widget/completion frame sizing is exercised through exported defaults; host keybinding and completion wiring remains part of manual QA. `run-tests.zsh` also runs it whenever `python3` and `fzf` are installed and prints a skip line otherwise; set `FZF_BIN` when running the script directly to test another binary. Each PTY case isolates HOME, cache storage, and host finder options, including `FZF_DEFAULT_OPTS_FILE`; a hostile-options self-check covers both harnesses. These checks use fixture rows and perform no package mutations. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
 
 The environment check is optional because it reflects the current machine rather than repository correctness:
 

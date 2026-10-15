@@ -3,7 +3,7 @@
 _extract_usage() {
   print 'Usage: extract [--keep] [--destination <dir>] <file>'
   print ''
-  print 'Supported archives: tar, zip, rar, 7z, gzip, bzip2, and compress.'
+  print 'Supported archives: tar, zip, rar, 7z, gzip, bzip2, xz, zstd, lzma, lzip, and compress.'
   print 'Archive inputs are kept; bare compressed inputs use native in-place removal.'
   print -r -- '--keep preserves a bare compressed input, and --destination implies keep.'
 }
@@ -48,7 +48,7 @@ extract() {
   emulate -L zsh
   setopt localoptions noclobber
 
-  local archive_arg='' destination='' archive output rc arg value
+  local archive_arg='' destination='' archive archive_match output rc arg value sevenzip
   local -i keep_input=0 options_done=0
   local -a operands tar_args unzip_args
 
@@ -122,7 +122,14 @@ extract() {
   archive=${archive_arg:a}
   [[ -n $destination ]] && destination=${destination:A}
 
-  case $archive in
+  # Suffixes match case-insensitively; only compress keeps its uppercase .Z.
+  if [[ $archive == *.Z ]]; then
+    archive_match=$archive
+  else
+    archive_match=${archive:l}
+  fi
+
+  case $archive_match in
     *.tar.bz2)
       [[ -n $destination ]] && tar_args=(-C "$destination")
       command tar "${tar_args[@]}" -xjf "$archive"
@@ -139,9 +146,25 @@ extract() {
       [[ -n $destination ]] && tar_args=(-C "$destination")
       command tar "${tar_args[@]}" --zstd -xf "$archive"
       ;;
+    *.tar.lzma)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" --lzma -xf "$archive"
+      ;;
+    *.tar.lz)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" --lzip -xf "$archive"
+      ;;
     *.tar)
       [[ -n $destination ]] && tar_args=(-C "$destination")
       command tar "${tar_args[@]}" -xf "$archive"
+      ;;
+    *.tbz)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xjf "$archive"
+      ;;
+    *.txz)
+      [[ -n $destination ]] && tar_args=(-C "$destination")
+      command tar "${tar_args[@]}" -xJf "$archive"
       ;;
     *.tbz2)
       [[ -n $destination ]] && tar_args=(-C "$destination")
@@ -169,11 +192,15 @@ extract() {
       fi
       ;;
     *.7z)
-      command -v 7z >/dev/null 2>&1 || { print -u2 -r -- "7z is required to extract '$archive_arg'"; return 1; }
+      for sevenzip in 7z 7zz 7za ''; do
+        [[ -z $sevenzip ]] && break
+        command -v $sevenzip >/dev/null 2>&1 && break
+      done
+      [[ -n $sevenzip ]] || { print -u2 -r -- "7z, 7zz, or 7za is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
-        command 7z x "$archive" "-o$destination"
+        command $sevenzip x "$archive" "-o$destination"
       else
-        command 7z x "$archive"
+        command $sevenzip x "$archive"
       fi
       ;;
     *.bz2)
@@ -196,6 +223,38 @@ extract() {
         command gunzip -k -- "$archive"
       else
         command gunzip -- "$archive"
+      fi
+      ;;
+    *.xz)
+      command -v unxz >/dev/null 2>&1 || { print -u2 -r -- "unxz is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination ]]; then
+        output="$destination/${archive:t:r}"
+        _extract_stream_to "$output" "$archive" unxz || return
+      elif (( keep_input )); then
+        command unxz -k -- "$archive"
+      else
+        command unxz -- "$archive"
+      fi
+      ;;
+    *.lzma)
+      command -v unlzma >/dev/null 2>&1 || { print -u2 -r -- "unlzma is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination ]]; then
+        output="$destination/${archive:t:r}"
+        _extract_stream_to "$output" "$archive" unlzma || return
+      elif (( keep_input )); then
+        command unlzma -k -- "$archive"
+      else
+        command unlzma -- "$archive"
+      fi
+      ;;
+    *.zst)
+      # unzstd keeps its input natively, so --keep needs no extra flag.
+      command -v unzstd >/dev/null 2>&1 || { print -u2 -r -- "unzstd is required to extract '$archive_arg'"; return 1; }
+      if [[ -n $destination ]]; then
+        output="$destination/${archive:t:r}"
+        _extract_stream_to "$output" "$archive" unzstd || return
+      else
+        command unzstd -q -- "$archive"
       fi
       ;;
     *.Z)
@@ -412,7 +471,12 @@ ft() {
     else
       search_args=(-rnI)
     fi
-    (( fixed_strings )) && search_args+=(-F)
+    # Extended regex keeps alternation and repetition closer to rg's syntax.
+    if (( fixed_strings )); then
+      search_args+=(-F)
+    else
+      search_args+=(-E)
+    fi
     search_args+=(--color=auto -- "$pattern" "$search_root")
     command grep "${search_args[@]}"
   fi

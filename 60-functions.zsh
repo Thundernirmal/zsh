@@ -16,6 +16,8 @@ source "$_ZSH_FUNCTIONS_MODULE_DIR/lib/upkg-registry.zsh"
 _zsh_functions_load() {
   if (( ! _ZSH_FUNCTIONS_CATALOGUE_LOADED )); then
     [[ -r $_ZSH_FUNCTIONS_MODULE_DIR/lib/functions-catalogue.zsh ]] || return 1
+    # Parse trusted helpers without user or global alias expansion.
+    setopt localoptions no_aliases
     source "$_ZSH_FUNCTIONS_MODULE_DIR/lib/functions-catalogue.zsh" || return 1
     typeset -gi _ZSH_FUNCTIONS_CATALOGUE_LOADED=1
   fi

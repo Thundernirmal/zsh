@@ -3,6 +3,8 @@ typeset -gA _ZSH_FUNCTION_DOMAINS_LOADED
 
 _zsh_functions_load_domain() {
   emulate -L zsh
+  # Parse trusted helpers without user or global alias expansion.
+  setopt no_aliases
   local domain=$1
   case $domain in
     all)

@@ -629,7 +629,7 @@ _zdoctor_usage() {
   print '  integration status (fzf, zoxide, cgm, npkg, global aliases).'
   print ''
   print 'Network endpoints and Secret Service are probed only with:'
-  print '  --network   Check the myip and weather endpoints (curl, 8s timeout)'
+  print '  --network   Check the myip and weather endpoints (curl, ZSH_HTTP_* timeouts)'
   print '  --secrets   Ping Secret Service over D-Bus without retrieving any value'
 }
 
@@ -683,175 +683,180 @@ zdoctor() {
     esac
   }
 
-  repo_dir=${_ZSH_FUNCTIONS_MODULE_DIR:-${HOME:-}/.config/zsh}
-  install_base=${HOME:-}/.config/zsh
-  if [[ ${repo_dir:A} == ${install_base:A} ]]; then
-    _zdoctor_report ok "install location ($repo_dir)"
-  else
-    _zdoctor_report fail "install location ($repo_dir is not $install_base; move the clone or symlink it there)"
-  fi
-
-  modules=( 10-history 20-aliases 25-theme 30-zoxide 40-fzf 50-completion
-    55-ui-helpers 60-functions 62-cgm 65-help 66-compdefs 70-globals 80-tips )
-  missing_modules=()
-  for module in "${modules[@]}"; do
-    if [[ $module == 62-cgm ]] && ! command -v secret-tool >/dev/null 2>&1; then
-      continue
-    fi
-    [[ -r $install_base/$module.zsh ]] || missing_modules+=("$module.zsh")
-  done
-  if (( ${#missing_modules[@]} == 0 )); then
-    _zdoctor_report ok 'all expected modules are readable'
-  else
-    _zdoctor_report fail "unreadable modules (startup skips them): ${(j:, :)missing_modules}"
-  fi
-
-  if (( $+functions[compdef] )); then
-    if (( ${+_comps[zhelp]} )); then
-      _zdoctor_report ok 'completion is ready (compinit ran; custom completions registered)'
+  # The always block removes the helper even after an interrupt or early return.
+  {
+    repo_dir=${_ZSH_FUNCTIONS_MODULE_DIR:-${HOME:-}/.config/zsh}
+    install_base=${HOME:-}/.config/zsh
+    if [[ ${repo_dir:A} == ${install_base:A} ]]; then
+      _zdoctor_report ok "install location ($repo_dir)"
     else
-      _zdoctor_report warn 'compinit ran but custom completions are not registered; restart the shell'
+      _zdoctor_report fail "install location ($repo_dir is not $install_base; move the clone or symlink it there)"
     fi
-  else
-    _zdoctor_report warn 'compinit has not run; add `autoload -Uz compinit && compinit -i` before sourcing init.zsh for Tab completion'
-  fi
 
-  for module in zsh git curl ss lsd zoxide; do
-    if command -v $module >/dev/null 2>&1; then
-      _zdoctor_report ok "required tool: $module"
+    modules=( 10-history 20-aliases 25-theme 30-zoxide 40-fzf 50-completion
+      55-ui-helpers 60-functions 62-cgm 65-help 66-compdefs 70-globals 80-tips )
+    missing_modules=()
+    for module in "${modules[@]}"; do
+      if [[ $module == 62-cgm ]] && ! command -v secret-tool >/dev/null 2>&1; then
+        continue
+      fi
+      [[ -r $install_base/$module.zsh ]] || missing_modules+=("$module.zsh")
+    done
+    if (( ${#missing_modules[@]} == 0 )); then
+      _zdoctor_report ok 'all expected modules are readable'
     else
-      _zdoctor_report fail "required tool missing: $module (see scripts/check-deps.sh for install hints)"
+      _zdoctor_report fail "unreadable modules (startup skips them): ${(j:, :)missing_modules}"
     fi
-  done
-  fzf_minimum=${_FZF_MIN_VERSION:-0.68.0}
-  if command -v fzf >/dev/null 2>&1; then
-    fzf_version=$(command fzf --version 2>/dev/null) || fzf_version=''
-    fzf_version=${${fzf_version%% *}:-}
-    if [[ $fzf_version == <->.<-> || $fzf_version == <->.<->.<-> ]]; then
-      fzf_parts=( "${(@s:.:)fzf_version}" 0 )
-      minimum_parts=( "${(@s:.:)fzf_minimum}" 0 0 )
-      if (( fzf_parts[1] != minimum_parts[1] ? fzf_parts[1] > minimum_parts[1] :
-            fzf_parts[2] != minimum_parts[2] ? fzf_parts[2] > minimum_parts[2] :
-            fzf_parts[3] >= minimum_parts[3] )); then
-        _zdoctor_report ok "required tool: fzf $fzf_version (minimum $fzf_minimum)"
+
+    if (( $+functions[compdef] )); then
+      if (( ${+_comps[zhelp]} )); then
+        _zdoctor_report ok 'completion is ready (compinit ran; custom completions registered)'
       else
-        _zdoctor_report fail "fzf $fzf_version is older than the $fzf_minimum minimum"
+        _zdoctor_report warn 'compinit ran but custom completions are not registered; restart the shell'
       fi
     else
-      _zdoctor_report fail "fzf version is unparseable (minimum $fzf_minimum)"
+      _zdoctor_report warn 'compinit has not run; add `autoload -Uz compinit && compinit -i` before sourcing init.zsh for Tab completion'
     fi
-  else
-    _zdoctor_report fail "required tool missing: fzf (minimum $fzf_minimum)"
-  fi
 
-  for module in bat tree jq secret-tool nix; do
-    if command -v $module >/dev/null 2>&1; then
-      _zdoctor_report ok "optional tool: $module"
-    else
-      _zdoctor_report warn "optional tool missing: $module (only its workflows stay unavailable)"
-    fi
-  done
-  if command -v fd >/dev/null 2>&1 || command -v fdfind >/dev/null 2>&1; then
-    _zdoctor_report ok 'optional tool: fd/fdfind'
-  else
-    _zdoctor_report warn 'optional tool missing: fd/fdfind (ff falls back to find)'
-  fi
-
-  if (( $+functions[_zsh_theme_resolve_glyph_tier] )); then
-    if _zsh_theme_resolve_glyph_tier "${ZSH_UI_GLYPHS:-auto}"; then
-      _zdoctor_report ok "glyphs resolve to $REPLY (ZSH_UI_GLYPHS=${ZSH_UI_GLYPHS:-auto}${NO_NERD_FONT:+, NO_NERD_FONT is set})"
-    else
-      _zdoctor_report fail "ZSH_UI_GLYPHS=${ZSH_UI_GLYPHS:-auto} is invalid (use auto, nerd, unicode, or ascii)"
-    fi
-  else
-    _zdoctor_report warn 'glyph resolver is not loaded yet; run `ztheme list` to load it'
-  fi
-
-  case ${_FZF_STATE:-unchecked} in
-    blocked)
-      _zdoctor_report fail "fzf integration state: blocked (found: ${_FZF_FOUND:-not checked}); repair the reported problem and restart the shell"
-      ;;
-    ready)
-      _zdoctor_report ok "fzf integration state: ready (found: ${_FZF_FOUND:-not checked})"
-      ;;
-    unchecked)
-      print -r -- 'note: fzf integration state: unchecked (not initialized in this shell; check a normal interactive shell)'
-      ;;
-    *)
-      _zdoctor_report warn "fzf integration state: ${_FZF_STATE} (unrecognized state; restart the shell)"
-      ;;
-  esac
-  if command -v zoxide >/dev/null 2>&1; then
-    if (( $+functions[zi] )); then
-      _zdoctor_report ok 'zoxide integration is ready'
-    else
-      _zdoctor_report warn 'zoxide is installed but zi is unavailable; restart the shell'
-    fi
-  else
-    _zdoctor_report warn 'zoxide is not installed; z and zi stay unavailable'
-  fi
-  if (( $+functions[cgm] )); then
-    _zdoctor_report ok 'cgm is defined (secret-tool was present at startup)'
-  elif command -v secret-tool >/dev/null 2>&1; then
-    _zdoctor_report warn 'secret-tool is installed but cgm is undefined; restart the shell'
-  else
-    _zdoctor_report warn 'cgm is unavailable (secret-tool is not installed)'
-  fi
-  if (( $+functions[npkg] )); then
-    _zdoctor_report ok 'npkg is defined'
-  elif command -v nix >/dev/null 2>&1; then
-    _zdoctor_report warn 'nix is installed but npkg is undefined; restart the shell'
-  else
-    _zdoctor_report warn 'npkg is unavailable (nix is not installed)'
-  fi
-  if (( ${+galiases[G]} )); then
-    _zdoctor_report ok 'global aliases are enabled (ZSH_GLOBAL_ALIASES=1)'
-  else
-    _zdoctor_report warn "global aliases are disabled; export ZSH_GLOBAL_ALIASES=1 before startup to enable them"
-  fi
-
-  if (( check_network )); then
-    if command -v curl >/dev/null 2>&1; then
-      if command curl -fsS --max-time 8 -o /dev/null https://ifconfig.me/ip 2>/dev/null; then
-        _zdoctor_report ok 'myip endpoint is reachable (https://ifconfig.me/ip)'
+    for module in zsh git curl ss lsd zoxide; do
+      if command -v $module >/dev/null 2>&1; then
+        _zdoctor_report ok "required tool: $module"
       else
-        _zdoctor_report fail 'myip endpoint is unreachable (https://ifconfig.me/ip)'
+        _zdoctor_report fail "required tool missing: $module (see scripts/check-deps.sh for install hints)"
       fi
-      if command curl -fsS --max-time 8 -o /dev/null 'https://wttr.in/?format=3' 2>/dev/null; then
-        _zdoctor_report ok 'weather endpoint is reachable (https://wttr.in/)'
+    done
+    fzf_minimum=${_FZF_MIN_VERSION:-0.68.0}
+    if command -v fzf >/dev/null 2>&1; then
+      fzf_version=$(command fzf --version 2>/dev/null) || fzf_version=''
+      fzf_version=${${fzf_version%% *}:-}
+      if [[ $fzf_version == <->.<-> || $fzf_version == <->.<->.<-> ]]; then
+        fzf_parts=( "${(@s:.:)fzf_version}" 0 )
+        minimum_parts=( "${(@s:.:)fzf_minimum}" 0 0 )
+        if (( fzf_parts[1] != minimum_parts[1] ? fzf_parts[1] > minimum_parts[1] :
+              fzf_parts[2] != minimum_parts[2] ? fzf_parts[2] > minimum_parts[2] :
+              fzf_parts[3] >= minimum_parts[3] )); then
+          _zdoctor_report ok "required tool: fzf $fzf_version (minimum $fzf_minimum)"
+        else
+          _zdoctor_report fail "fzf $fzf_version is older than the $fzf_minimum minimum"
+        fi
       else
-        _zdoctor_report fail 'weather endpoint is unreachable (https://wttr.in/)'
+        _zdoctor_report fail "fzf version is unparseable (minimum $fzf_minimum)"
       fi
     else
-      _zdoctor_report fail 'curl is missing so network endpoints cannot be checked'
+      _zdoctor_report fail "required tool missing: fzf (minimum $fzf_minimum)"
     fi
-  else
-    print -r -- 'note: network endpoints not probed (pass --network to check myip and weather)'
-  fi
 
-  if (( check_secrets )); then
-    if ! command -v secret-tool >/dev/null 2>&1; then
-      _zdoctor_report fail 'secret-tool is not installed'
-    elif ! command -v gdbus >/dev/null 2>&1; then
-      _zdoctor_report warn 'gdbus is missing, so Secret Service reachability cannot be checked'
-    # Peer.Ping reaches the service without unlocking, searching, or reading items.
-    elif command gdbus call --session --dest org.freedesktop.secrets \
-        --object-path /org/freedesktop/secrets \
-        --method org.freedesktop.DBus.Peer.Ping --timeout 5 >/dev/null 2>&1; then
-      _zdoctor_report ok 'Secret Service is reachable; no credential values were retrieved'
+    for module in bat tree rg jq secret-tool gdbus setsid nix; do
+      if command -v $module >/dev/null 2>&1; then
+        _zdoctor_report ok "optional tool: $module"
+      else
+        _zdoctor_report warn "optional tool missing: $module (only its workflows stay unavailable)"
+      fi
+    done
+    if command -v fd >/dev/null 2>&1 || command -v fdfind >/dev/null 2>&1; then
+      _zdoctor_report ok 'optional tool: fd/fdfind'
     else
-      _zdoctor_report fail 'Secret Service is unreachable; no credential values were requested'
+      _zdoctor_report warn 'optional tool missing: fd/fdfind (ff falls back to find)'
     fi
-  else
-    print -r -- 'note: Secret Service not contacted (pass --secrets to check secret-tool)'
-  fi
 
-  if (( failures > 0 )); then
-    print -r -- "zdoctor: $failures failure(s), $warnings warning(s)"
-    unfunction _zdoctor_report
-    return 1
-  fi
-  print -r -- "zdoctor: healthy ($warnings warning(s))"
-  unfunction _zdoctor_report
-  return 0
+    if (( $+functions[_zsh_theme_resolve_glyph_tier] )); then
+      if _zsh_theme_resolve_glyph_tier "${ZSH_UI_GLYPHS:-auto}"; then
+        _zdoctor_report ok "glyphs resolve to $REPLY (ZSH_UI_GLYPHS=${ZSH_UI_GLYPHS:-auto}${NO_NERD_FONT:+, NO_NERD_FONT is set})"
+      else
+        _zdoctor_report fail "ZSH_UI_GLYPHS=${ZSH_UI_GLYPHS:-auto} is invalid (use auto, nerd, unicode, or ascii)"
+      fi
+    else
+      _zdoctor_report warn 'glyph resolver is not loaded yet; run `ztheme list` to load it'
+    fi
+
+    case ${_FZF_STATE:-unchecked} in
+      blocked)
+        _zdoctor_report fail "fzf integration state: blocked (found: ${_FZF_FOUND:-not checked}); repair the reported problem and restart the shell"
+        ;;
+      ready)
+        _zdoctor_report ok "fzf integration state: ready (found: ${_FZF_FOUND:-not checked})"
+        ;;
+      unchecked)
+        print -r -- 'note: fzf integration state: unchecked (not initialized in this shell; check a normal interactive shell)'
+        ;;
+      *)
+        _zdoctor_report warn "fzf integration state: ${_FZF_STATE} (unrecognized state; restart the shell)"
+        ;;
+    esac
+    if command -v zoxide >/dev/null 2>&1; then
+      if (( $+functions[zi] )); then
+        _zdoctor_report ok 'zoxide integration is ready'
+      else
+        _zdoctor_report warn 'zoxide is installed but zi is unavailable; restart the shell'
+      fi
+    else
+      _zdoctor_report warn 'zoxide is not installed; z and zi stay unavailable'
+    fi
+    if (( $+functions[cgm] )); then
+      _zdoctor_report ok 'cgm is defined (secret-tool was present at startup)'
+    elif command -v secret-tool >/dev/null 2>&1; then
+      _zdoctor_report warn 'secret-tool is installed but cgm is undefined; restart the shell'
+    else
+      _zdoctor_report warn 'cgm is unavailable (secret-tool is not installed)'
+    fi
+    if (( $+functions[npkg] )); then
+      _zdoctor_report ok 'npkg is defined'
+    elif command -v nix >/dev/null 2>&1; then
+      _zdoctor_report warn 'nix is installed but npkg is undefined; restart the shell'
+    else
+      _zdoctor_report warn 'npkg is unavailable (nix is not installed)'
+    fi
+    if (( ${+galiases[G]} )); then
+      _zdoctor_report ok 'global aliases are enabled (ZSH_GLOBAL_ALIASES=1)'
+    else
+      _zdoctor_report warn "global aliases are disabled; export ZSH_GLOBAL_ALIASES=1 before startup to enable them"
+    fi
+
+    if (( check_network )); then
+      if ! command -v curl >/dev/null 2>&1; then
+        _zdoctor_report fail 'curl is missing so network endpoints cannot be checked'
+      elif ! _zsh_http_timeout_args; then
+        _zdoctor_report fail 'network timeouts are invalid (fix ZSH_HTTP_CONNECT_TIMEOUT or ZSH_HTTP_MAX_TIME)'
+      else
+        if command curl -fsS "${reply[@]}" -o /dev/null https://ifconfig.me/ip 2>/dev/null; then
+          _zdoctor_report ok 'myip endpoint is reachable (https://ifconfig.me/ip)'
+        else
+          _zdoctor_report fail 'myip endpoint is unreachable (https://ifconfig.me/ip)'
+        fi
+        if command curl -fsS "${reply[@]}" -o /dev/null 'https://wttr.in/?format=3' 2>/dev/null; then
+          _zdoctor_report ok 'weather endpoint is reachable (https://wttr.in/)'
+        else
+          _zdoctor_report fail 'weather endpoint is unreachable (https://wttr.in/)'
+        fi
+      fi
+    else
+      print -r -- 'note: network endpoints not probed (pass --network to check myip and weather)'
+    fi
+
+    if (( check_secrets )); then
+      if ! command -v secret-tool >/dev/null 2>&1; then
+        _zdoctor_report fail 'secret-tool is not installed'
+      elif ! command -v gdbus >/dev/null 2>&1; then
+        _zdoctor_report warn 'gdbus is missing, so Secret Service reachability cannot be checked'
+      # Peer.Ping reaches the service without unlocking, searching, or reading items.
+      elif command gdbus call --session --dest org.freedesktop.secrets \
+          --object-path /org/freedesktop/secrets \
+          --method org.freedesktop.DBus.Peer.Ping --timeout 5 >/dev/null 2>&1; then
+        _zdoctor_report ok 'Secret Service is reachable; no credential values were retrieved'
+      else
+        _zdoctor_report fail 'Secret Service is unreachable; no credential values were requested'
+      fi
+    else
+      print -r -- 'note: Secret Service not contacted (pass --secrets to check secret-tool)'
+    fi
+
+    if (( failures > 0 )); then
+      print -r -- "zdoctor: $failures failure(s), $warnings warning(s)"
+      return 1
+    fi
+    print -r -- "zdoctor: healthy ($warnings warning(s))"
+    return 0
+  } always {
+    (( $+functions[_zdoctor_report] )) && unfunction _zdoctor_report
+  }
 }

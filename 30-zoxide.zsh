@@ -1,6 +1,6 @@
 # Shared zoxide integration.
 if (( ! ${+_ZSH_ZOXIDE_FZF_OPTS_CAPTURED} )); then
-typeset -g _ZSH_ZOXIDE_INHERITED_FZF_OPTS=${_ZO_FZF_OPTS-}
+  typeset -g _ZSH_ZOXIDE_INHERITED_FZF_OPTS=${_ZO_FZF_OPTS-}
   typeset -gi _ZSH_ZOXIDE_FZF_OPTS_CAPTURED=1
 fi
 typeset -g _ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE=${_ZSH_ZOXIDE_FZF_CONFIG_SIGNATURE:-}
@@ -53,6 +53,21 @@ _zsh_zoxide_refresh_fzf_opts() {
 }
 
 typeset -gi _ZSH_ZOXIDE_CACHE_SCHEMA=2
+
+# Publishing a fresh cache removes integrations that nothing has regenerated
+# for 30 days, such as files keyed to replaced executables or older Zsh builds.
+# The age limit stops shells with different keys from deleting each other's caches.
+_zsh_prune_stale_cache_files() {
+  emulate -L zsh
+
+  local cache_dir=$1 pattern=$2
+  local -a stale_files
+
+  [[ -n $cache_dir && -d $cache_dir && -O $cache_dir && ! -L $cache_dir ]] || return 0
+  stale_files=( "$cache_dir"/${~pattern}(N.Um+30) )
+  (( ${#stale_files[@]} )) && command rm -f -- "${stale_files[@]}" 2>/dev/null
+  return 0
+}
 
 _zsh_zoxide_cache_file_for_path() {
   emulate -L zsh
@@ -206,6 +221,7 @@ if (( $+commands[zoxide] )); then
           if (( _zsh_zoxide_persistent )) &&
             command mv -fT -- "$_zsh_zoxide_temp_file" "$_zsh_zoxide_cache_file" 2>/dev/null; then
             _zsh_zoxide_temp_file=''
+            _zsh_prune_stale_cache_files "$_zsh_zoxide_cache_dir" 'init-*.zsh'
             _zsh_zoxide_activate_file "$_zsh_zoxide_cache_file" "$_zsh_zoxide_path"
           else
             _zsh_zoxide_activate_file "$_zsh_zoxide_temp_file" "$_zsh_zoxide_path"

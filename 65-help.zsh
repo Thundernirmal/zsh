@@ -5,6 +5,8 @@ typeset -gi _ZSH_HELP_CATALOGUE_LOADED=${_ZSH_HELP_CATALOGUE_LOADED:-0}
 
 _zsh_help_load() {
   (( _ZSH_HELP_CATALOGUE_LOADED )) && return 0
+  # Parse trusted helpers without user or global alias expansion.
+  setopt localoptions no_aliases
   [[ -r $_ZSH_HELP_MODULE_DIR/lib/help-catalogue.zsh ]] || return 1
   source "$_ZSH_HELP_MODULE_DIR/lib/help-catalogue.zsh" || return 1
   typeset -gi _ZSH_HELP_CATALOGUE_LOADED=1

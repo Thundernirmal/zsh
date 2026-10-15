@@ -8,6 +8,7 @@ _zsh_tip_pool=(
   "Run dirs -v to inspect the directory stack"
   "Use *(D) when a glob should include hidden entries"
   "Start a command with a space to keep it out of saved history"
+  "Use ZSH_HISTFILE=path before sourcing init.zsh to keep history elsewhere"
   "Run zhelp to find a command and queue an editable example"
   "Run zdoctor in an interactive shell; repair blocked fzf and restart"
   "Use ztheme show custom to inspect; ztheme use custom applies the palette"

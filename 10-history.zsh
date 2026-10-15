@@ -1,7 +1,8 @@
 # Shared history defaults.
 HISTSIZE=100000
 SAVEHIST=100000
-HISTFILE=$HOME/.zsh_history
+# ZSH_HISTFILE keeps history elsewhere, such as below ZDOTDIR or XDG_STATE_HOME.
+HISTFILE=${ZSH_HISTFILE:-$HOME/.zsh_history}
 
 setopt APPEND_HISTORY
 setopt SHARE_HISTORY

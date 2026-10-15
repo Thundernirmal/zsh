@@ -549,6 +549,8 @@ print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 2 'group-writable cache forces integration regeneration' || return 1
 
   print -r -- '# changed binary identity' >> "$case_dir/bin/fzf"
+  print -r -- '# stale' > "$cache_root/zsh/fzf/integration-1-stale.zsh"
+  command touch -d '40 days ago' -- "$cache_root/zsh/fzf/integration-1-stale.zsh"
   HOME="$tmp_home" \
     XDG_CACHE_HOME="$cache_root" \
     PATH="$case_dir/bin" \
@@ -564,6 +566,8 @@ print -r -- "state=$_FZF_STATE found=$_FZF_FOUND evaluated=${FZF_TEST_EVALUATED:
   assert_matching_lines "$(file_contents "$log_file")" ':--version' 3 'changed fzf binary invalidates the cached version result' || return 1
   assert_matching_lines "$(file_contents "$log_file")" ':--zsh' 3 'changed fzf binary invalidates generated integration' || return 1
   assert_matching_lines "$(file_contents "$process_log")" '/zsh/fzf/.integration.' 3 'only cold and invalidated fzf caches receive syntax validation' || return 1
+  [[ ! -e $cache_root/zsh/fzf/integration-1-stale.zsh ]]
+  assert_status "$?" 0 'fzf cache publication prunes stale integrations' || return 1
 
   command rm -rf -- "$case_dir"
 }
@@ -944,6 +948,8 @@ test_owned_module_settings() {
     [[ $HISTSIZE == 100000 && $SAVEHIST == 100000 && $HISTFILE == "$HOME/.zsh_history" ]] || exit 11
     [[ -o appendhistory && -o sharehistory && -o histignorealldups && -o histfindnodups ]] || exit 12
     [[ -o histignorespace && -o histreduceblanks ]] || exit 13
+    ZSH_HISTFILE=$HOME/state/history source "$1/10-history.zsh"
+    [[ $HISTFILE == "$HOME/state/history" ]] || exit 23
 
     source "$1/50-completion.zsh"
     local -a values
@@ -975,6 +981,35 @@ test_global_alias_opt_in() {
     [[ $(echo '"'"'H'"'"') == H ]] || exit 34
   ' zsh "$repo_dir"
   assert_status "$?" 0 'global aliases stay off by default and quoting keeps tokens literal' || return 1
+}
+
+test_lazy_helpers_ignore_aliases() {
+  local stderr_file="$tmp_home/lazy-aliases.stderr" output
+
+  output=$(HOME="$tmp_home" ZSH_GLOBAL_ALIASES=1 "$zsh_bin" -fc '
+    source "$1/25-theme.zsh"
+    source "$1/55-ui-helpers.zsh"
+    source "$1/60-functions.zsh"
+    source "$1/65-help.zsh"
+    source "$1/66-compdefs.zsh"
+    source "$1/70-globals.zsh"
+    source "$1/80-tips.zsh"
+    alias local=false grep=false
+    (( ${+galiases[G]} )) || exit 41
+    zhelp --plain --all >/dev/null || exit 42
+    (( ${+_ZSH_HELP_SUMMARY[G]} && ${+_ZSH_HELP_SUMMARY[NUL]} && ${+_ZSH_HELP_SUMMARY[zhelp]} )) || exit 43
+    tips >/dev/null || exit 44
+    _zsh_functions_load all || exit 45
+    (( $+functions[ft] && $+functions[zdoctor] )) || exit 46
+    print -r -- loaded
+  ' zsh "$repo_dir" 2>"$stderr_file")
+  assert_status "$?" 0 'lazy helpers load without expanding user or global aliases' || return 1
+  [[ $output == loaded && ! -s $stderr_file ]] || {
+    print -u2 -- 'not ok: lazy helpers stay quiet with aliases enabled'
+    command cat -- "$stderr_file" >&2
+    return 1
+  }
+  print -- 'ok: lazy helpers stay quiet with aliases enabled'
 }
 
 test_zoxide_init_outcomes() {
@@ -1087,6 +1122,21 @@ printf "%s\n" "z() { :; }" "__zoxide_zi() { :; }" "zi() { __zoxide_zi \"\$@\"; }
   assert_matching_lines "$(file_contents "$log_file")" 'init zsh' 3 'zoxide init settings select separate caches' || return 1
   cache_files=( "$cache_root"/zsh/zoxide/init-*.zsh(N) )
   assert_equals "${#cache_files[@]}" 3 'each zoxide init setting combination has its own cache file' || return 1
+
+  # Publishing a new cache prunes only integrations older than 30 days.
+  print -r -- '# stale' >"$cache_root/zsh/zoxide/init-1-stale.zsh"
+  print -r -- '# recent' >"$cache_root/zsh/zoxide/init-1-recent.zsh"
+  command touch -d '40 days ago' -- "$cache_root/zsh/zoxide/init-1-stale.zsh"
+  ZOXIDE_TEST_LOG="$log_file" XDG_CACHE_HOME="$cache_root" _ZO_ECHO=1 _ZO_RESOLVE_SYMLINKS=1 \
+    PATH="$fakebin:${zsh_bin:h}" "$zsh_bin" -fc '
+      source "$1/25-theme.zsh"
+      source "$1/30-zoxide.zsh"
+    ' zsh "$repo_dir" >/dev/null 2>&1
+  assert_status "$?" 0 'zoxide cache publication with stale files exits cleanly' || return 1
+  [[ ! -e $cache_root/zsh/zoxide/init-1-stale.zsh && -e $cache_root/zsh/zoxide/init-1-recent.zsh ]]
+  assert_status "$?" 0 'zoxide cache publication prunes only stale integrations' || return 1
+  cache_files=( "$cache_root"/zsh/zoxide/init-*.zsh(N) )
+  assert_equals "${#cache_files[@]}" 5 'zoxide cache pruning keeps current and recent integrations' || return 1
 }
 
 test_fzf_partial_integration_rollback() {
@@ -1209,6 +1259,7 @@ main() {
   test_runner_signal_exit || return 1
   test_runner_syntax_loop || return 1
   test_global_alias_opt_in || return 1
+  test_lazy_helpers_ignore_aliases || return 1
   test_owned_module_settings || return 1
   test_zoxide_init_outcomes || return 1
   test_zoxide_persistent_startup_cache || return 1
