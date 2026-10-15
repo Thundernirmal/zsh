@@ -50,6 +50,7 @@ zsh ./scripts/test-doctor.zsh
 # CI also runs the real-fzf PTY suite against each supported fzf release.
 if (( $+commands[python3] && $+commands[fzf] )); then
   python3 ./scripts/test-ui-pty.py
+  python3 ./scripts/test-preview.py
   python3 ./scripts/test-fzf-pty.py >/dev/null
   print -- 'ok: real fzf PTY checks'
 else

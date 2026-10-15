@@ -28,3 +28,5 @@ if (( ! _ZSH_TIPS_CATALOGUE_LOADED )); then
 fi
 
 # Query ownership, deterministic process parsing, and discovery limits are documented in GUIDE.md.
+
+# Ctrl+T plain file previews stop at line 200; full-file inspection is a separate action.

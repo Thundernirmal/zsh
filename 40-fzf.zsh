@@ -77,9 +77,9 @@ _fzf_export_config() {
 
   if [[ -n ${NO_COLOR:-} ]]; then
     # fzf shell-quotes selection placeholders by default; {q} is the query.
-    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=never --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=never --line-range=:200 -- {}; else sed -n "1,200p" -- {}; fi'
+    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=never --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=never --line-range=:200 -- {}; else sed -n "1,200p;200Q" -- {}; fi'
   else
-    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=always --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -C -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=always --line-range=:200 -- {}; else sed -n "1,200p" -- {}; fi'
+    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=always --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -C -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=always --line-range=:200 -- {}; else sed -n "1,200p;200Q" -- {}; fi'
   fi
   _zsh_theme_fzf_preview_window
   preview_window=$REPLY

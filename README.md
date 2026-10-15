@@ -41,7 +41,7 @@ ztheme list
 
 `zdoctor` reports installation, tool, and integration problems without touching the network or Secret Service unless asked (`--network`, `--secrets`). `zhelp` searches every command and queues an editable example; it never runs the example. General helpers support `--help`; the [function reference](./GUIDE.md#function-reference) covers their options and safety rules.
 
-Fuzzy pickers share one themed, responsive frame. Use Ctrl+P to toggle a preview and Ctrl+/ to toggle wrapping. Glyphs default to Nerd Font icons in UTF-8 locales; set `NO_NERD_FONT=1` or `ZSH_UI_GLYPHS=unicode` otherwise (see [terminal output modes](./GUIDE.md#terminal-output-modes) and [finder sizing](./GUIDE.md#finder-layout-and-option-precedence)).
+Fuzzy pickers share one themed, responsive frame, with file previews limited to the first 200 lines. Use Ctrl+P to toggle a preview and Ctrl+/ to toggle wrapping. Glyphs default to Nerd Font icons in UTF-8 locales; set `NO_NERD_FONT=1` or `ZSH_UI_GLYPHS=unicode` otherwise (see [terminal output modes](./GUIDE.md#terminal-output-modes) and [finder sizing](./GUIDE.md#finder-layout-and-option-precedence)).
 
 ## What it provides
 
