@@ -62,7 +62,11 @@ _ui_is_rich_terminal() {
   [[ -z ${NO_COLOR:-} ]] || return 1
   _ui_locale_is_utf8 || return 1
 
-  width=$(_ui_term_width)
+  # COLUMNS is live shell state; avoid a subshell on every color/mode check.
+  width=${COLUMNS:-}
+  case $width in
+    ''|*[!0-9]*) width=$(_ui_term_width) ;;
+  esac
   (( width >= 60 ))
 }
 

@@ -121,3 +121,7 @@ Deleting wordcode before publishing text does not alone resolve concurrency: an 
 This handoff replaces parallel active recommendations on this branch; the originals remain in their commits. Resolve each C item with its own measured implementation or evidence-backed decline. Once resolved, move current behavior to the guide and remove stale plan material and links; Git history retains the review.
 
 The consolidation changes no guide headings, module paths, registration records, dependency guards, or shell runtime interfaces. No website sync, website verification, or remote push is part of this change. Future source refactors must follow the companion-repository checks in [AGENTS.md](../../AGENTS.md); shell tests alone cannot establish website compatibility.
+
+## Implementation ledger
+
+The review and plan above are preserved as the original baseline. Subsequent implementation status, commits, measurements, and pending checks are recorded in the append-only [ledger](./ledger.md). At the user's request, performance documents are retained rather than removed when an item is resolved. All implementation commits remain local unless separately authorized.
