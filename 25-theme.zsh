@@ -240,11 +240,16 @@ _zsh_theme_fzf_color_args() {
   )
   [[ ${ZSH_FZF_LAYOUT:-compact} == roomy ]] && target_roles+=( alt-bg surface )
 
+  local -A role_values
   integer index
   for (( index = 1; index <= ${#target_roles}; index += 2 )); do
     target=${target_roles[$index]}
     role=${target_roles[$(( index + 1 ))]}
-    _zsh_theme_color_value "$role" fzf "$depth" || return 1
+    if (( ! ${+role_values[$role]} )); then
+      _zsh_theme_color_value "$role" fzf "$depth" || return 1
+      role_values[$role]=$REPLY
+    fi
+    REPLY=${role_values[$role]}
     value=$REPLY
     mappings+=( "${target}:${value}" )
   done

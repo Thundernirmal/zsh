@@ -29,3 +29,12 @@ Stage 2 validation: full runner passed (1,964 `ok:` lines, UI and real-fzf PTY i
 - Website: source location/helper interface unchanged; no snapshot sync or compatibility claim.
 
 Stage 3 validation: full runner passed (1,965 `ok:` lines, real-fzf PTY included); focused function regressions passed. Three interleaved batches at 100/1,000/3,000 rows measured baseline/current medians 150.95/71.09 ms, 1645.54/715.68 ms, 4703.37/2196.76 ms; [raw C03 samples](./C03-results.json). `git diff --check` passed.
+
+## Stage 4 — C07a per-build color-role reuse
+
+- Previous stage commit: `47ddbf7` (C03). Parent: `47ddbf7`; commit subject: `perf(C07a): resolve each finder color role once per build`.
+- Change: a local role cache reduces 40/41 target resolutions to 13 per build. Explicitly restores REPLY on cache hits, preserving the prior final scratch result. No persistent cache or RGB arithmetic change.
+- Coverage: frozen pre-change output digest across all five built-ins, four depths, and three layouts, including final REPLY; resolver counts (13 compact/roomy, zero no-color), failure propagation, existing custom-palette/atomic-refresh tests, and pure-Zsh startup probes.
+- Website: mapping targets, literal registrations, helpers, and documentation behavior unchanged. Snapshot checks remain pending; no remote push.
+
+Stage 4 validation: full runner passed (1,967 `ok:` lines), focused theme tests and byte-for-byte matrix comparison passed. Median per-build times: truecolor 4.582 → 2.227 ms, 256 26.358 → 9.279 ms; [raw C07a samples](./C07a-results.json). `git diff --check` passed.
