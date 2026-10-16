@@ -68,6 +68,10 @@ if (( $+functions[compdef] )); then
   typeset -gA _ZSH_NPKG_COMPLETION_CACHE_DATA
   typeset -gA _ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS
   typeset -gi _ZSH_NPKG_COMPLETION_PARSE_COUNT=${_ZSH_NPKG_COMPLETION_PARSE_COUNT:-0}
+  typeset -ga _ZSH_NPKG_COMPLETION_UNION
+  typeset -g _ZSH_NPKG_COMPLETION_SIGNATURE=${_ZSH_NPKG_COMPLETION_SIGNATURE:-}
+  typeset -gi _ZSH_NPKG_COMPLETION_UNION_VALID=${_ZSH_NPKG_COMPLETION_UNION_VALID:-0}
+  typeset -gi _ZSH_NPKG_COMPLETION_BUILD_COUNT=${_ZSH_NPKG_COMPLETION_BUILD_COUNT:-0}
   if (( $+functions[cgm] )); then
     typeset -ga _ZSH_CGM_COMMAND_SPECS=(
       'set:Securely store or replace one credential'
@@ -137,9 +141,10 @@ if (( $+functions[compdef] )); then
     emulate -L zsh
     setopt localoptions nullglob
 
-    local cache_dir cache_file attribute identity previous_identity
-    local -a file_attributes
-    local -A seen
+    local cache_dir cache_file attribute identity signature=''
+    local -a file_attributes cache_files attributes
+    local -A identities retained_data
+    integer cacheable=1
     typeset -ga reply
     reply=()
 
@@ -147,19 +152,24 @@ if (( $+functions[compdef] )); then
     for cache_file in "$cache_dir"/nixpkgs-attrs-*.txt(N.); do
       [[ -r $cache_file && ! -L $cache_file ]] || continue
 
-      identity=''
+      cache_files+=( "$cache_file" )
       if _zsh_npkg_cache_identity "$cache_file"; then
-        identity=$REPLY
+        identities[$cache_file]=$REPLY
+      else
+        cacheable=0
       fi
+      # Neither a filesystem path nor an identity can contain a NUL byte.
+      signature+="$cache_file"$'\0'"${identities[$cache_file]-}"$'\0'
+    done
 
-      if [[ -n $identity ]]; then
-        previous_identity=${_ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS[$cache_file]-}
-        if [[ -n $previous_identity && $previous_identity != $identity ]]; then
-          unset "_ZSH_NPKG_COMPLETION_CACHE_DATA[$previous_identity]"
-        fi
-        _ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS[$cache_file]=$identity
-      fi
+    if (( cacheable && _ZSH_NPKG_COMPLETION_UNION_VALID )) &&
+        [[ $signature == "$_ZSH_NPKG_COMPLETION_SIGNATURE" ]]; then
+      reply=( "${_ZSH_NPKG_COMPLETION_UNION[@]}" )
+      return 0
+    fi
 
+    for cache_file in "${cache_files[@]}"; do
+      identity=${identities[$cache_file]-}
       if [[ -n $identity && ${+_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]} -eq 1 ]]; then
         if [[ -n ${_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]} ]]; then
           file_attributes=( "${(f)_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]}" )
@@ -172,18 +182,20 @@ if (( $+functions[compdef] )); then
           [[ -n $attribute ]] || continue
           file_attributes+=("$attribute")
         done < "$cache_file"
-        if [[ -n $identity ]]; then
-          _ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]="${(F)file_attributes}"
-        fi
         (( _ZSH_NPKG_COMPLETION_PARSE_COUNT++ ))
       fi
-
-      for attribute in "${file_attributes[@]}"; do
-        [[ -n ${seen[$attribute]-} ]] && continue
-        reply+=("$attribute")
-        seen[$attribute]=1
-      done
+      [[ -z $identity ]] || retained_data[$identity]="${(F)file_attributes}"
+      attributes+=( "${file_attributes[@]}" )
     done
+    # Unique expansion retains first occurrence order without per-name appends.
+    reply=( "${(@u)attributes}" )
+    _ZSH_NPKG_COMPLETION_CACHE_DATA=( "${(@kv)retained_data}" )
+    _ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS=( "${(@kv)identities}" )
+    _ZSH_NPKG_COMPLETION_UNION=( "${reply[@]}" )
+    _ZSH_NPKG_COMPLETION_SIGNATURE=$signature
+    _ZSH_NPKG_COMPLETION_UNION_VALID=$cacheable
+    (( _ZSH_NPKG_COMPLETION_BUILD_COUNT++ ))
+    return 0
   }
 
   _zsh_npkg_cached_packages() {

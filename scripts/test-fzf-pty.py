@@ -498,6 +498,12 @@ def run_branch_case(
             # Require redraw after each toggle while filtering a known canonical ref.
             query = "main" if action == "normal" else target
             os.write(master, query.encode())
+            if rows == 2:
+                # A query redraw can precede asynchronous filtering. Wait for
+                # the single matching row before toggling previews or accepting.
+                filtered = bytearray()
+                read_until(master, process, filtered, b"1/2", 3.0)
+                output.extend(filtered)
             for _ in range(2):
                 os.write(master, b"\x10")
                 redraw = bytearray()

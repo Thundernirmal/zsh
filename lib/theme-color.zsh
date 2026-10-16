@@ -17,7 +17,7 @@ _zsh_theme_rgb_to_256() {
 
   local hex=$1
   local -a rgb levels=(0 95 135 175 215 255)
-  integer component level_index best_index best_distance distance
+  integer component
   local -a cube_indexes
   integer cube_r cube_g cube_b cube_code cube_distance
   integer gray_index gray_value gray_code gray_distance
@@ -26,16 +26,14 @@ _zsh_theme_rgb_to_256() {
   rgb=( "${reply[@]}" )
 
   for component in "${rgb[@]}"; do
-    best_index=0
-    best_distance=65536
-    for (( level_index = 1; level_index <= ${#levels}; level_index++ )); do
-      distance=$(( (component - levels[level_index]) ** 2 ))
-      if (( distance < best_distance )); then
-        best_distance=$distance
-        best_index=$(( level_index - 1 ))
-      fi
-    done
-    cube_indexes+=( $best_index )
+    # Midpoint ties choose the lower cube level, matching the strict search.
+    if (( component <= 47 )); then
+      cube_indexes+=(0)
+    elif (( component <= 115 )); then
+      cube_indexes+=(1)
+    else
+      cube_indexes+=( $(( (component - 116) / 40 + 2 )) )
+    fi
   done
 
   cube_r=${levels[$(( cube_indexes[1] + 1 ))]}
@@ -48,21 +46,18 @@ _zsh_theme_rgb_to_256() {
     (rgb[3] - cube_b) ** 2
   ))
 
-  best_distance=196608
-  gray_code=232
-  for (( gray_index = 0; gray_index < 24; gray_index++ )); do
-    gray_value=$(( 8 + gray_index * 10 ))
-    distance=$((
-      (rgb[1] - gray_value) ** 2 +
-      (rgb[2] - gray_value) ** 2 +
-      (rgb[3] - gray_value) ** 2
-    ))
-    if (( distance < best_distance )); then
-      best_distance=$distance
-      gray_distance=$distance
-      gray_code=$(( 232 + gray_index ))
-    fi
-  done
+  # The closest gray depends on the channel sum. Exact midpoint ties stay
+  # on the lower gray; clamp the 24-level ramp before comparing distances.
+  gray_index=$(( (rgb[1] + rgb[2] + rgb[3] - 24 + 14) / 30 ))
+  (( gray_index < 0 )) && gray_index=0
+  (( gray_index > 23 )) && gray_index=23
+  gray_value=$(( 8 + gray_index * 10 ))
+  gray_code=$(( 232 + gray_index ))
+  gray_distance=$((
+    (rgb[1] - gray_value) ** 2 +
+    (rgb[2] - gray_value) ** 2 +
+    (rgb[3] - gray_value) ** 2
+  ))
 
   if (( gray_distance < cube_distance )); then
     REPLY=$gray_code

@@ -270,12 +270,12 @@ exit 1" >"$fakebin/du"
   rehash
 
   functions[_ui_plain_mode]='return 1'
-  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_width_reply]='REPLY=120'
   functions[_ui_term_height]='print -r -- 30'
   dusage "$fixture_dir" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
   output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
   functions[_ui_plain_mode]='return 0'
-  unset 'functions[_ui_term_width]' 'functions[_ui_term_height]'
+  unset 'functions[_ui_term_width_reply]' 'functions[_ui_term_height]'
   source "$repo_dir/55-ui-helpers.zsh"
   functions[_ui_plain_mode]='return 0'
   assert_status "$rc" 1 'dusage rich mode returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
@@ -513,7 +513,7 @@ test_control_character_paths() {
 
   (
     functions[_ui_plain_mode]='return 1'
-    functions[_ui_term_width]='print -r -- 60'
+    functions[_ui_term_width_reply]='REPLY=60'
     functions[_ui_term_height]='print -r -- 100'
     functions[_ui_color]='printf "\e[35m"'
     functions[_ui_reset]='printf "\e[0m"'
@@ -525,7 +525,7 @@ test_control_character_paths() {
 
   (
     functions[_ui_plain_mode]='return 1'
-    functions[_ui_term_width]='print -r -- 60'
+    functions[_ui_term_width_reply]='REPLY=60'
     functions[_ui_term_height]='print -r -- 100'
     functions[_ui_color]='printf "\e[35m"'
     functions[_ui_reset]='printf "\e[0m"'
@@ -537,7 +537,7 @@ test_control_character_paths() {
 
   (
     functions[_ui_plain_mode]='return 1'
-    functions[_ui_term_width]='print -r -- 60'
+    functions[_ui_term_width_reply]='REPLY=60'
     functions[_ui_color]='printf "\e[35m"'
     functions[_ui_reset]='printf "\e[0m"'
     functions[_ui_bold]=':'
@@ -555,6 +555,51 @@ test_control_character_paths() {
     assert_safe_output_file "$stripped" "${filename:t} is safe after expected UI styling is removed" || return 1
   done
 }
+
+test_sanitizer_ascii_fast_path() (
+  local locale value char escaped expected long=''
+  integer code calls=0
+  # All byte-range controls, plus printable Unicode and invalid UTF-8.
+  for locale in C.UTF-8; do
+    local LC_ALL=$locale
+    for (( code=0; code<=159; code++ )); do
+      builtin printf -v escaped '\\u%04x' "$code"
+      builtin printf -v char '%b' "$escaped"
+      case $code in
+        7) expected='\a';; 8) expected='\b';; 9) expected='\t';;
+        10) expected='\n';; 11) expected='\v';; 12) expected='\f';;
+        13) expected='\r';; 27) expected='\e';;
+        *)
+          if (( code < 32 || code == 127 || (code >= 128 && code <= 159) )); then
+            builtin printf -v expected '\\x%02x' "$code"
+          else expected=$char
+          fi ;;
+      esac
+      _ui_safe_text_reply "a${char}b"
+      [[ $REPLY == "a${expected}b" ]] || {
+        print -u2 -- "not ok: sanitizer control $code in $locale"
+        return 1
+      }
+    done
+  done
+  LC_ALL=C.UTF-8
+  for value in '' 'short ASCII ~' 'é雪😀' $'e\u0301' $'a\xffb'; do
+    _ui_safe_text_reply "$value"
+    [[ $REPLY == "$value" ]] || return 1
+  done
+  printf() { (( calls++ )); builtin printf "$@"; }
+  for locale in C C.UTF-8; do
+    LC_ALL=$locale
+    for value in '' 'short' "${(l:4096::x:)long}"; do
+      _ui_safe_text_reply "$value"
+      [[ $REPLY == "$value" ]] || return 1
+    done
+  done
+  (( calls == 0 )) || return 1
+  _ui_safe_text_reply '雪'
+  (( calls > 0 )) || return 1
+  print -- 'ok: sanitizer ASCII skips character conversion; controls, Unicode, and invalid bytes retain output'
+)
 
 test_display_width() {
   local width padded truncated
@@ -1061,6 +1106,7 @@ main() {
   test_dusage_oversized_operand_set || return 1
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
+  test_sanitizer_ascii_fast_path || return 1
   test_display_width || return 1
   test_human_bytes || return 1
   test_alias_probes_are_quiet || return 1

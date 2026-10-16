@@ -350,6 +350,7 @@ ports() {
   local -a lines rows
   local row_delim=$'\t'
   integer width addr_width proc_width
+  local REPLY
 
   if _ui_plain_mode; then
     command ss -tulnp
@@ -426,7 +427,8 @@ ports() {
 
   shown=$(_ui_visible_count 999 "${#rows[@]}" 8)
   more=$(( ${#rows[@]} - shown ))
-  width=$(_ui_term_width)
+  _ui_term_width_reply
+  width=$REPLY
 
   local available=$(( width - 42 ))
   (( available < 20 )) && available=20
@@ -581,7 +583,7 @@ path() {
   fi
 
   local -a entries
-  local entry display_entry shown width index_width path_width
+  local entry display_entry shown width index_width path_width REPLY
 
   entries=( "${(@s/:/)PATH}" )
 
@@ -593,7 +595,8 @@ path() {
   fi
 
   shown=${#entries[@]}
-  width=$(_ui_term_width)
+  _ui_term_width_reply
+  width=$REPLY
   index_width=4
   path_width=$(( width - index_width - 8 ))
   (( path_width < 20 )) && path_width=20

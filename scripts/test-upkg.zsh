@@ -133,7 +133,7 @@ assert_order() {
 run_upkg_rich() {
   (
     functions[_ui_plain_mode]='return 1'
-    functions[_ui_term_width]='print -r -- 120'
+    functions[_ui_term_width_reply]='REPLY=120'
     functions[_ui_color]=':'
     functions[_ui_reset]=':'
     functions[_ui_bold]=':'
@@ -967,7 +967,7 @@ done
   rich_check_file="$tmp_prefix/rich-check.zsh"
 
   {
-    print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width 2>/dev/null || true'
+    print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width _ui_term_width_reply 2>/dev/null || true'
     print -- "source '$repo_dir/60-functions.zsh'"
     print -- '_zsh_functions_load || exit 1'
     print -- '_ui_truncate 10 "My File.txt"'
@@ -1998,7 +1998,7 @@ esac
 
   functions[_ui_is_rich_terminal]='return 0'
   functions[_ui_plain_mode]='return 1'
-  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_width_reply]='REPLY=120'
   functions[_ui_term_height]='print -r -- 12'
   functions[_ui_color]=':'
   functions[_ui_reset]=':'
@@ -2227,7 +2227,7 @@ esac
 
   functions[_ui_is_rich_terminal]='return 0'
   functions[_ui_plain_mode]='return 1'
-  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_width_reply]='REPLY=120'
   functions[_ui_term_height]='print -r -- 12'
   functions[_ui_color]=':'
   functions[_ui_reset]=':'

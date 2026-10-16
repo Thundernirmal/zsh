@@ -524,7 +524,7 @@ Finder presentation is compiled separately from the trusted integration cache. C
 | Ctrl+R | Select a history entry and insert it for editing |
 | Alt+C | Select a directory and change to it |
 
-Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from `sed`. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
+Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from GNU `sed`. The plain fallback stops after line 200; it does not scan later content or detect read errors beyond that preview prefix. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
@@ -889,9 +889,13 @@ Explicitly inactive profile elements are excluded from outdated checks and the r
 | `change available` | The sets differ |
 | `unknown` | Profile data or evaluation is incomplete |
 
+Profile labels keep visible control-character escaping, including embedded tabs and NULs; malformed profile JSON is an error, not an empty successful inventory.
+
 A change is not necessarily an upgrade. It can be a downgrade, rebuild, changed input, output-selection change, or packaging change. Display versions are informational and never determine state.
 
 A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active elements is a complete zero-count result. Active store-path-only entries or entries without an evaluable flake source/attribute are reported as unknown instead of being silently excluded. Pinned flake references remain pinned: `npkg upgrade` cannot advance their revision, and their evaluated identity can correctly remain current. Reinstall from an unlocked reference only when changing that pin is intentional.
+
+`npkg outdated` runs at most eight evaluation workers, refilling completed slots while keeping displayed results in profile order. If the optional Zsh polling module is unavailable, it drains each batch before starting another. Package mutations remain sequential.
 
 For `npkg outdated`, INT, TERM, and HUP stop owned evaluation workers and their descendants, remove temporary files, preserve unrelated background jobs, and return `130`, `143`, and `129` respectively. Captured package queries run in private sessions using `setsid` (util-linux). A trusted supervisor remains alive through group termination and escalation, including children forked during shutdown. It monitors its owner and the original Nix inventory process while queries run and after they finish. Abnormal owner death stops the private group and removes its verified private capture directories; loss of only one Nix worker retains shared batch storage. A missing startup identity fails with status `1` after an approximately three-second handshake budget and shuts down the verified launcher/session. Linux `/proc` verifies the supervisor identity. Failed-startup cleanup uses per-task child lists when readable and falls back to process-stat parent discovery when those optional files are absent, unreadable, empty, malformed, or contain stale identities. Process records and child lists use fixed whitespace independent of the caller’s `IFS`; each child is attributed by parent and start time before cleanup, and subsequent signals require its recorded start identity. Cleanup freezes only the launcher, retaining a proc descriptor for the original task through its identity-checked final termination. Children are never frozen; a child that establishes a private session during shutdown is handled as a group. If access to a child identity is lost, further signals to that child are skipped. Signals sent only to the wrapper are forwarded to its owned session. Shared Nix daemon processes and children that deliberately detach into another session or process group are outside this ownership boundary. The `upkg` Nix bridge consumes the stable internal `current`, `changed`, or `partial` state rather than matching display text.
 
@@ -951,7 +955,7 @@ When user-facing behavior changes, update every affected surface without copying
 - Never add a plaintext CGM fallback, value-retrieving completion, or `eval`-based secret export.
 - Treat aliases in `20-aliases.zsh` as high-impact changes.
 
-Nix attribute completion reuses parsed names in the current session while each cache file’s device, inode, size, and modification time match. Replacing, adding, or removing cache files is reflected on the next completion. It never refreshes the index over the network.
+Nix attribute completion reuses parsed names and the final ordered, deduplicated candidate list in the current session while the eligible file set and each file’s device, inode, size, and modification time match. These identities use filesystem timestamp granularity; same-size edits with preserved identities and timestamps are not content-hash checked. Replacing, adding, or removing cache files is reflected on the next completion. It never refreshes the index over the network.
 
 ### Required checks
 

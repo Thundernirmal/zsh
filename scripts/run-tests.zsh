@@ -36,11 +36,13 @@ unset _zsh_syntax_file
 sh -n ./scripts/check-deps.sh
 zsh ./scripts/test-init.zsh
 zsh ./scripts/test-theme.zsh
+zsh ./scripts/test-theme-rgb.zsh
 zsh ./scripts/test-functions.zsh
 zsh ./scripts/test-command-ux.zsh
 zsh ./scripts/test-domains.zsh
 zsh ./scripts/test-cgm.zsh
 zsh ./scripts/test-upkg.zsh
+zsh ./scripts/test-npkg-decode.zsh
 zsh ./scripts/test-package-audit.zsh
 zsh ./scripts/test-query-ownership.zsh
 zsh ./scripts/test-query-launcher.zsh
@@ -49,6 +51,8 @@ zsh ./scripts/test-help.zsh
 zsh ./scripts/test-doctor.zsh
 # CI also runs the real-fzf PTY suite against each supported fzf release.
 if (( $+commands[python3] && $+commands[fzf] )); then
+  python3 ./scripts/test-ui-pty.py
+  python3 ./scripts/test-preview.py
   python3 ./scripts/test-fzf-pty.py >/dev/null
   print -- 'ok: real fzf PTY checks'
 else

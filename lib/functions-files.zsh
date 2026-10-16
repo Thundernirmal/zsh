@@ -580,7 +580,7 @@ dusage() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width
+  local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width REPLY
   local size_text percent_text header_meta footer_text display_target
   local scan_status=0 signal_status=0 incomplete_detail=''
   local -a entries records lines
@@ -656,7 +656,8 @@ dusage() {
   shown=$(_ui_visible_count "$limit" "${#lines[@]}" 6)
   more=$(( ${#lines[@]} - shown ))
   visible_count=$shown
-  width=$(_ui_term_width)
+  _ui_term_width_reply
+  width=$REPLY
   size_width=9
   bar_width=16
   percent_width=5
@@ -749,7 +750,7 @@ bigfiles() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width
+  local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width REPLY
   local signal_status=0 display_target incomplete_status=0
   local line_count=0 incomplete_detail=''
   local -a records lines
@@ -830,7 +831,8 @@ bigfiles() {
   shown=$(_ui_visible_count "$limit" "$line_count" 6)
   more=$(( line_count - shown ))
 
-  width=$(_ui_term_width)
+  _ui_term_width_reply
+  width=$REPLY
   size_width=9
   bar_width=16
   (( width < 80 )) && bar_width=10
