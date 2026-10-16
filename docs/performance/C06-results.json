@@ -1,0 +1,43 @@
+{
+  "method": "Three interleaved fresh-shell 16-entry fixtures; native evaluation stub sleeps 20 ms; skewed entries 1 and 9 sleep 300 ms. Full stdout/status/state parity asserted; no live Nix/network/mutations. Includes shell and fixture construction.",
+  "samples": {
+    "skewed": [
+      {
+        "baseline_ms": 1054.2475100010051,
+        "current_ms": 766.4835440009483
+      },
+      {
+        "baseline_ms": 998.4992919999058,
+        "current_ms": 738.1407150023733
+      },
+      {
+        "baseline_ms": 975.5854009999894,
+        "current_ms": 691.5948360037873
+      }
+    ],
+    "uniform": [
+      {
+        "baseline_ms": 372.3998989953543,
+        "current_ms": 404.0208340011304
+      },
+      {
+        "baseline_ms": 382.58153600327205,
+        "current_ms": 397.6234190049581
+      },
+      {
+        "baseline_ms": 432.62482400314184,
+        "current_ms": 478.2378029995016
+      }
+    ]
+  },
+  "medians_ms": {
+    "skewed": {
+      "baseline": 998.4992919999058,
+      "current": 738.1407150023733
+    },
+    "uniform": {
+      "baseline": 382.58153600327205,
+      "current": 404.0208340011304
+    }
+  }
+}

@@ -461,6 +461,36 @@ exit 99' > "$fakebin/$tool"
   assert_status "$?" 0 'theme module sourcing invokes no external tools' || return 1
 }
 
+test_color_role_reuse() {
+  local output digest
+  output=$(run_theme_case 'ZSH_UI_THEME=terminal; ZSH_FZF_THEME=' '
+for ZSH_UI_THEME in "${_ZSH_UI_THEME_NAMES[@]}"; do
+  _zsh_theme_resolve_settings || exit 1
+  for _ZSH_UI_COLOR_DEPTH in ansi 256 truecolor none; do
+    for ZSH_FZF_LAYOUT in compact minimal roomy; do
+      _zsh_theme_fzf_color_args || exit 2
+      print -r -- "$ZSH_UI_THEME:$_ZSH_UI_COLOR_DEPTH:$ZSH_FZF_LAYOUT:$REPLY:${(j: :)reply}"
+    done
+  done
+done') || return 1
+  # Frozen pre-C07a output, including the final REPLY, across all built-ins.
+  digest=$(print -r -- "$output" | command sha256sum)
+  assert_equals "${digest%% *}" c9262e4a208fb9e2d7e6cec95421d50ed002f0af2df425fa8604e5ef79917725 'color role reuse preserves every built-in/depth/layout mapping and scratch result' || return 1
+  output=$(run_theme_case 'ZSH_UI_THEME=terminal; ZSH_FZF_THEME=' '
+_zsh_theme_load_registry
+functions[_original_color]=$functions[_zsh_theme_color_value]
+integer calls=0
+_zsh_theme_color_value() { (( calls++ )); _original_color "$@"; }
+for ZSH_FZF_LAYOUT in compact roomy; do
+  calls=0; _zsh_theme_fzf_color_args || exit 1; print $calls
+done
+NO_COLOR=1; calls=0; _zsh_theme_fzf_color_args || exit 1; print $calls
+unset NO_COLOR
+_zsh_theme_color_value() { return 1; }
+_zsh_theme_fzf_color_args; print $?') || return 1
+  assert_equals "$output" $'13\n13\n0\n1' 'color roles resolve once per build and preserve no-color/failure paths'
+}
+
 main() {
   test_defaults_and_builtins || return 1
   test_color_resolution || return 1
@@ -469,6 +499,7 @@ main() {
   test_glyph_tier_selection || return 1
   test_dashboard_renderer || return 1
   test_fzf_compiler || return 1
+  test_color_role_reuse || return 1
   test_picker_presentation || return 1
   test_ztheme_command || return 1
   test_custom_theme_atomicity || return 1

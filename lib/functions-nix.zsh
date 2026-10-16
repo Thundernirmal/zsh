@@ -436,32 +436,97 @@
 
   # Reap only the caller's recorded workers; a cancelled worker stops its peers.
   _npkg_wait_workers() {
-    local pid worker_status
+    local pid worker_status wait_mode=${1:-all}
+    integer reaped
+    # Optional builtin sleep; retain the existing full drain if unavailable.
+    if [[ $wait_mode == available ]]; then
+      zmodload zsh/zselect 2>/dev/null || wait_mode=all
+    fi
     while (( ${#job_pids} )); do
-      pid=$job_pids[1]
-      while true; do
-        wait "$pid" 2>/dev/null
-        worker_status=$?
-        # A wrapper signal interrupts wait before the worker finishes cleanup.
+      reaped=0
+      for pid in "${job_pids[@]}"; do
+        if [[ $wait_mode == available ]] && _zsh_owned_job_is_running "$pid"; then
+          continue
+        fi
+        while true; do
+          wait "$pid" 2>/dev/null
+          worker_status=$?
+          # A wrapper signal interrupts wait before the worker finishes cleanup.
+          case $worker_status in
+            129|130|143)
+              (( interrupted )) && _zsh_owned_job_is_running "$pid" && continue
+              ;;
+          esac
+          break
+        done
+        job_pids=( "${(@)job_pids:#$pid}" )
+        unset "job_identities[$pid]"
+        reaped=1
         case $worker_status in
           129|130|143)
-            (( interrupted )) && _zsh_owned_job_is_running "$pid" && continue
+            if (( ! interrupted )); then
+              interrupted=$worker_status
+              _zsh_stop_owned_jobs "${job_pids[@]}"
+            fi
             ;;
         esac
-        break
       done
-      job_pids[1]=()
-      unset "job_identities[$pid]"
-      case $worker_status in
-        129|130|143)
-          if (( ! interrupted )); then
-            interrupted=$worker_status
-            _zsh_stop_owned_jobs "${job_pids[@]}"
-          fi
-          ;;
-      esac
+      [[ $wait_mode == available ]] && (( reaped )) && return 0
+      # Poll only owned workers, at most eight, without spawning sleep processes.
+      (( ${#job_pids} )) && zselect -t 1 2>/dev/null
     done
     job_pids=()
+  }
+
+  # Decode jq @tsv fields plus our explicit NUL escape. No eval or locale-dependent
+  # byte conversion; literal backslashes remain distinct from encoded controls.
+  _npkg_decode_field() {
+    emulate -L zsh
+    local value=$1 char output=''
+    integer index
+    if [[ $value != *\\* ]]; then
+      REPLY=$value
+      return 0
+    fi
+    for (( index=1; index<=${#value}; index++ )); do
+      char=${value[$index]}
+      if [[ $char == \\ ]]; then
+        (( index++ ))
+        case ${value[$index]-} in
+          \\) char='\' ;;
+          n) char=$'\n' ;;
+          r) char=$'\r' ;;
+          t) char=$'\t' ;;
+          0) char=$'\0' ;;
+          *) return 1 ;;
+        esac
+      fi
+      output+=$char
+    done
+    REPLY=$output
+  }
+
+  # One jq pass per normal evaluation record. Streams retain the legacy path;
+  # use stdin for records/installed paths rather than imposing argv size limits.
+  _npkg_eval_summary() {
+    emulate -L zsh
+    setopt pipefail
+    local kind=$1 installed=$2 record=$3
+    { print -r -- "$installed"; print -r -- "$record"; } |
+      command jq -rs --arg kind "$kind" '
+        if length != 2 then ["stream"]
+        else
+          .[0] as $installed | .[1] as $value
+          | if ($value | type == "object" and (.version == null or (.version | type) == "string"))
+               and ($kind == "locked" or ($value.paths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)))
+            then ["valid",
+                  ($value.version | if . == null or . == "" then "?" else . end),
+                  (if $kind == "locked" then ""
+                   elif ($installed | sort | unique) == ($value.paths | sort | unique) then "current"
+                   else "changed" end)]
+            else ["invalid"] end
+        end | @tsv | gsub("\u0000"; "\\0")
+      ' 2>/dev/null
   }
 
   _npkg_outdated() {
@@ -478,6 +543,9 @@
 
     local profile_json profile_error_file profile_capture_dir profile_error entry_data entry_json name attr_path source locked_uri
     local store_paths_json outputs_json structural_value
+    local REPLY eval_summary
+    local -a entry_fields eval_fields
+    integer field_index
     local tmp_dir current_record locked_record installed_paths available_paths
     local installed_version available_version package_state display_state marker role detail error_output
     local width name_width version_width visible_count more
@@ -517,7 +585,10 @@
     if (( profile_status != 0 )); then
       case $profile_status in 129|130|143) return "$profile_status" ;; esac
       print -u2 -r -- 'Failed to read Nix profile.'
-      [[ -n $profile_error ]] && print -u2 -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
+      if [[ -n $profile_error ]]; then
+        _ui_safe_text_reply "$profile_error"
+        print -u2 -r -- "Diagnostic: $REPLY"
+      fi
       return 1
     fi
 
@@ -530,7 +601,7 @@
     }
 
     entry_data=$(
-      print -r -- "$profile_json" | command jq -c '
+      print -r -- "$profile_json" | command jq -r '
         def text: if type == "string" then . else "" end;
         def manifest_entries:
           if (.elements | type) == "object" then
@@ -573,24 +644,7 @@
             storePaths: $stores,
             outputs: ($value.outputs // null)
           }
-      '
-    ) || {
-      print -u2 -r -- 'Failed to parse Nix profile elements.'
-      return 1
-    }
-
-    while IFS= read -r entry_json; do
-      [[ -n $entry_json ]] || continue
-
-      name=$(print -r -- "$entry_json" | command jq -r '.displayName') || return 1
-      attr_path=$(print -r -- "$entry_json" | command jq -r '.attrPath') || return 1
-      source=$(print -r -- "$entry_json" | command jq -r '.originalUrl') || return 1
-      locked_uri=$(print -r -- "$entry_json" | command jq -r '.lockedUri') || return 1
-      store_paths_json=$(print -r -- "$entry_json" | command jq -c '.storePaths') || return 1
-      outputs_json=$(print -r -- "$entry_json" | command jq -c '.outputs') || return 1
-
-      if print -r -- "$entry_json" | command jq -e '
-        (.displayName | type == "string" and length > 0)
+        | ((.displayName | type == "string" and length > 0)
         and (.attrPath | type == "string" and length > 0)
         and (.originalUrl | type == "string" and length > 0)
         and (.lockedUri | type == "string")
@@ -603,14 +657,43 @@
             and all(.outputs[]; type == "string" and (. == "*" or test("^[A-Za-z0-9+._?=-]+$")))
             and (([.outputs[] | select(. == "*")] | length) == 0 or ((.outputs | length) == 1 and .outputs[0] == "*"))
           )
-        )
-      ' >/dev/null 2>&1; then
-        structural_value=1
-      else
-        structural_value=0
-      fi
+        )) as $valid
+        | [ .displayName, .attrPath, .originalUrl, .lockedUri,
+            (.storePaths | tojson), (.outputs | tojson),
+            (if $valid then "1" else "0" end) ]
+        | @tsv | gsub("\u0000"; "\\0")
+      '
+    ) || {
+      print -u2 -r -- 'Failed to parse Nix profile elements.'
+      return 1
+    }
 
-      names+=("$(_ui_safe_text "$name")")
+    while IFS= read -r entry_json; do
+      [[ -n $entry_json ]] || continue
+
+      entry_fields=( "${(@ps:\t:)entry_json}" )
+      (( ${#entry_fields} == 7 )) || {
+        print -u2 -r -- 'Failed to decode Nix profile fields.'
+        return 1
+      }
+      for (( field_index=1; field_index<=7; field_index++ )); do
+        _npkg_decode_field "${entry_fields[$field_index]}" || return 1
+        entry_fields[$field_index]=$REPLY
+        # Previous jq command substitutions stripped trailing newlines.
+        while [[ ${entry_fields[$field_index]} == *$'\n' ]]; do
+          entry_fields[$field_index]=${entry_fields[$field_index]%$'\n'}
+        done
+      done
+      name=$entry_fields[1]
+      attr_path=$entry_fields[2]
+      source=$entry_fields[3]
+      locked_uri=$entry_fields[4]
+      store_paths_json=$entry_fields[5]
+      outputs_json=$entry_fields[6]
+      structural_value=$entry_fields[7]
+
+      _ui_safe_text_reply "$name"
+      names+=("$REPLY")
       attrs+=("$attr_path")
       sources+=("$source")
       locked_uris+=("$locked_uri")
@@ -672,8 +755,8 @@
         :
       ) &
       job_pids+=("$!")
-      if [[ -r /proc/${job_pids[-1]}/stat ]]; then
-        worker_stat=$(</proc/${job_pids[-1]}/stat)
+      if [[ -r /proc/${job_pids[-1]}/stat ]] &&
+          { worker_stat=$(</proc/${job_pids[-1]}/stat); } 2>/dev/null; then
         worker_fields=( ${=${worker_stat##*\) }} )
         job_identities[${job_pids[-1]}]=${worker_fields[20]-}
       fi
@@ -684,7 +767,7 @@
       fi
 
       if (( ${#job_pids[@]} >= max_jobs )); then
-        _npkg_wait_workers
+        _npkg_wait_workers available
         (( interrupted )) && break
       fi
     done
@@ -713,39 +796,64 @@
 
       if [[ -s $locked_file ]]; then
         locked_record=$(<"$locked_file")
-        if print -r -- "$locked_record" | command jq -e '
-          type == "object" and (.version == null or (.version | type) == "string")
-        ' >/dev/null 2>&1; then
-          installed_version=$(print -r -- "$locked_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
-          installed_version=$(_ui_safe_text "$installed_version")
+        eval_summary=$(_npkg_eval_summary locked null "$locked_record") || eval_summary=invalid
+        eval_fields=( "${(@ps:\t:)eval_summary}" )
+        if [[ $eval_summary == stream ]]; then
+          if print -r -- "$locked_record" | command jq -e '
+            type == "object" and (.version == null or (.version | type) == "string")
+          ' >/dev/null 2>&1; then
+            installed_version=$(print -r -- "$locked_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
+            _ui_safe_text_reply "$installed_version"
+            installed_version=$REPLY
+          fi
+        elif [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
+          _npkg_decode_field "$eval_fields[2]" || return 1
+          while [[ $REPLY == *$'\n' ]]; do REPLY=${REPLY%$'\n'}; done
+          _ui_safe_text_reply "$REPLY"
+          installed_version=$REPLY
         fi
       fi
 
       if (( structurally_valid[$idx] )) && [[ -s $current_file ]]; then
         current_record=$(<"$current_file")
-        if print -r -- "$current_record" | command jq -e '
-          type == "object"
-          and (.paths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0))
-          and (.version == null or (.version | type) == "string")
-        ' >/dev/null 2>&1; then
-          installed_paths=$(print -r -- "${installed_path_sets[$idx]}" | command jq -c 'sort | unique')
-          available_paths=$(print -r -- "$current_record" | command jq -c '.paths | sort | unique')
-          available_version=$(print -r -- "$current_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
-          available_version=$(_ui_safe_text "$available_version")
+        eval_summary=$(_npkg_eval_summary current "${installed_path_sets[$idx]}" "$current_record") || eval_summary=invalid
+        eval_fields=( "${(@ps:\t:)eval_summary}" )
+        if [[ $eval_summary == stream ]]; then
+          if print -r -- "$current_record" | command jq -e '
+            type == "object"
+            and (.paths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0))
+            and (.version == null or (.version | type) == "string")
+          ' >/dev/null 2>&1; then
+            installed_paths=$(print -r -- "${installed_path_sets[$idx]}" | command jq -c 'sort | unique')
+            available_paths=$(print -r -- "$current_record" | command jq -c '.paths | sort | unique')
+            available_version=$(print -r -- "$current_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
+            _ui_safe_text_reply "$available_version"
+            available_version=$REPLY
 
-          if [[ $installed_paths == $available_paths ]]; then
-            package_state=current
+            if [[ $installed_paths == $available_paths ]]; then
+              package_state=current
+            else
+              package_state=changed
+              (( changed++ ))
+            fi
           else
-            package_state=changed
-            (( changed++ ))
+            detail='evaluation returned unusable output-path data'
           fi
+        elif [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
+          _npkg_decode_field "$eval_fields[2]" || return 1
+          while [[ $REPLY == *$'\n' ]]; do REPLY=${REPLY%$'\n'}; done
+          _ui_safe_text_reply "$REPLY"
+          available_version=$REPLY
+          package_state=$eval_fields[3]
+          [[ $package_state != changed ]] || (( changed++ ))
         else
           detail='evaluation returned unusable output-path data'
         fi
       elif (( structurally_valid[$idx] )); then
         if [[ -s "${tmp_dir}/${idx}.current.error" ]]; then
           error_output=$(<"${tmp_dir}/${idx}.current.error")
-          detail="evaluation failed: $(_ui_safe_text "$error_output")"
+          _ui_safe_text_reply "$error_output"
+          detail="evaluation failed: $REPLY"
         else
           detail='evaluation failed without a diagnostic'
         fi

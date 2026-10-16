@@ -25,6 +25,11 @@ _ui_safe_text_reply() {
   setopt MULTIBYTE
 
   local value=$1
+  local non_ascii_pattern='*[^ -~]*'
+  if [[ $value != ${~non_ascii_pattern} ]]; then
+    REPLY=$value
+    return 0
+  fi
   local char escaped output=''
   integer index code
 
@@ -318,7 +323,8 @@ _zsh_owned_job_is_running() {
   local pid=$1 stat_text expected
   local -a fields
   [[ $pid == <-> && -r /proc/$pid/stat ]] || return 1
-  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  { stat_text=$(</proc/$pid/stat); } 2>/dev/null || return 1
+  fields=( ${=${stat_text##*\) }} )
   [[ ${fields[2]-} == "$sysparams[pid]" && ${fields[1]-} != Z ]] || return 1
   expected=${job_identities[$pid]-}
   [[ -z $expected || ${fields[20]-} == "$expected" ]]
@@ -342,7 +348,8 @@ _zsh_stop_owned_group() {
   local pid=$1 identity=$2 stat_text
   local -a fields
   [[ $pid == <-> && -r /proc/$pid/stat ]] || return 0
-  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  { stat_text=$(</proc/$pid/stat); } 2>/dev/null || return 0
+  fields=( ${=${stat_text##*\) }} )
   [[ ${fields[3]-} == "$pid" && ${fields[4]-} == "$pid" && ${fields[20]-} == "$identity" ]] || return 0
   builtin kill -TERM -- "-$pid" 2>/dev/null
   (( $3 )) && zselect -t 10
@@ -511,8 +518,9 @@ _zsh_run_owned_query() {
   {
     command setsid --wait "$shell_executable" -df "$_ZSH_FUNCTIONS_MODULE_DIR/lib/query-supervisor.zsh" "$control_dir" "$caller_pid" "$caller_identity" "$root_pid" "$root_identity" "${#cleanup_dirs}" "${cleanup_dirs[@]}" "$@" &
     launcher_pid=$!
-    if [[ -r /proc/$launcher_pid/stat ]]; then
-      stat_text=$(</proc/$launcher_pid/stat); fields=( ${=${stat_text##*\) }} )
+    if [[ -r /proc/$launcher_pid/stat ]] &&
+        { stat_text=$(</proc/$launcher_pid/stat); } 2>/dev/null; then
+      fields=( ${=${stat_text##*\) }} )
       [[ ${fields[2]-} != "$caller_pid" ]] || launcher_identity=${fields[20]-}
     fi
     while [[ ! -f $control_dir/identity || ! -s $control_dir/identity ]] && (( ! signal_status && ticks++ < 300 )); do

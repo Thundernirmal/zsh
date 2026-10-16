@@ -19,7 +19,8 @@ _supervisor_process_alive() {
   local pid=$1 identity=$2 stat_text
   local -a fields
   [[ $pid == <-> && -r /proc/$pid/stat ]] || return 1
-  stat_text=$(</proc/$pid/stat); fields=( ${=${stat_text##*\) }} )
+  { stat_text=$(</proc/$pid/stat); } 2>/dev/null || return 1
+  fields=( ${=${stat_text##*\) }} )
   [[ ${fields[1]-} != Z && ${fields[20]-} == "$identity" ]]
 }
 # Record only private directories created by the trusted calling workflows.
@@ -69,15 +70,17 @@ case $callback in
   *) exit 1 ;;
 esac
 child_pid=$!
-if [[ -r /proc/$child_pid/stat ]]; then
-  stat_text=$(</proc/$child_pid/stat); fields=( ${=${stat_text##*\) }} )
+if [[ -r /proc/$child_pid/stat ]] &&
+    { stat_text=$(</proc/$child_pid/stat); } 2>/dev/null; then
+  fields=( ${=${stat_text##*\) }} )
   [[ ${fields[2]-} != "$supervisor_pid" ]] || child_identity=${fields[20]-}
 fi
 # Poll rather than blocking in wait: owner death must interrupt active queries.
 while true; do
   _supervisor_check_owner
   [[ -r /proc/$child_pid/stat ]] || break
-  stat_text=$(</proc/$child_pid/stat); fields=( ${=${stat_text##*\) }} )
+  { stat_text=$(</proc/$child_pid/stat); } 2>/dev/null || break
+  fields=( ${=${stat_text##*\) }} )
   [[ ${fields[1]-} != Z && ${fields[2]-} == "$supervisor_pid" ]] || break
   [[ -z $child_identity || ${fields[20]-} == "$child_identity" ]] || break
   zselect -t 1

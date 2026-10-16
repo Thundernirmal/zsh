@@ -1,0 +1,113 @@
+{
+  "method": "Seven alternating-order paired fresh-shell full Nix inventories at 20/100 entries. Stub native queries only; current/locked records with tab/NUL/Unicode; exact stdout/stderr/status/summary/caller-REPLY parity. Six PTY configurations additionally compare full command bytes (narrow/wide, ANSI/256/truecolor, NO_COLOR, C locale).",
+  "pty_configs": [
+    [
+      59,
+      "ansi",
+      false,
+      "C.UTF-8"
+    ],
+    [
+      100,
+      "ansi",
+      false,
+      "C.UTF-8"
+    ],
+    [
+      100,
+      "256",
+      false,
+      "C.UTF-8"
+    ],
+    [
+      100,
+      "truecolor",
+      false,
+      "C.UTF-8"
+    ],
+    [
+      100,
+      "256",
+      true,
+      "C.UTF-8"
+    ],
+    [
+      100,
+      "ansi",
+      false,
+      "C"
+    ]
+  ],
+  "samples": {
+    "20": [
+      {
+        "baseline_ms": 725.7061659984174,
+        "current_ms": 800.9891180045088
+      },
+      {
+        "baseline_ms": 724.1931989992736,
+        "current_ms": 671.2480170026538
+      },
+      {
+        "baseline_ms": 881.9957320010872,
+        "current_ms": 634.8536810037331
+      },
+      {
+        "baseline_ms": 653.8215580003452,
+        "current_ms": 591.2602719981805
+      },
+      {
+        "baseline_ms": 770.4519420003635,
+        "current_ms": 596.546960005071
+      },
+      {
+        "baseline_ms": 835.0712510000449,
+        "current_ms": 627.8762190049747
+      },
+      {
+        "baseline_ms": 752.4750479933573,
+        "current_ms": 776.1266790039372
+      }
+    ],
+    "100": [
+      {
+        "baseline_ms": 3186.8975260003936,
+        "current_ms": 2669.648656003119
+      },
+      {
+        "baseline_ms": 2666.9153300026665,
+        "current_ms": 2695.0298200026737
+      },
+      {
+        "baseline_ms": 2107.194422002067,
+        "current_ms": 1330.8476230013184
+      },
+      {
+        "baseline_ms": 1532.3765200009802,
+        "current_ms": 1305.435492999095
+      },
+      {
+        "baseline_ms": 1557.9524759959895,
+        "current_ms": 1514.1723439955967
+      },
+      {
+        "baseline_ms": 2191.4144990005298,
+        "current_ms": 1697.6542949996656
+      },
+      {
+        "baseline_ms": 1875.3159820043948,
+        "current_ms": 1481.369316999917
+      }
+    ]
+  },
+  "medians_ms": {
+    "20": {
+      "baseline": 752.4750479933573,
+      "current": 634.8536810037331
+    },
+    "100": {
+      "baseline": 2107.194422002067,
+      "current": 1514.1723439955967
+    }
+  }
+}
