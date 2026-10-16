@@ -585,7 +585,10 @@
     if (( profile_status != 0 )); then
       case $profile_status in 129|130|143) return "$profile_status" ;; esac
       print -u2 -r -- 'Failed to read Nix profile.'
-      [[ -n $profile_error ]] && print -u2 -r -- "Diagnostic: $(_ui_safe_text "$profile_error")"
+      if [[ -n $profile_error ]]; then
+        _ui_safe_text_reply "$profile_error"
+        print -u2 -r -- "Diagnostic: $REPLY"
+      fi
       return 1
     fi
 
@@ -689,7 +692,8 @@
       outputs_json=$entry_fields[6]
       structural_value=$entry_fields[7]
 
-      names+=("$(_ui_safe_text "$name")")
+      _ui_safe_text_reply "$name"
+      names+=("$REPLY")
       attrs+=("$attr_path")
       sources+=("$source")
       locked_uris+=("$locked_uri")
@@ -799,12 +803,14 @@
             type == "object" and (.version == null or (.version | type) == "string")
           ' >/dev/null 2>&1; then
             installed_version=$(print -r -- "$locked_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
-            installed_version=$(_ui_safe_text "$installed_version")
+            _ui_safe_text_reply "$installed_version"
+            installed_version=$REPLY
           fi
         elif [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
           _npkg_decode_field "$eval_fields[2]" || return 1
           while [[ $REPLY == *$'\n' ]]; do REPLY=${REPLY%$'\n'}; done
-          installed_version=$(_ui_safe_text "$REPLY")
+          _ui_safe_text_reply "$REPLY"
+          installed_version=$REPLY
         fi
       fi
 
@@ -821,7 +827,8 @@
             installed_paths=$(print -r -- "${installed_path_sets[$idx]}" | command jq -c 'sort | unique')
             available_paths=$(print -r -- "$current_record" | command jq -c '.paths | sort | unique')
             available_version=$(print -r -- "$current_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
-            available_version=$(_ui_safe_text "$available_version")
+            _ui_safe_text_reply "$available_version"
+            available_version=$REPLY
 
             if [[ $installed_paths == $available_paths ]]; then
               package_state=current
@@ -835,7 +842,8 @@
         elif [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
           _npkg_decode_field "$eval_fields[2]" || return 1
           while [[ $REPLY == *$'\n' ]]; do REPLY=${REPLY%$'\n'}; done
-          available_version=$(_ui_safe_text "$REPLY")
+          _ui_safe_text_reply "$REPLY"
+          available_version=$REPLY
           package_state=$eval_fields[3]
           [[ $package_state != changed ]] || (( changed++ ))
         else
@@ -844,7 +852,8 @@
       elif (( structurally_valid[$idx] )); then
         if [[ -s "${tmp_dir}/${idx}.current.error" ]]; then
           error_output=$(<"${tmp_dir}/${idx}.current.error")
-          detail="evaluation failed: $(_ui_safe_text "$error_output")"
+          _ui_safe_text_reply "$error_output"
+          detail="evaluation failed: $REPLY"
         else
           detail='evaluation failed without a diagnostic'
         fi

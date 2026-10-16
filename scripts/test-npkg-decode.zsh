@@ -168,3 +168,27 @@ for count in 1 2 3; do
   assert test ! -s "$scratch/error"
 done
 print 'ok: immediate Nix worker exits retain status and do not leak process-read diagnostics'
+
+# Nix uses the pure reply core directly, including diagnostics, without leaking
+# the caller's REPLY. The legacy printing wrapper remains available elsewhere.
+_ui_safe_text() { print -r -- called >> "$scratch/sanitizer-captures"; return 99; }
+fixture='{"elements":[{"name":"tab\t雪","attrPath":"pkg","originalUrl":"current","uri":"locked","storePaths":["/store/a"]}]}'
+_npkg_eval_installable_record() {
+  print -r -- '{"paths":["/store/a"],"version":"a\tb\u0000c"}'
+}
+REPLY=caller-sentinel
+_npkg_outdated > "$scratch/output"
+assert test "$?" -eq 0
+assert test "$REPLY" = caller-sentinel
+[[ $(<"$scratch/output") == *'tab\t雪'* && $(<"$scratch/output") == *'a\tb\x00c'* ]] || exit 1
+_npkg_eval_installable_record() { print -u2 -r -- $'failed\t雪'; return 1; }
+_npkg_outdated > "$scratch/output"
+assert test "$?" -eq 1
+[[ $(<"$scratch/output") == *'evaluation failed: failed\t雪'* ]] || exit 1
+_npkg_nix() { print -u2 -r -- $'profile\tfailed'; return 1; }
+_npkg_outdated > "$scratch/output" 2> "$scratch/error"
+assert test "$?" -eq 1
+[[ $(<"$scratch/error") == *'Diagnostic: profile\tfailed'* ]] || exit 1
+assert test ! -e "$scratch/sanitizer-captures"
+assert test "$REPLY" = caller-sentinel
+print 'ok: Nix row and diagnostic sanitization avoids capture wrappers and preserves caller scratch state'
