@@ -125,3 +125,5 @@ The consolidation changes no guide headings, module paths, registration records,
 ## Implementation ledger
 
 The review and plan above are preserved as the original baseline. Subsequent implementation status, commits, measurements, and pending checks are recorded in the append-only [ledger](./ledger.md). At the user's request, performance documents are retained rather than removed when an item is resolved. All implementation commits remain local unless separately authorized.
+
+The implementation pass now has a [current disposition](./decisions.md), including commit mapping, the C09 profiling decision, C10/C11 design gates, and pending external checks. The original findings above remain unchanged as baseline evidence; consult the ledger and disposition for current status.

@@ -112,3 +112,13 @@ Stage 9 validation: the complete runner passed on the first run after this corre
 - Documentation/website: no public behavior or printing interface changed. Existing escaping documentation remains accurate. Helpers stay in the same source files; companion extraction/snapshot validation remains pending.
 
 Stage 10 final validation: full `zsh scripts/run-tests.zsh` passed after rebasing the sanitizer change onto the process-read correction, including immediate-exit workers, sanitizer-wrapper avoidance, caller scratch state, ownership/launcher checks, and real-fzf PTY tests. Complete pipe/PTY byte parity and `git diff --check` passed.
+
+## Stage 11 — remaining design gates and final reconciliation
+
+- Previous stage commit: `8835142` (C08). Parent: `8835142`; commit subject: `docs: record performance pass dispositions and validation limits`.
+- C09: 30 fresh first-load samples, exactly 53 records each, median 6.10 ms (5.48–10.49 ms). Retain registry validation and option isolation; decline this optional rewrite for the current pass. [Raw samples](./C09-results.json).
+- C10/C11: document immutable-generation design direction and unresolved publication/fallback/alias/freshness gates; production wordcode remains deferred. C12/D01 are not promoted without new evidence; D02's existing safety boundaries remain intact.
+- Reconciliation: add a complete item-to-commit disposition and explicit pending website/host-completion checks. Append status links to the original plan/review rather than replacing or removing their historical contents. Retain noisy measurements and every earlier validation observation.
+- Final verification and preservation checks are recorded below before commit. No push or website publication.
+
+Stage 11 final validation: complete `zsh scripts/run-tests.zsh` passed (1,990 `ok:` lines), including real-fzf PTY and fixed-install-path smoke checks. `git diff --check` passed. All five original consolidation artifacts from `45c2bd5` are preserved byte-for-byte or by append-only extension; all performance JSON parses, local Markdown file links resolve, and C08 sample medians match their recorded summaries. Only performance documentation/results are included in this final reconciliation commit. Website and host completion checks remain explicitly pending; no remote push.
