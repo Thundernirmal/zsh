@@ -183,6 +183,9 @@ fi
 if ! (( $+functions[_ui_ascii_mode] )); then
   _ui_ascii_mode() { return 0; }
 fi
+if ! (( $+functions[_ui_term_width_reply] )); then
+  _ui_term_width_reply() { REPLY=80; }
+fi
 if ! (( $+functions[_ui_term_width] )); then
   _ui_term_width() { print -r -- 80; }
 fi

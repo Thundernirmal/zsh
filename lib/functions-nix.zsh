@@ -472,8 +472,8 @@
         esac
       done
       [[ $wait_mode == available ]] && (( reaped )) && return 0
-      # Poll only owned workers, at most eight, without spawning sleep processes.
-      (( ${#job_pids} )) && zselect -t 1 2>/dev/null
+      # Poll only owned workers, at most eight, every 0.1s without sleep processes.
+      (( ${#job_pids} )) && zselect -t 10 2>/dev/null
     done
     job_pids=()
   }
@@ -506,26 +506,34 @@
     REPLY=$output
   }
 
-  # One jq pass per normal evaluation record. Streams retain the legacy path;
-  # use stdin for records/installed paths rather than imposing argv size limits.
+  # Decode a field, then strip trailing newlines as command substitution used to.
+  _npkg_decode_trimmed() {
+    _npkg_decode_field "$1" || return 1
+    while [[ $REPLY == *$'\n' ]]; do REPLY=${REPLY%$'\n'}; done
+  }
+
+  # One jq pass per evaluation record; stdin avoids argv size limits for
+  # records/installed paths. Multi-value streams keep the legacy rules: the last
+  # value decides validity, versions join with newlines, and paths never match.
   _npkg_eval_summary() {
     emulate -L zsh
     setopt pipefail
     local kind=$1 installed=$2 record=$3
     { print -r -- "$installed"; print -r -- "$record"; } |
       command jq -rs --arg kind "$kind" '
-        if length != 2 then ["stream"]
-        else
-          .[0] as $installed | .[1] as $value
-          | if ($value | type == "object" and (.version == null or (.version | type) == "string"))
-               and ($kind == "locked" or ($value.paths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)))
-            then ["valid",
-                  ($value.version | if . == null or . == "" then "?" else . end),
-                  (if $kind == "locked" then ""
-                   elif ($installed | sort | unique) == ($value.paths | sort | unique) then "current"
-                   else "changed" end)]
-            else ["invalid"] end
-        end | @tsv | gsub("\u0000"; "\\0")
+        def version_ok: type == "object" and (.version == null or (.version | type) == "string");
+        def paths_ok: .paths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0);
+        .[0] as $installed | .[1:] as $values
+        | if ($values | length) > 0
+             and ($values[-1] | version_ok and ($kind == "locked" or paths_ok))
+          then ["valid",
+                ([$values[] | select(version_ok) | .version | if . == null or . == "" then "?" else . end] | join("\n")),
+                (if $kind == "locked" then ""
+                 elif ($values | length) == 1
+                      and ($installed | sort | unique) == ($values[0].paths | sort | unique) then "current"
+                 else "changed" end)]
+          else ["invalid"] end
+        | @tsv | gsub("\u0000"; "\\0")
       ' 2>/dev/null
   }
 
@@ -546,7 +554,7 @@
     local REPLY eval_summary
     local -a entry_fields eval_fields
     integer field_index
-    local tmp_dir current_record locked_record installed_paths available_paths
+    local tmp_dir current_record locked_record
     local installed_version available_version package_state display_state marker role detail error_output
     local width name_width version_width visible_count more
     local current_file locked_file pid
@@ -677,12 +685,8 @@
         return 1
       }
       for (( field_index=1; field_index<=7; field_index++ )); do
-        _npkg_decode_field "${entry_fields[$field_index]}" || return 1
+        _npkg_decode_trimmed "${entry_fields[$field_index]}" || return 1
         entry_fields[$field_index]=$REPLY
-        # Previous jq command substitutions stripped trailing newlines.
-        while [[ ${entry_fields[$field_index]} == *$'\n' ]]; do
-          entry_fields[$field_index]=${entry_fields[$field_index]%$'\n'}
-        done
       done
       name=$entry_fields[1]
       attr_path=$entry_fields[2]
@@ -798,17 +802,8 @@
         locked_record=$(<"$locked_file")
         eval_summary=$(_npkg_eval_summary locked null "$locked_record") || eval_summary=invalid
         eval_fields=( "${(@ps:\t:)eval_summary}" )
-        if [[ $eval_summary == stream ]]; then
-          if print -r -- "$locked_record" | command jq -e '
-            type == "object" and (.version == null or (.version | type) == "string")
-          ' >/dev/null 2>&1; then
-            installed_version=$(print -r -- "$locked_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
-            _ui_safe_text_reply "$installed_version"
-            installed_version=$REPLY
-          fi
-        elif [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
-          _npkg_decode_field "$eval_fields[2]" || return 1
-          while [[ $REPLY == *$'\n' ]]; do REPLY=${REPLY%$'\n'}; done
+        if [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
+          _npkg_decode_trimmed "$eval_fields[2]" || return 1
           _ui_safe_text_reply "$REPLY"
           installed_version=$REPLY
         fi
@@ -818,30 +813,8 @@
         current_record=$(<"$current_file")
         eval_summary=$(_npkg_eval_summary current "${installed_path_sets[$idx]}" "$current_record") || eval_summary=invalid
         eval_fields=( "${(@ps:\t:)eval_summary}" )
-        if [[ $eval_summary == stream ]]; then
-          if print -r -- "$current_record" | command jq -e '
-            type == "object"
-            and (.paths | type == "array" and length > 0 and all(.[]; type == "string" and length > 0))
-            and (.version == null or (.version | type) == "string")
-          ' >/dev/null 2>&1; then
-            installed_paths=$(print -r -- "${installed_path_sets[$idx]}" | command jq -c 'sort | unique')
-            available_paths=$(print -r -- "$current_record" | command jq -c '.paths | sort | unique')
-            available_version=$(print -r -- "$current_record" | command jq -r 'if .version == null or .version == "" then "?" else .version end')
-            _ui_safe_text_reply "$available_version"
-            available_version=$REPLY
-
-            if [[ $installed_paths == $available_paths ]]; then
-              package_state=current
-            else
-              package_state=changed
-              (( changed++ ))
-            fi
-          else
-            detail='evaluation returned unusable output-path data'
-          fi
-        elif [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
-          _npkg_decode_field "$eval_fields[2]" || return 1
-          while [[ $REPLY == *$'\n' ]]; do REPLY=${REPLY%$'\n'}; done
+        if [[ ${eval_fields[1]-} == valid && ${#eval_fields} == 3 ]]; then
+          _npkg_decode_trimmed "$eval_fields[2]" || return 1
           _ui_safe_text_reply "$REPLY"
           available_version=$REPLY
           package_state=$eval_fields[3]
@@ -923,7 +896,8 @@
       return 0
     fi
 
-    width=$(_ui_term_width)
+    _ui_term_width_reply
+    width=$REPLY
     if (( width >= 120 )); then
       name_width=28
       version_width=18

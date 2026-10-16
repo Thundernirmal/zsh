@@ -270,12 +270,12 @@ exit 1" >"$fakebin/du"
   rehash
 
   functions[_ui_plain_mode]='return 1'
-  functions[_ui_term_width]='print -r -- 120'
+  functions[_ui_term_width_reply]='REPLY=120'
   functions[_ui_term_height]='print -r -- 30'
   dusage "$fixture_dir" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
   output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
   functions[_ui_plain_mode]='return 0'
-  unset 'functions[_ui_term_width]' 'functions[_ui_term_height]'
+  unset 'functions[_ui_term_width_reply]' 'functions[_ui_term_height]'
   source "$repo_dir/55-ui-helpers.zsh"
   functions[_ui_plain_mode]='return 0'
   assert_status "$rc" 1 'dusage rich mode returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
@@ -513,7 +513,7 @@ test_control_character_paths() {
 
   (
     functions[_ui_plain_mode]='return 1'
-    functions[_ui_term_width]='print -r -- 60'
+    functions[_ui_term_width_reply]='REPLY=60'
     functions[_ui_term_height]='print -r -- 100'
     functions[_ui_color]='printf "\e[35m"'
     functions[_ui_reset]='printf "\e[0m"'
@@ -525,7 +525,7 @@ test_control_character_paths() {
 
   (
     functions[_ui_plain_mode]='return 1'
-    functions[_ui_term_width]='print -r -- 60'
+    functions[_ui_term_width_reply]='REPLY=60'
     functions[_ui_term_height]='print -r -- 100'
     functions[_ui_color]='printf "\e[35m"'
     functions[_ui_reset]='printf "\e[0m"'
@@ -537,7 +537,7 @@ test_control_character_paths() {
 
   (
     functions[_ui_plain_mode]='return 1'
-    functions[_ui_term_width]='print -r -- 60'
+    functions[_ui_term_width_reply]='REPLY=60'
     functions[_ui_color]='printf "\e[35m"'
     functions[_ui_reset]='printf "\e[0m"'
     functions[_ui_bold]=':'

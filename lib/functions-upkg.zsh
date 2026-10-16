@@ -248,11 +248,12 @@ _upkg_print_section() {
 
   local manager=$1
   local title=$(_upkg_manager_title "$manager")
-  local width fill='─' lead='─ '
+  local width fill='─' lead='─ ' REPLY
 
   print ''
   if [ -n "${_UPKG_THEME_MODE:-}" ] && ! _ui_plain_mode; then
-    width=$(( $(_ui_term_width) - 2 ))
+    _ui_term_width_reply
+    width=$(( REPLY - 2 ))
     (( width < 32 )) && width=32
     if _ui_ascii_mode; then
       fill='-'
@@ -980,7 +981,7 @@ _upkg_format_search_rows() {
   emulate -L zsh
 
   local row manager name version description
-  local width manager_width name_width version_width desc_width
+  local width manager_width name_width version_width desc_width REPLY
   local failed_count=0 cancelled_count=0
   local failed_managers=''
   local -a rows=( "$@" ) fields
@@ -1019,7 +1020,8 @@ _upkg_format_search_rows() {
       printf '%-8s %-36s %-18s %s\n' "$manager" "$name" "$version" "$description"
     done
   else
-    width=$(_ui_term_width)
+    _ui_term_width_reply
+    width=$REPLY
     if (( width >= 130 )); then
       manager_width=10
       name_width=36
@@ -1236,12 +1238,13 @@ _upkg_search_progress() {
 _upkg_search_progress_clear() {
   emulate -L zsh
 
-  local width
+  local width REPLY
 
   [ -n "${_UPKG_THEME_MODE:-}" ] || return 0
   _ui_plain_mode && return 0
 
-  width=$(_ui_term_width)
+  _ui_term_width_reply
+  width=$REPLY
   case $width in
     ''|*[!0-9]*) width=80 ;;
   esac

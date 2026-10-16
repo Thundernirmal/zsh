@@ -83,8 +83,8 @@ for record in '{}' '{"paths":[]}' '{"paths":["/store/a"],"version":false}' 'not-
   [[ $encoded == invalid ]] || exit 1
 done
 encoded=$(_npkg_eval_summary current '["/store/a"]' $'{"paths":["/store/a"],"version":"1"}\n{"paths":["/store/b"],"version":"2"}') || exit 1
-[[ $encoded == stream ]] || exit 1
-# The legacy stream path remains visible as a changed result, with joined versions.
+[[ $encoded == $'valid\t1\\n2\tchanged' ]] || exit 1
+# Multi-record streams stay visible as a changed result, with joined versions.
 _npkg_eval_installable_record() {
   print -r -- '{"paths":["/store/a"],"version":"1"}' '{"paths":["/store/b"],"version":"2"}'
 }

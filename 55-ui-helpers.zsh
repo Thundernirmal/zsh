@@ -7,20 +7,27 @@ if (( ! $+functions[_zsh_theme_sgr] )); then
   unset _ui_theme_module
 fi
 
+# Sets REPLY without a subshell; COLUMNS is live shell state.
+_ui_term_width_reply() {
+  emulate -L zsh
+
+  REPLY=${COLUMNS:-}
+
+  case $REPLY in
+    ''|*[!0-9]*) REPLY=$(command tput cols 2>/dev/null) ;;
+  esac
+
+  case $REPLY in
+    ''|*[!0-9]*) REPLY=80 ;;
+  esac
+}
+
 _ui_term_width() {
   emulate -L zsh
 
-  local cols=${COLUMNS:-}
-
-  case $cols in
-    ''|*[!0-9]*) cols=$(command tput cols 2>/dev/null) ;;
-  esac
-
-  case $cols in
-    ''|*[!0-9]*) cols=80 ;;
-  esac
-
-  print -r -- "$cols"
+  local REPLY
+  _ui_term_width_reply
+  print -r -- "$REPLY"
 }
 
 _ui_term_height() {
@@ -54,7 +61,7 @@ _ui_locale_is_utf8() {
 _ui_is_rich_terminal() {
   emulate -L zsh
 
-  local width
+  local REPLY
 
   [[ -t 1 ]] || return 1
   [[ -n ${TERM:-} ]] || return 1
@@ -62,12 +69,8 @@ _ui_is_rich_terminal() {
   [[ -z ${NO_COLOR:-} ]] || return 1
   _ui_locale_is_utf8 || return 1
 
-  # COLUMNS is live shell state; avoid a subshell on every color/mode check.
-  width=${COLUMNS:-}
-  case $width in
-    ''|*[!0-9]*) width=$(_ui_term_width) ;;
-  esac
-  (( width >= 60 ))
+  _ui_term_width_reply
+  (( REPLY >= 60 ))
 }
 
 _ui_plain_mode() {
@@ -559,13 +562,14 @@ _ui_title_line() {
 _ui_section_break() {
   emulate -L zsh
 
-  local width fill='─' lead='─ '
+  local width fill='─' lead='─ ' REPLY
 
   if _ui_plain_mode; then
     return 0
   fi
 
-  width=$(( $(_ui_term_width) - 2 ))
+  _ui_term_width_reply
+  width=$(( REPLY - 2 ))
   (( width < 32 )) && width=32
 
   if _ui_ascii_mode; then

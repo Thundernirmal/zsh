@@ -88,7 +88,10 @@ def main():
         assert run(MATRIX, tty) == run(REFERENCE + MATRIX, tty)
     run(r'''
 REPLY=sentinel; reply=(one two)
-_ui_term_width() { print width >> "$HOME/calls"; print -r -- 80; }
+mkdir "$HOME/bin"
+print -rl -- '#!/bin/sh' 'echo tput >> "$HOME/calls"; echo 80' > "$HOME/bin/tput"
+chmod +x "$HOME/bin/tput"
+path=("$HOME/bin" $path)
 for COLUMNS in 60 120 59 60; do
   _ui_is_rich_terminal; rc=$?
   (( COLUMNS < 60 ? rc == 1 : rc == 0 )) || exit 11
@@ -99,7 +102,7 @@ _ui_is_rich_terminal || exit 13
 [[ -s $HOME/calls ]] || exit 14
 # Hide the special integer type to exercise the defensive invalid-value path.
 () { local -h COLUMNS=invalid; _ui_is_rich_terminal || exit 15; }
-[[ $(<"$HOME/calls") == $'width\nwidth' ]] || exit 16
+[[ $(<"$HOME/calls") == $'tput\ntput' && $REPLY == sentinel ]] || exit 16
 functions[_ui_term_height]='print -r -- 12'
 [[ $(_ui_visible_count 20 20 3) == 9 ]] || exit 17
 ''')
