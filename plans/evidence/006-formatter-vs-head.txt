@@ -1,0 +1,4 @@
+formatter-pty/100: baseline median=767.386ms p95=782.922ms n=5 rss<=5156KiB  candidate median=343.248ms p95=364.878ms n=5 rss<=5040KiB  baseline/candidate=2.24x
+formatter-pty/1000: baseline median=7448.622ms p95=9926.064ms n=5 rss<=6100KiB  candidate median=3253.316ms p95=3834.754ms n=5 rss<=6032KiB  baseline/candidate=2.29x
+formatter-rich/100: baseline median=810.415ms p95=905.028ms n=5 rss<=5152KiB  candidate median=264.508ms p95=273.827ms n=5 rss<=5116KiB  baseline/candidate=3.06x
+formatter-rich/1000: baseline median=7181.033ms p95=7850.319ms n=5 rss<=6056KiB  candidate median=2206.594ms p95=2281.344ms n=5 rss<=6092KiB  baseline/candidate=3.25x

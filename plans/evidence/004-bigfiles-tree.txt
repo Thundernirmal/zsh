@@ -1,0 +1,2 @@
+bigfiles-tree/2000: baseline median=142.334ms p95=146.603ms n=5 rss<=5504KiB  candidate median=47.871ms p95=48.745ms n=5 rss<=6540KiB  baseline/candidate=2.97x
+bigfiles-tree/20000: baseline median=1426.062ms p95=1477.296ms n=5 rss<=11436KiB  candidate median=234.510ms p95=420.204ms n=5 rss<=11256KiB  baseline/candidate=6.08x

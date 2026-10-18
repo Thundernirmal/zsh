@@ -1,0 +1,2 @@
+completion-cold/60000: baseline median=2689.426ms p95=2755.563ms n=5 rss<=23956KiB  candidate median=96.612ms p95=100.806ms n=5 rss<=24028KiB  baseline/candidate=27.84x
+completion-warm/60000: baseline median=17.807ms p95=19.970ms n=5 rss<=23928KiB  candidate median=12.294ms p95=12.377ms n=5 rss<=24076KiB  baseline/candidate=1.45x

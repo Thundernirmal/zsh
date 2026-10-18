@@ -1,0 +1,3 @@
+parser/100: baseline median=120.371ms p95=127.062ms n=5 rss<=5100KiB  candidate median=18.788ms p95=19.683ms n=5 rss<=5104KiB  baseline/candidate=6.41x
+parser/1000: baseline median=1364.997ms p95=1419.371ms n=5 rss<=6060KiB  candidate median=187.228ms p95=192.194ms n=5 rss<=5972KiB  baseline/candidate=7.29x
+parser/3000: baseline median=4476.670ms p95=4828.459ms n=5 rss<=8568KiB  candidate median=575.183ms p95=588.937ms n=5 rss<=8120KiB  baseline/candidate=7.78x

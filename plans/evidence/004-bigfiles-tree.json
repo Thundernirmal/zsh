@@ -1,0 +1,144 @@
+{
+  "tool": "scripts/benchmark-workloads.py",
+  "date": "2026-10-18",
+  "platform": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+  "versions": {
+    "zsh": "zsh 5.9 (x86_64-redhat-linux-gnu)",
+    "python": "3.14.8",
+    "git": "git version 2.56.0"
+  },
+  "candidate": {
+    "sha": "f3e0ed801d2c222edc9b10b466cde2c1dfe75b05",
+    "dirty": true
+  },
+  "baseline": {
+    "ref": "348906d0fa8e87f6d3198a63a0a832a4deeffbe1",
+    "sha": "348906d0fa8e87f6d3198a63a0a832a4deeffbe1"
+  },
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "COLUMNS": "120",
+    "LINES": "40",
+    "ZSH_UI_THEME": "terminal",
+    "private": "HOME, ZDOTDIR, TMPDIR and XDG_* under scratch"
+  },
+  "method": "Fresh zsh -df child per sample; in-child EPOCHREALTIME around the workload section. Groups alternate baseline/candidate per sample when a baseline is given. Lower-middle median. formatter-rich forces the rich predicate into a file sink (not a PTY); formatter-pty runs on a real PTY. Startup is fresh-shell wall time with 3 warmups per sample.",
+  "groups": [
+    {
+      "workload": "bigfiles-tree",
+      "size": 2000,
+      "kind": "-",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            139.9130821228,
+            141.8440341949,
+            144.4108486176,
+            146.6028690338,
+            142.3337459564
+          ],
+          "peak_rss_kib": [
+            5260,
+            5388,
+            5052,
+            5380,
+            5504
+          ],
+          "sha256": "24826451815314de5b6a3fe5c72b52271aa8146a238c83ea5801098e900bcfe7",
+          "observed": 20,
+          "median_ms": 142.3337459564,
+          "p95_ms": 146.6028690338,
+          "min_ms": 139.9130821228,
+          "max_ms": 146.6028690338,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            47.8708744049,
+            48.6192703247,
+            48.7446784973,
+            46.3771820068,
+            47.2986698151
+          ],
+          "peak_rss_kib": [
+            6336,
+            6340,
+            6520,
+            6400,
+            6540
+          ],
+          "sha256": "24826451815314de5b6a3fe5c72b52271aa8146a238c83ea5801098e900bcfe7",
+          "observed": 20,
+          "median_ms": 47.8708744049,
+          "p95_ms": 48.7446784973,
+          "min_ms": 46.3771820068,
+          "max_ms": 48.7446784973,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "bigfiles-tree",
+      "size": 20000,
+      "kind": "-",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1408.273935318,
+            1421.4358329773,
+            1426.0621070862,
+            1431.5066337585,
+            1477.2963523865
+          ],
+          "peak_rss_kib": [
+            11200,
+            11232,
+            11436,
+            11044,
+            11260
+          ],
+          "sha256": "a16e8e1dc9534759d8228caaca53ae7ec75c7e968336cba741563ab1ef35cf0c",
+          "observed": 20,
+          "median_ms": 1426.0621070862,
+          "p95_ms": 1477.2963523865,
+          "min_ms": 1408.273935318,
+          "max_ms": 1477.2963523865,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            234.1048717499,
+            233.7584495544,
+            420.2044010162,
+            242.2111034393,
+            234.5097064972
+          ],
+          "peak_rss_kib": [
+            11180,
+            11256,
+            11168,
+            11140,
+            11188
+          ],
+          "sha256": "a16e8e1dc9534759d8228caaca53ae7ec75c7e968336cba741563ab1ef35cf0c",
+          "observed": 20,
+          "median_ms": 234.5097064972,
+          "p95_ms": 420.2044010162,
+          "min_ms": 233.7584495544,
+          "max_ms": 420.2044010162,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    }
+  ]
+}

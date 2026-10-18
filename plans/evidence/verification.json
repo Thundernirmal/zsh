@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-18",
+  "source_commit": "348906d0fa8e87f6d3198a63a0a832a4deeffbe1",
+  "branch": "performance/validated-consolidation",
+  "command": "zsh scripts/run-tests.zsh",
+  "runs": [
+    {
+      "name": "tests.log",
+      "exit_code": 0,
+      "sha256": "53d8f572f592d7e2ce9aa91990122cb5b5af2b44bc38d8508098e54389184014",
+      "ok_lines": 2265,
+      "last_lines": [
+        "ok: missing diagnosis never contacts network or Secret Service",
+        "ok: UI PTY parity, live width, fallback, scratch state, and public height override",
+        "ok: exported file previews preserve bytes/errors/backends and stop at line 200 without EOF",
+        "ok: real fzf PTY checks",
+        "ok: upkg timing PTY checks"
+      ]
+    },
+    {
+      "name": "final-tests.log",
+      "exit_code": 0,
+      "sha256": "53d8f572f592d7e2ce9aa91990122cb5b5af2b44bc38d8508098e54389184014",
+      "ok_lines": 2265,
+      "last_lines": [
+        "ok: missing diagnosis never contacts network or Secret Service",
+        "ok: UI PTY parity, live width, fallback, scratch state, and public height override",
+        "ok: exported file previews preserve bytes/errors/backends and stop at line 200 without EOF",
+        "ok: real fzf PTY checks",
+        "ok: upkg timing PTY checks"
+      ]
+    }
+  ],
+  "scope": "Planning Markdown and JSON only; no tracked runtime modifications",
+  "independent_document_review": "Pass; no remaining actionable objections after corrections",
+  "candidate_gains_validated": false,
+  "website_verified": false,
+  "documentation_checks": {
+    "markdown_files": 10,
+    "relative_file_links": 21,
+    "source_hashes": 46,
+    "numbered_source_proposals": 34,
+    "sun_secondary_findings": 5,
+    "all_pass": true,
+    "untracked_file_whitespace_checked": true,
+    "runtime_diff_empty": true,
+    "only_md_json_artifacts": true
+  }
+}

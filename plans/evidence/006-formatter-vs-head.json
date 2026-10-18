@@ -1,0 +1,256 @@
+{
+  "tool": "scripts/benchmark-workloads.py",
+  "date": "2026-10-18",
+  "platform": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+  "versions": {
+    "zsh": "zsh 5.9 (x86_64-redhat-linux-gnu)",
+    "python": "3.14.8",
+    "git": "git version 2.56.0"
+  },
+  "candidate": {
+    "sha": "0d8bca1ba0369d191359dadbafa26a7d96e776a2",
+    "dirty": true
+  },
+  "baseline": {
+    "ref": "HEAD",
+    "sha": "0d8bca1ba0369d191359dadbafa26a7d96e776a2"
+  },
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "COLUMNS": "120",
+    "LINES": "40",
+    "ZSH_UI_THEME": "terminal",
+    "private": "HOME, ZDOTDIR, TMPDIR and XDG_* under scratch"
+  },
+  "method": "Fresh zsh -df child per sample; in-child EPOCHREALTIME around the workload section. Groups alternate baseline/candidate per sample when a baseline is given. Lower-middle median. formatter-rich forces the rich predicate into a file sink (not a PTY); formatter-pty runs on a real PTY. Startup is fresh-shell wall time with 3 warmups per sample.",
+  "groups": [
+    {
+      "workload": "formatter-pty",
+      "size": 100,
+      "kind": "-",
+      "mode": "real-pty",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            756.5543651581,
+            767.5561904907,
+            782.9222679138,
+            767.3859596252,
+            703.5977840424
+          ],
+          "peak_rss_kib": [
+            4868,
+            5156,
+            4920,
+            5032,
+            4908
+          ],
+          "sha256": "5da89102f5ddb1561e378abb458bc9ec899f64bedc28c8666f3e8702739c6f15",
+          "observed": 100,
+          "median_ms": 767.3859596252,
+          "p95_ms": 782.9222679138,
+          "min_ms": 703.5977840424,
+          "max_ms": 782.9222679138,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            343.2476520538,
+            338.7200832367,
+            364.8777008057,
+            357.2521209717,
+            302.2141456604
+          ],
+          "peak_rss_kib": [
+            4924,
+            4716,
+            4900,
+            5020,
+            5040
+          ],
+          "sha256": "5da89102f5ddb1561e378abb458bc9ec899f64bedc28c8666f3e8702739c6f15",
+          "observed": 100,
+          "median_ms": 343.2476520538,
+          "p95_ms": 364.8777008057,
+          "min_ms": 302.2141456604,
+          "max_ms": 364.8777008057,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "formatter-pty",
+      "size": 1000,
+      "kind": "-",
+      "mode": "real-pty",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            6863.6155128479,
+            7448.6224651337,
+            7312.246799469,
+            9926.064491272,
+            7566.7049884796
+          ],
+          "peak_rss_kib": [
+            5836,
+            6100,
+            5832,
+            5852,
+            5796
+          ],
+          "sha256": "169fb7fb8e140d9f1e0b965ad9280bf0144c49949efc1e07b65c7b2a8a77f53d",
+          "observed": 1000,
+          "median_ms": 7448.6224651337,
+          "p95_ms": 9926.064491272,
+          "min_ms": 6863.6155128479,
+          "max_ms": 9926.064491272,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            3039.1411781311,
+            2985.1965904236,
+            3253.3161640167,
+            3834.7535133362,
+            3478.2114028931
+          ],
+          "peak_rss_kib": [
+            5728,
+            5956,
+            5912,
+            6032,
+            5920
+          ],
+          "sha256": "169fb7fb8e140d9f1e0b965ad9280bf0144c49949efc1e07b65c7b2a8a77f53d",
+          "observed": 1000,
+          "median_ms": 3253.3161640167,
+          "p95_ms": 3834.7535133362,
+          "min_ms": 2985.1965904236,
+          "max_ms": 3834.7535133362,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "formatter-rich",
+      "size": 100,
+      "kind": "-",
+      "mode": "forced-rich-sink",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            905.0281047821,
+            817.2852993011,
+            788.7861728668,
+            810.4152679443,
+            758.113861084
+          ],
+          "peak_rss_kib": [
+            5152,
+            5152,
+            4868,
+            5048,
+            4816
+          ],
+          "sha256": "5da89102f5ddb1561e378abb458bc9ec899f64bedc28c8666f3e8702739c6f15",
+          "observed": 100,
+          "median_ms": 810.4152679443,
+          "p95_ms": 905.0281047821,
+          "min_ms": 758.113861084,
+          "max_ms": 905.0281047821,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            267.7507400513,
+            273.8265991211,
+            243.1797981262,
+            237.452507019,
+            264.5084857941
+          ],
+          "peak_rss_kib": [
+            4840,
+            5036,
+            5116,
+            4836,
+            4804
+          ],
+          "sha256": "5da89102f5ddb1561e378abb458bc9ec899f64bedc28c8666f3e8702739c6f15",
+          "observed": 100,
+          "median_ms": 264.5084857941,
+          "p95_ms": 273.8265991211,
+          "min_ms": 237.452507019,
+          "max_ms": 273.8265991211,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "formatter-rich",
+      "size": 1000,
+      "kind": "-",
+      "mode": "forced-rich-sink",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            7426.3253211975,
+            6565.331697464,
+            7850.3189086914,
+            6445.7545280457,
+            7181.0326576233
+          ],
+          "peak_rss_kib": [
+            5892,
+            5800,
+            6056,
+            5968,
+            5852
+          ],
+          "sha256": "169fb7fb8e140d9f1e0b965ad9280bf0144c49949efc1e07b65c7b2a8a77f53d",
+          "observed": 1000,
+          "median_ms": 7181.0326576233,
+          "p95_ms": 7850.3189086914,
+          "min_ms": 6445.7545280457,
+          "max_ms": 7850.3189086914,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            2206.5937519073,
+            2150.4964828491,
+            2281.3444137573,
+            2227.9431819916,
+            2142.0860290527
+          ],
+          "peak_rss_kib": [
+            5844,
+            6092,
+            5940,
+            6092,
+            5800
+          ],
+          "sha256": "169fb7fb8e140d9f1e0b965ad9280bf0144c49949efc1e07b65c7b2a8a77f53d",
+          "observed": 1000,
+          "median_ms": 2206.5937519073,
+          "p95_ms": 2281.3444137573,
+          "min_ms": 2142.0860290527,
+          "max_ms": 2281.3444137573,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    }
+  ]
+}

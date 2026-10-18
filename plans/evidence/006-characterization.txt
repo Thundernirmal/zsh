@@ -1,0 +1,6 @@
+pty frozen: rc=0 bytes=784843 renders=363 sha256=a15ed42649a816e1 37.6s
+pty live: rc=0 bytes=784843 renders=363 sha256=a15ed42649a816e1 23.5s
+pty: IDENTICAL
+pipe frozen: rc=0 bytes=662726 renders=363 sha256=9b05b923fa22ac1f 0.3s
+pipe live: rc=0 bytes=662726 renders=363 sha256=9b05b923fa22ac1f 0.3s
+pipe: IDENTICAL

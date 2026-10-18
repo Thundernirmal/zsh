@@ -1,0 +1,1376 @@
+{
+  "tool": "scripts/benchmark-workloads.py",
+  "date": "2026-10-18",
+  "platform": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+  "versions": {
+    "zsh": "zsh 5.9 (x86_64-redhat-linux-gnu)",
+    "python": "3.14.8",
+    "git": "git version 2.56.0"
+  },
+  "candidate": {
+    "sha": "0d8bca1ba0369d191359dadbafa26a7d96e776a2",
+    "dirty": true
+  },
+  "baseline": {
+    "ref": "348906d0fa8e87f6d3198a63a0a832a4deeffbe1",
+    "sha": "348906d0fa8e87f6d3198a63a0a832a4deeffbe1"
+  },
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "COLUMNS": "120",
+    "LINES": "40",
+    "ZSH_UI_THEME": "terminal",
+    "private": "HOME, ZDOTDIR, TMPDIR and XDG_* under scratch"
+  },
+  "method": "Fresh zsh -df child per sample; in-child EPOCHREALTIME around the workload section. Groups alternate baseline/candidate per sample when a baseline is given. Lower-middle median. formatter-rich forces the rich predicate into a file sink (not a PTY); formatter-pty runs on a real PTY. Startup is fresh-shell wall time with 3 warmups per sample.",
+  "groups": [
+    {
+      "workload": "truncate",
+      "size": 16,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            113.8164997101,
+            117.8915500641,
+            122.6334571838,
+            117.7554130554,
+            122.5557327271
+          ],
+          "peak_rss_kib": [
+            4356,
+            4304,
+            4536,
+            4232,
+            4600
+          ],
+          "sha256": "d9a10e6e8f7dc13fe2aeac8f11d3877a96bd92fa1d6f5731b979daabe51c87ec",
+          "observed": "aaaaaaaaaaaaaaaa",
+          "median_ms": 117.8915500641,
+          "p95_ms": 122.6334571838,
+          "min_ms": 113.8164997101,
+          "max_ms": 122.6334571838,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            51.6467094421,
+            58.1827163696,
+            58.4349632263,
+            58.2275390625,
+            57.3723316193
+          ],
+          "peak_rss_kib": [
+            4540,
+            4356,
+            4420,
+            4308,
+            4560
+          ],
+          "sha256": "d9a10e6e8f7dc13fe2aeac8f11d3877a96bd92fa1d6f5731b979daabe51c87ec",
+          "observed": "aaaaaaaaaaaaaaaa",
+          "median_ms": 58.1827163696,
+          "p95_ms": 58.4349632263,
+          "min_ms": 51.6467094421,
+          "max_ms": 58.4349632263,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "truncate",
+      "size": 16,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            721.2188243866,
+            749.6118545532,
+            721.2855815887,
+            751.6539096832,
+            756.6924095154
+          ],
+          "peak_rss_kib": [
+            4576,
+            4444,
+            4616,
+            4244,
+            4576
+          ],
+          "sha256": "d6283d107c385e63243e5e65f52e2a1e83046c8e4003f061c9815286bfc4b76c",
+          "observed": "\u96eaaaaaaaaaaaaaaaa",
+          "median_ms": 749.6118545532,
+          "p95_ms": 756.6924095154,
+          "min_ms": 721.2188243866,
+          "max_ms": 756.6924095154,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            205.6701183319,
+            201.8008232117,
+            208.2850933075,
+            203.9721012115,
+            212.1682167053
+          ],
+          "peak_rss_kib": [
+            4604,
+            4356,
+            4304,
+            4608,
+            4600
+          ],
+          "sha256": "d6283d107c385e63243e5e65f52e2a1e83046c8e4003f061c9815286bfc4b76c",
+          "observed": "\u96eaaaaaaaaaaaaaaaa",
+          "median_ms": 205.6701183319,
+          "p95_ms": 212.1682167053,
+          "min_ms": 201.8008232117,
+          "max_ms": 212.1682167053,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "truncate",
+      "size": 40,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1011.8041038513,
+            1001.3177394867,
+            988.9776706696,
+            986.2926006317,
+            1002.8750896454
+          ],
+          "peak_rss_kib": [
+            4624,
+            4428,
+            4424,
+            4380,
+            4576
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 1001.3177394867,
+          "p95_ms": 1011.8041038513,
+          "min_ms": 986.2926006317,
+          "max_ms": 1011.8041038513,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            236.5667819977,
+            243.0467605591,
+            238.3460998535,
+            241.5645122528,
+            245.3916072845
+          ],
+          "peak_rss_kib": [
+            4540,
+            4608,
+            4416,
+            4352,
+            4604
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 241.5645122528,
+          "p95_ms": 245.3916072845,
+          "min_ms": 236.5667819977,
+          "max_ms": 245.3916072845,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "truncate",
+      "size": 40,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            2468.804359436,
+            2433.5646629333,
+            2481.4939498901,
+            2498.7695217133,
+            2433.2420825958
+          ],
+          "peak_rss_kib": [
+            4580,
+            4388,
+            4448,
+            4628,
+            4440
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 2468.804359436,
+          "p95_ms": 2498.7695217133,
+          "min_ms": 2433.2420825958,
+          "max_ms": 2498.7695217133,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            910.5772972107,
+            921.701669693,
+            916.6283607483,
+            909.7065925598,
+            923.1352806091
+          ],
+          "peak_rss_kib": [
+            4312,
+            4420,
+            4564,
+            4380,
+            4340
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 916.6283607483,
+          "p95_ms": 923.1352806091,
+          "min_ms": 909.7065925598,
+          "max_ms": 923.1352806091,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "truncate",
+      "size": 1000,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1.177072525,
+            1.0669231415,
+            1.0962486267,
+            1.0216236115,
+            1.042842865
+          ],
+          "peak_rss_kib": [
+            4612,
+            4432,
+            4308,
+            4428,
+            4308
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 1.0669231415,
+          "p95_ms": 1.177072525,
+          "min_ms": 1.0216236115,
+          "max_ms": 1.177072525,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            0.4267692566,
+            0.3798007965,
+            0.3900527954,
+            0.4200935364,
+            0.3914833069
+          ],
+          "peak_rss_kib": [
+            4500,
+            4424,
+            4560,
+            4544,
+            4604
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 0.3914833069,
+          "p95_ms": 0.4267692566,
+          "min_ms": 0.3798007965,
+          "max_ms": 0.4267692566,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "truncate",
+      "size": 1000,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            33.7660312653,
+            32.833814621,
+            33.9426994324,
+            35.2263450623,
+            33.3878993988
+          ],
+          "peak_rss_kib": [
+            4564,
+            4420,
+            4428,
+            4436,
+            4432
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 33.7660312653,
+          "p95_ms": 35.2263450623,
+          "min_ms": 32.833814621,
+          "max_ms": 35.2263450623,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            1.3482570648,
+            1.2741088867,
+            1.2521743774,
+            1.2526512146,
+            1.3101100922
+          ],
+          "peak_rss_kib": [
+            4444,
+            4448,
+            4616,
+            4436,
+            4248
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 1.2741088867,
+          "p95_ms": 1.3482570648,
+          "min_ms": 1.2521743774,
+          "max_ms": 1.3482570648,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "pad",
+      "size": 16,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            202.8284072876,
+            196.2678432465,
+            200.2465724945,
+            196.6533660889,
+            198.1163024902
+          ],
+          "peak_rss_kib": [
+            4616,
+            4244,
+            4612,
+            4564,
+            4612
+          ],
+          "sha256": "1897fdb4ffa2c015735ca38f33abf5f1e4f195e603fea5196efd5a1d20b3438f",
+          "observed": "aaaaaaaaaaaaaaaa",
+          "median_ms": 198.1163024902,
+          "p95_ms": 202.8284072876,
+          "min_ms": 196.2678432465,
+          "max_ms": 202.8284072876,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            128.3056735992,
+            136.8334293365,
+            133.2905292511,
+            139.5642757416,
+            127.1648406982
+          ],
+          "peak_rss_kib": [
+            4440,
+            4572,
+            4432,
+            4312,
+            4412
+          ],
+          "sha256": "1897fdb4ffa2c015735ca38f33abf5f1e4f195e603fea5196efd5a1d20b3438f",
+          "observed": "aaaaaaaaaaaaaaaa",
+          "median_ms": 133.2905292511,
+          "p95_ms": 139.5642757416,
+          "min_ms": 127.1648406982,
+          "max_ms": 139.5642757416,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "pad",
+      "size": 16,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1479.66837883,
+            1472.6314544678,
+            1461.5142345428,
+            1478.1744480133,
+            1449.6836662292
+          ],
+          "peak_rss_kib": [
+            4456,
+            4588,
+            4644,
+            4456,
+            4440
+          ],
+          "sha256": "5a6719067be3a780dbf14c2d58804713dc238f02990ed242e798143e6aeb89dd",
+          "observed": "\u96eaaaaaaaaaaaaaaaa",
+          "median_ms": 1472.6314544678,
+          "p95_ms": 1479.66837883,
+          "min_ms": 1449.6836662292,
+          "max_ms": 1479.66837883,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            444.4060325623,
+            447.0503330231,
+            445.4147815704,
+            446.1846351624,
+            457.1211338043
+          ],
+          "peak_rss_kib": [
+            4600,
+            4444,
+            4612,
+            4568,
+            4548
+          ],
+          "sha256": "5a6719067be3a780dbf14c2d58804713dc238f02990ed242e798143e6aeb89dd",
+          "observed": "\u96eaaaaaaaaaaaaaaaa",
+          "median_ms": 446.1846351624,
+          "p95_ms": 457.1211338043,
+          "min_ms": 444.4060325623,
+          "max_ms": 457.1211338043,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "pad",
+      "size": 40,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1082.5905799866,
+            1101.4523506165,
+            1109.5011234283,
+            1086.7569446564,
+            1102.6735305786
+          ],
+          "peak_rss_kib": [
+            4580,
+            4252,
+            4452,
+            4256,
+            4444
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 1101.4523506165,
+          "p95_ms": 1109.5011234283,
+          "min_ms": 1082.5905799866,
+          "max_ms": 1109.5011234283,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            336.0302448273,
+            333.3246707916,
+            322.9088783264,
+            328.4606933594,
+            342.1146869659
+          ],
+          "peak_rss_kib": [
+            4608,
+            4548,
+            4308,
+            4432,
+            4504
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 333.3246707916,
+          "p95_ms": 342.1146869659,
+          "min_ms": 322.9088783264,
+          "max_ms": 342.1146869659,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "pad",
+      "size": 40,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            3416.0022735596,
+            3487.3123168945,
+            3412.7259254456,
+            3451.322555542,
+            3515.5298709869
+          ],
+          "peak_rss_kib": [
+            4508,
+            4496,
+            4512,
+            4692,
+            4648
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 3451.322555542,
+          "p95_ms": 3515.5298709869,
+          "min_ms": 3412.7259254456,
+          "max_ms": 3515.5298709869,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            1155.7955741882,
+            1191.9548511505,
+            1163.2454395294,
+            1161.8328094482,
+            1202.4073600769
+          ],
+          "peak_rss_kib": [
+            4552,
+            4568,
+            4572,
+            4424,
+            4564
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 1163.2454395294,
+          "p95_ms": 1202.4073600769,
+          "min_ms": 1155.7955741882,
+          "max_ms": 1202.4073600769,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "pad",
+      "size": 1000,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1.3074874878,
+            1.2853145599,
+            1.8479824066,
+            1.3008117676,
+            1.1739730835
+          ],
+          "peak_rss_kib": [
+            4616,
+            4436,
+            4440,
+            4552,
+            4608
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 1.3008117676,
+          "p95_ms": 1.8479824066,
+          "min_ms": 1.1739730835,
+          "max_ms": 1.8479824066,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            0.5476474762,
+            0.5292892456,
+            0.7312297821,
+            0.545501709,
+            0.5798339844
+          ],
+          "peak_rss_kib": [
+            4612,
+            4560,
+            4436,
+            4616,
+            4568
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": "aaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 0.5476474762,
+          "p95_ms": 0.7312297821,
+          "min_ms": 0.5292892456,
+          "max_ms": 0.7312297821,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "pad",
+      "size": 1000,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            39.9057865143,
+            38.6190414429,
+            39.0069484711,
+            36.6716384888,
+            36.568403244
+          ],
+          "peak_rss_kib": [
+            4312,
+            4616,
+            4312,
+            4576,
+            4312
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 38.6190414429,
+          "p95_ms": 39.9057865143,
+          "min_ms": 36.568403244,
+          "max_ms": 39.9057865143,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            1.8281936646,
+            1.9986629486,
+            1.9593238831,
+            1.663684845,
+            1.5916824341
+          ],
+          "peak_rss_kib": [
+            4628,
+            4388,
+            4436,
+            4428,
+            4616
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": "\u96eaaaaaaaaa...aaaaaaaaaaa",
+          "median_ms": 1.8281936646,
+          "p95_ms": 1.9986629486,
+          "min_ms": 1.5916824341,
+          "max_ms": 1.9986629486,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "safe-truncate",
+      "size": 16,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            191.3840770721,
+            193.3522224426,
+            188.5883808136,
+            177.9496669769,
+            178.6751747131
+          ],
+          "peak_rss_kib": [
+            4428,
+            4608,
+            4604,
+            4612,
+            4416
+          ],
+          "sha256": "025223b0ff557ddb1b5d6afe9b84081b4c198c2d27b664c6089249ad236d5c10",
+          "observed": 1000,
+          "median_ms": 188.5883808136,
+          "p95_ms": 193.3522224426,
+          "min_ms": 177.9496669769,
+          "max_ms": 193.3522224426,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            202.5771141052,
+            199.2204189301,
+            192.2647953033,
+            195.7705020905,
+            189.3501281738
+          ],
+          "peak_rss_kib": [
+            4312,
+            4616,
+            4308,
+            4608,
+            4440
+          ],
+          "sha256": "025223b0ff557ddb1b5d6afe9b84081b4c198c2d27b664c6089249ad236d5c10",
+          "observed": 1000,
+          "median_ms": 195.7705020905,
+          "p95_ms": 202.5771141052,
+          "min_ms": 189.3501281738,
+          "max_ms": 202.5771141052,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "safe-truncate",
+      "size": 16,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            814.4025802612,
+            811.5146160126,
+            820.0807571411,
+            821.5644359589,
+            838.2925987244
+          ],
+          "peak_rss_kib": [
+            4324,
+            4324,
+            4568,
+            4328,
+            4628
+          ],
+          "sha256": "d78999cc7e3d52ab4d5c4099a074caba59a129ba8f6b91d36da74b4d2a322480",
+          "observed": 1000,
+          "median_ms": 820.0807571411,
+          "p95_ms": 838.2925987244,
+          "min_ms": 811.5146160126,
+          "max_ms": 838.2925987244,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            354.6125888824,
+            353.9924621582,
+            362.0049953461,
+            349.0417003632,
+            361.7084026337
+          ],
+          "peak_rss_kib": [
+            4440,
+            4548,
+            4316,
+            4524,
+            4244
+          ],
+          "sha256": "d78999cc7e3d52ab4d5c4099a074caba59a129ba8f6b91d36da74b4d2a322480",
+          "observed": 1000,
+          "median_ms": 354.6125888824,
+          "p95_ms": 362.0049953461,
+          "min_ms": 349.0417003632,
+          "max_ms": 362.0049953461,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "safe-truncate",
+      "size": 40,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1423.1317043304,
+            1443.2992935181,
+            1503.4911632538,
+            1510.1218223572,
+            1464.8208618164
+          ],
+          "peak_rss_kib": [
+            4612,
+            4480,
+            4352,
+            4472,
+            4468
+          ],
+          "sha256": "8fc6f31e5c95f20206550451346a05cdcf55572ee49edff337845233b7f34d5f",
+          "observed": 1000,
+          "median_ms": 1464.8208618164,
+          "p95_ms": 1510.1218223572,
+          "min_ms": 1423.1317043304,
+          "max_ms": 1510.1218223572,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            288.0952358246,
+            285.7367992401,
+            297.0592975616,
+            295.4421043396,
+            292.243719101
+          ],
+          "peak_rss_kib": [
+            4636,
+            4592,
+            4640,
+            4400,
+            4444
+          ],
+          "sha256": "8fc6f31e5c95f20206550451346a05cdcf55572ee49edff337845233b7f34d5f",
+          "observed": 1000,
+          "median_ms": 292.243719101,
+          "p95_ms": 297.0592975616,
+          "min_ms": 285.7367992401,
+          "max_ms": 297.0592975616,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "safe-truncate",
+      "size": 40,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            3016.7574882507,
+            3004.6093463898,
+            2998.5730648041,
+            2990.8082485199,
+            3064.8233890533
+          ],
+          "peak_rss_kib": [
+            4448,
+            4616,
+            4500,
+            4452,
+            4636
+          ],
+          "sha256": "832a57ade0841aec6f058a03f3a4ab76442e5257bc962866533745f11c36787c",
+          "observed": 1000,
+          "median_ms": 3004.6093463898,
+          "p95_ms": 3064.8233890533,
+          "min_ms": 2990.8082485199,
+          "max_ms": 3064.8233890533,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            1100.7459163666,
+            1103.7256717682,
+            1103.3201217651,
+            1146.6453075409,
+            1114.4957542419
+          ],
+          "peak_rss_kib": [
+            4532,
+            4620,
+            4620,
+            4472,
+            4668
+          ],
+          "sha256": "832a57ade0841aec6f058a03f3a4ab76442e5257bc962866533745f11c36787c",
+          "observed": 1000,
+          "median_ms": 1103.7256717682,
+          "p95_ms": 1146.6453075409,
+          "min_ms": 1100.7459163666,
+          "max_ms": 1146.6453075409,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "safe-truncate",
+      "size": 1000,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            10.4742050171,
+            10.1375579834,
+            10.7374191284,
+            9.6399784088,
+            9.9465847015
+          ],
+          "peak_rss_kib": [
+            4280,
+            4416,
+            4476,
+            4608,
+            4652
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": 1,
+          "median_ms": 10.1375579834,
+          "p95_ms": 10.7374191284,
+          "min_ms": 9.6399784088,
+          "max_ms": 10.7374191284,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            0.4286766052,
+            0.5149841309,
+            0.4961490631,
+            0.4789829254,
+            0.4639625549
+          ],
+          "peak_rss_kib": [
+            4312,
+            4420,
+            4372,
+            4436,
+            4436
+          ],
+          "sha256": "33913d2caa29a701ab041ddba17e6b13de3504cf80be4e42ffc75625974b5e77",
+          "observed": 1,
+          "median_ms": 0.4789829254,
+          "p95_ms": 0.5149841309,
+          "min_ms": 0.4286766052,
+          "max_ms": 0.5149841309,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "safe-truncate",
+      "size": 1000,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            43.3835983276,
+            44.7535514832,
+            47.2106933594,
+            46.4468002319,
+            42.2446727753
+          ],
+          "peak_rss_kib": [
+            4452,
+            4612,
+            4652,
+            4660,
+            4472
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": 1,
+          "median_ms": 44.7535514832,
+          "p95_ms": 47.2106933594,
+          "min_ms": 42.2446727753,
+          "max_ms": 47.2106933594,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            10.5438232422,
+            9.1547966003,
+            9.1981887817,
+            9.7548961639,
+            10.6036663055
+          ],
+          "peak_rss_kib": [
+            4664,
+            4616,
+            4604,
+            4488,
+            4616
+          ],
+          "sha256": "0505433124b5ae192d6b3a757d02118ed9343374d6a5a5c6ad9ba5eb6f23f9f5",
+          "observed": 1,
+          "median_ms": 9.7548961639,
+          "p95_ms": 10.6036663055,
+          "min_ms": 9.1547966003,
+          "max_ms": 10.6036663055,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "width",
+      "size": 16,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            33.4944725037,
+            30.7605266571,
+            33.3445072174,
+            33.8909626007,
+            30.2088260651
+          ],
+          "peak_rss_kib": [
+            4420,
+            4300,
+            4556,
+            4420,
+            4424
+          ],
+          "sha256": "e6c21e8d260fe71882debdb339d2402a2ca7648529bc2303f48649bce0380017",
+          "observed": "16",
+          "median_ms": 33.3445072174,
+          "p95_ms": 33.8909626007,
+          "min_ms": 30.2088260651,
+          "max_ms": 33.8909626007,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            34.8589420319,
+            31.4807891846,
+            34.6300601959,
+            34.5351696014,
+            32.0634841919
+          ],
+          "peak_rss_kib": [
+            4608,
+            4356,
+            4348,
+            4604,
+            4604
+          ],
+          "sha256": "e6c21e8d260fe71882debdb339d2402a2ca7648529bc2303f48649bce0380017",
+          "observed": "16",
+          "median_ms": 34.5351696014,
+          "p95_ms": 34.8589420319,
+          "min_ms": 31.4807891846,
+          "max_ms": 34.8589420319,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "width",
+      "size": 16,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            651.5583992004,
+            664.0741825104,
+            635.4806423187,
+            646.1951732635,
+            648.1053829193
+          ],
+          "peak_rss_kib": [
+            4316,
+            4384,
+            4452,
+            4572,
+            4444
+          ],
+          "sha256": "54183f4323f377b737433a1e98229ead0fdc686f93bab057ecb612daa94002b5",
+          "observed": "17",
+          "median_ms": 648.1053829193,
+          "p95_ms": 664.0741825104,
+          "min_ms": 635.4806423187,
+          "max_ms": 664.0741825104,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            183.0313205719,
+            184.9040985107,
+            185.0488185883,
+            180.802822113,
+            195.4276561737
+          ],
+          "peak_rss_kib": [
+            4604,
+            4368,
+            4304,
+            4304,
+            4304
+          ],
+          "sha256": "54183f4323f377b737433a1e98229ead0fdc686f93bab057ecb612daa94002b5",
+          "observed": "17",
+          "median_ms": 184.9040985107,
+          "p95_ms": 195.4276561737,
+          "min_ms": 180.802822113,
+          "max_ms": 195.4276561737,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "width",
+      "size": 40,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            30.5466651917,
+            33.1463813782,
+            34.6159934998,
+            32.0127010345,
+            34.3449115753
+          ],
+          "peak_rss_kib": [
+            4600,
+            4224,
+            4300,
+            4600,
+            4432
+          ],
+          "sha256": "673650f936cb3b0a2f93ce09d81be10748b1b203c19e8176b4eefc1964a0cf3a",
+          "observed": "40",
+          "median_ms": 33.1463813782,
+          "p95_ms": 34.6159934998,
+          "min_ms": 30.5466651917,
+          "max_ms": 34.6159934998,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            32.9940319061,
+            34.5990657806,
+            35.9044075012,
+            32.5798988342,
+            33.2069396973
+          ],
+          "peak_rss_kib": [
+            4496,
+            4500,
+            4356,
+            4424,
+            4412
+          ],
+          "sha256": "673650f936cb3b0a2f93ce09d81be10748b1b203c19e8176b4eefc1964a0cf3a",
+          "observed": "40",
+          "median_ms": 33.2069396973,
+          "p95_ms": 35.9044075012,
+          "min_ms": 32.5798988342,
+          "max_ms": 35.9044075012,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "width",
+      "size": 40,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1000,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            1404.789686203,
+            1501.1825561523,
+            1749.6802806854,
+            1503.1898021698,
+            1532.3026180267
+          ],
+          "peak_rss_kib": [
+            4380,
+            4424,
+            4432,
+            4628,
+            4620
+          ],
+          "sha256": "040316eca5e77dbb2212c1efe8b81cb23bc67ce0ac8cb5c9d902d98bd45ddfa1",
+          "observed": "41",
+          "median_ms": 1503.1898021698,
+          "p95_ms": 1749.6802806854,
+          "min_ms": 1404.789686203,
+          "max_ms": 1749.6802806854,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            186.7225170135,
+            187.6442432404,
+            172.3926067352,
+            187.504529953,
+            187.8538131714
+          ],
+          "peak_rss_kib": [
+            4296,
+            4604,
+            4356,
+            4608,
+            4600
+          ],
+          "sha256": "040316eca5e77dbb2212c1efe8b81cb23bc67ce0ac8cb5c9d902d98bd45ddfa1",
+          "observed": "41",
+          "median_ms": 187.504529953,
+          "p95_ms": 187.8538131714,
+          "min_ms": 172.3926067352,
+          "max_ms": 187.8538131714,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "width",
+      "size": 1000,
+      "kind": "ascii",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            0.1077651978,
+            0.0970363617,
+            0.1022815704,
+            0.1046657562,
+            0.1077651978
+          ],
+          "peak_rss_kib": [
+            4428,
+            4424,
+            4432,
+            4304,
+            4428
+          ],
+          "sha256": "83c02ac2d48c863dab2ccf6870455aadfc2cec073b8db269b517c879d76aa6d9",
+          "observed": "1000",
+          "median_ms": 0.1046657562,
+          "p95_ms": 0.1077651978,
+          "min_ms": 0.0970363617,
+          "max_ms": 0.1077651978,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            0.0951290131,
+            0.0989437103,
+            0.1087188721,
+            0.1072883606,
+            0.1249313354
+          ],
+          "peak_rss_kib": [
+            4352,
+            4424,
+            4432,
+            4300,
+            4564
+          ],
+          "sha256": "83c02ac2d48c863dab2ccf6870455aadfc2cec073b8db269b517c879d76aa6d9",
+          "observed": "1000",
+          "median_ms": 0.1072883606,
+          "p95_ms": 0.1249313354,
+          "min_ms": 0.0951290131,
+          "max_ms": 0.1249313354,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    },
+    {
+      "workload": "width",
+      "size": 1000,
+      "kind": "mixed",
+      "mode": "in-child",
+      "batch_calls": 1,
+      "revisions": {
+        "baseline": {
+          "samples_ms": [
+            35.0527763367,
+            33.1127643585,
+            32.8733921051,
+            35.3207588196,
+            35.6156826019
+          ],
+          "peak_rss_kib": [
+            4612,
+            4616,
+            4312,
+            4568,
+            4316
+          ],
+          "sha256": "d6a1a767319c3bf2a337b16e3a14916f63e432872e0f8df1cb73b32a8b338ae4",
+          "observed": "1001",
+          "median_ms": 35.0527763367,
+          "p95_ms": 35.6156826019,
+          "min_ms": 32.8733921051,
+          "max_ms": 35.6156826019,
+          "n": 5
+        },
+        "candidate": {
+          "samples_ms": [
+            0.2839565277,
+            0.2911090851,
+            0.3283023834,
+            0.3385543823,
+            0.3373622894
+          ],
+          "peak_rss_kib": [
+            4432,
+            4304,
+            4500,
+            4372,
+            4428
+          ],
+          "sha256": "d6a1a767319c3bf2a337b16e3a14916f63e432872e0f8df1cb73b32a8b338ae4",
+          "observed": "1001",
+          "median_ms": 0.3283023834,
+          "p95_ms": 0.3385543823,
+          "min_ms": 0.2839565277,
+          "max_ms": 0.3385543823,
+          "n": 5
+        }
+      },
+      "outputs_identical": true
+    }
+  ]
+}
