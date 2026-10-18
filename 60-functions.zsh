@@ -35,7 +35,7 @@ _zsh_functions_dispatch() {
     fkill|headers|fanprofile|ports|weather|myip|path|zdoctor) domain=system ;;
     croot|gitcount|fbr) domain=git ;;
     upkg) domain=upkg ;;
-    npkg|_npkg_cache_dir) domain=nix ;;
+    npkg|_npkg_cache_dir|_npkg_cache_dir_reply) domain=nix ;;
     *) return 1 ;;
   esac
   _zsh_functions_load "$domain" || {
@@ -69,5 +69,6 @@ if (( ! _ZSH_FUNCTIONS_CATALOGUE_LOADED )); then
   if (( $+commands[nix] )); then
     npkg() { _zsh_functions_dispatch npkg "$@"; }
     _npkg_cache_dir() { _zsh_functions_dispatch _npkg_cache_dir "$@"; }
+    _npkg_cache_dir_reply() { _zsh_functions_dispatch _npkg_cache_dir_reply "$@"; }
   fi
 fi

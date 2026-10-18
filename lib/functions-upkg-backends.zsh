@@ -22,29 +22,34 @@ _upkg_run_search_apt() {
     return 1
   fi
 
-  for line in ${(f)output}; do
-    [ -n "$line" ] || continue
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
 
-    if [[ $line == [[:space:]]* ]]; then
-      if [ -n "$current_name" ] && [ -z "$current_desc" ]; then
-        current_desc=$(_upkg_search_trim "$line")
+      if [[ $line == [[:space:]]* ]]; then
+        if [ -n "$current_name" ] && [ -z "$current_desc" ]; then
+          _upkg_search_trim_reply "$line"
+          current_desc=$REPLY
+        fi
+        continue
       fi
-      continue
-    fi
 
-    if [ -n "$current_name" ]; then
-      rows+=("${current_name}"$'\t'"${current_version}"$'\t'"${current_desc}")
-    fi
+      if [ -n "$current_name" ]; then
+        rows+=("${current_name}"$'\t'"${current_version}"$'\t'"${current_desc}")
+      fi
 
-    header=${line%% *}
-    rest=${line#"$header"}
-    rest=${rest# }
-    current_name=''; current_version=''; current_desc=''
-    [[ $header == */* && $rest != "$line" && -n $rest ]] || continue
-    [[ $header =~ '^[[:alnum:]][[:alnum:]+.:_-]*/[^[:space:]]+$' ]] || continue
-    current_name=${header%%/*}
-    current_version=${rest%% *}
-  done
+      header=${line%% *}
+      rest=${line#"$header"}
+      rest=${rest# }
+      current_name=''; current_version=''; current_desc=''
+      [[ $header == */* && $rest != "$line" && -n $rest ]] || continue
+      [[ $header =~ '^[[:alnum:]][[:alnum:]+.:_-]*/[^[:space:]]+$' ]] || continue
+      current_name=${header%%/*}
+      current_version=${rest%% *}
+    done
+  }
 
   if [ -n "$current_name" ]; then
     rows+=("${current_name}"$'\t'"${current_version}"$'\t'"${current_desc}")
@@ -126,26 +131,32 @@ _upkg_run_search_pacman() {
     return 1
   fi
 
-  for line in ${(f)output}; do
-    [ -n "$line" ] || continue
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
 
-    if [[ $line == [[:space:]]* ]]; then
-      if (( ${#rows[@]} > 0 )); then
-        desc=$(_upkg_search_trim "$line")
-        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$desc")
+      if [[ $line == [[:space:]]* ]]; then
+        if (( ${#rows[@]} > 0 )); then
+          _upkg_search_trim_reply "$line"
+          desc=$REPLY
+          _upkg_append_search_description_reply "${rows[-1]}" "$desc"
+          rows[-1]=$REPLY
+        fi
+        continue
       fi
-      continue
-    fi
 
-    header=${line%% *}
-    rest=${line#"$header"}
-    rest=${rest# }
-    [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
-    [[ -n $rest && $rest != "$line" ]] || continue
-    name=${header#*/}
-    version=${rest%% *}
-    rows+=("${name}"$'\t'"${version}"$'\t')
-  done
+      header=${line%% *}
+      rest=${line#"$header"}
+      rest=${rest# }
+      [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
+      [[ -n $rest && $rest != "$line" ]] || continue
+      name=${header#*/}
+      version=${rest%% *}
+      rows+=("${name}"$'\t'"${version}"$'\t')
+    done
+  }
 
   _upkg_finish_search_results pacman "${rows[@]}"
 }
@@ -175,26 +186,32 @@ _upkg_run_search_paru() {
     return 1
   fi
 
-  for line in ${(f)output}; do
-    [ -n "$line" ] || continue
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
 
-    if [[ $line == [[:space:]]* ]]; then
-      if (( ${#rows[@]} > 0 )); then
-        desc=$(_upkg_search_trim "$line")
-        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$desc")
+      if [[ $line == [[:space:]]* ]]; then
+        if (( ${#rows[@]} > 0 )); then
+          _upkg_search_trim_reply "$line"
+          desc=$REPLY
+          _upkg_append_search_description_reply "${rows[-1]}" "$desc"
+          rows[-1]=$REPLY
+        fi
+        continue
       fi
-      continue
-    fi
 
-    header=${line%% *}
-    rest=${line#"$header"}
-    rest=${rest# }
-    [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
-    [[ -n $rest && $rest != "$line" ]] || continue
-    name=${header#*/}
-    version=${rest%% *}
-    rows+=("${name}"$'\t'"${version}"$'\t')
-  done
+      header=${line%% *}
+      rest=${line#"$header"}
+      rest=${rest# }
+      [[ $header =~ '^[[:alnum:]_.+-]+/[[:alnum:]_@.+:-]+$' ]] || continue
+      [[ -n $rest && $rest != "$line" ]] || continue
+      name=${header#*/}
+      version=${rest%% *}
+      rows+=("${name}"$'\t'"${version}"$'\t')
+    done
+  }
 
   _upkg_finish_search_results paru "${rows[@]}"
 }
@@ -300,17 +317,23 @@ _upkg_run_search_brew() {
       return 1
     fi
 
-    for line in ${(f)output}; do
-      [ -n "$line" ] || continue
-      candidate=$(_upkg_brew_name_from_header "$line")
-      if [ -z "${formula_wanted[$candidate]}" ]; then
-        continue
-      fi
+    # Parser helpers return in REPLY; keep that scratch out of caller state.
+    () {
+      local REPLY
+      for line in ${(f)output}; do
+        [ -n "$line" ] || continue
+        _upkg_brew_name_from_header_reply "$line"
+        candidate=$REPLY
+        if [ -z "${formula_wanted[$candidate]}" ]; then
+          continue
+        fi
 
-      meta=${line#*: }
-      version=$(_upkg_brew_version_from_header "$meta")
-      rows+=("${candidate}"$'\t'"${version}"$'\t'"formula")
-    done
+        meta=${line#*: }
+        _upkg_brew_version_from_header_reply "$meta"
+        version=$REPLY
+        rows+=("${candidate}"$'\t'"${version}"$'\t'"formula")
+      done
+    }
   fi
 
   if (( ${#casks_for_info[@]} > 0 )); then
@@ -328,17 +351,23 @@ _upkg_run_search_brew() {
       return 1
     fi
 
-    for line in ${(f)output}; do
-      [ -n "$line" ] || continue
-      candidate=$(_upkg_brew_name_from_header "$line")
-      if [ -z "${cask_wanted[$candidate]}" ]; then
-        continue
-      fi
+    # Parser helpers return in REPLY; keep that scratch out of caller state.
+    () {
+      local REPLY
+      for line in ${(f)output}; do
+        [ -n "$line" ] || continue
+        _upkg_brew_name_from_header_reply "$line"
+        candidate=$REPLY
+        if [ -z "${cask_wanted[$candidate]}" ]; then
+          continue
+        fi
 
-      meta=${line#*: }
-      version=$(_upkg_brew_version_from_header "$meta")
-      rows+=("${candidate}"$'\t'"${version}"$'\t'"cask")
-    done
+        meta=${line#*: }
+        _upkg_brew_version_from_header_reply "$meta"
+        version=$REPLY
+        rows+=("${candidate}"$'\t'"${version}"$'\t'"cask")
+      done
+    }
   fi
 
   _upkg_finish_search_results brew "${rows[@]}"
@@ -370,22 +399,28 @@ _upkg_run_search_flatpak() {
     return 1
   fi
 
-  for line in ${(f)output}; do
-    fields=("${(@ps:\t:)line}")
-    (( ${#fields} >= 4 )) || continue
-    app=$fields[1]; version=$fields[2]; name=$fields[3]; description=$fields[4]
-    [[ $app =~ '^[[:alnum:]_-]+(\.[[:alnum:]_-]+){2,}$' ]] || continue
-    display_name=$(_upkg_search_trim "$name")
-    description=$(_upkg_search_trim "$description")
-    if [ -n "$display_name" ] && [ "$display_name" != "$app" ]; then
-      if [ -n "$description" ]; then
-        description="${display_name} - ${description}"
-      else
-        description=$display_name
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    for line in ${(f)output}; do
+      fields=("${(@ps:\t:)line}")
+      (( ${#fields} >= 4 )) || continue
+      app=$fields[1]; version=$fields[2]; name=$fields[3]; description=$fields[4]
+      [[ $app =~ '^[[:alnum:]_-]+(\.[[:alnum:]_-]+){2,}$' ]] || continue
+      _upkg_search_trim_reply "$name"
+      display_name=$REPLY
+      _upkg_search_trim_reply "$description"
+      description=$REPLY
+      if [ -n "$display_name" ] && [ "$display_name" != "$app" ]; then
+        if [ -n "$description" ]; then
+          description="${display_name} - ${description}"
+        else
+          description=$display_name
+        fi
       fi
-    fi
-    rows+=("${app}"$'\t'"${version}"$'\t'"${description}")
-  done
+      rows+=("${app}"$'\t'"${version}"$'\t'"${description}")
+    done
+  }
 
   _upkg_finish_search_results flatpak "${rows[@]}"
 }
@@ -430,28 +465,34 @@ _upkg_run_search_nix() {
     return 1
   fi
 
-  for line in ${(f)output}; do
-    [ -n "$line" ] || continue
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    for line in ${(f)output}; do
+      [ -n "$line" ] || continue
 
-    if [[ $line == [[:space:]]* ]]; then
-      if (( ${#rows[@]} > 0 )); then
-        description=$(_upkg_search_trim "$line")
-        rows[-1]=$(_upkg_append_search_description "${rows[-1]}" "$description")
+      if [[ $line == [[:space:]]* ]]; then
+        if (( ${#rows[@]} > 0 )); then
+          _upkg_search_trim_reply "$line"
+          description=$REPLY
+          _upkg_append_search_description_reply "${rows[-1]}" "$description"
+          rows[-1]=$REPLY
+        fi
+        continue
       fi
-      continue
-    fi
 
-    [[ $line == '* '* && $line == *' ('*')' ]] || continue
-    trimmed=$line
-    trimmed=${trimmed#\* }
-    name=${trimmed%% \(*}
-    version=${trimmed##*\(}
-    version=${version%\)}
-    if [ "$name" = "$trimmed" ] || [ "$version" = "$trimmed" ]; then
-      continue
-    fi
-    rows+=("${name}"$'\t'"${version}"$'\t')
-  done
+      [[ $line == '* '* && $line == *' ('*')' ]] || continue
+      trimmed=$line
+      trimmed=${trimmed#\* }
+      name=${trimmed%% \(*}
+      version=${trimmed##*\(}
+      version=${version%\)}
+      if [ "$name" = "$trimmed" ] || [ "$version" = "$trimmed" ]; then
+        continue
+      fi
+      rows+=("${name}"$'\t'"${version}"$'\t')
+    done
+  }
 
   _upkg_finish_search_results nix "${rows[@]}"
 }
@@ -478,23 +519,28 @@ _upkg_run_search_npm() {
     return 1
   fi
 
-  for line in ${(f)output}; do
-    fields=("${(@ps:\t:)line}")
-    name=${fields[1]-}; description=''; version=''
-    [[ $name =~ '^(@[[:alnum:]_.~-]+/)?[[:alnum:]_.~-]+$' ]] || continue
-    # npm releases omit empty descriptions/authors in parseable output.
-    # Anchor on the publication date followed by a valid package version.
-    for date_index in 2 3 4; do
-      date=${fields[$date_index]-}
-      [[ $date == prehistoric || $date =~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' ]] || continue
-      version=${fields[$((date_index + 1))]-}
-      [[ $version =~ '^[0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:].-]+)?(\+[[:alnum:].-]+)?$' ]] || { version=''; continue; }
-      (( date_index > 2 )) && description=${fields[2]-}
-      break
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    for line in ${(f)output}; do
+      fields=("${(@ps:\t:)line}")
+      name=${fields[1]-}; description=''; version=''
+      [[ $name =~ '^(@[[:alnum:]_.~-]+/)?[[:alnum:]_.~-]+$' ]] || continue
+      # npm releases omit empty descriptions/authors in parseable output.
+      # Anchor on the publication date followed by a valid package version.
+      for date_index in 2 3 4; do
+        date=${fields[$date_index]-}
+        [[ $date == prehistoric || $date =~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' ]] || continue
+        version=${fields[$((date_index + 1))]-}
+        [[ $version =~ '^[0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:].-]+)?(\+[[:alnum:].-]+)?$' ]] || { version=''; continue; }
+        (( date_index > 2 )) && description=${fields[2]-}
+        break
+      done
+      [[ -n $version ]] || continue
+      _upkg_search_trim_reply "$description"
+      rows+=("${name}"$'\t'"${version}"$'\t'"${REPLY}")
     done
-    [[ -n $version ]] || continue
-    rows+=("${name}"$'\t'"${version}"$'\t'"$(_upkg_search_trim "$description")")
-  done
+  }
 
   _upkg_finish_search_results npm "${rows[@]}"
 }

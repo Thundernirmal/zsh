@@ -797,6 +797,352 @@ test_upkg_timing() {
   assert_contains "${functions[upkg]}" $'\t\tesac\n\t\t_UPKG_TIMING_MARKS+=("$EPOCHREALTIME") \n' 'manager timing samples inline immediately after dispatch' || return 1
 }
 
+# Frozen oracle for every search parser: rows, output, status, last result,
+# caller-visible REPLY/reply and printing-wrapper contracts must match the
+# pre-conversion implementation, and converted loops must avoid the wrappers.
+test_upkg_parser_oracle() {
+  local parser_body parser_expected parser_actual
+  integer parser_status
+
+  IFS= read -r -d '' parser_body <<'EOF_ORACLE'
+emulate -L zsh
+setopt NO_UNSET
+repo=$1
+source "$repo/55-ui-helpers.zsh"
+source "$repo/60-functions.zsh"
+_zsh_functions_load upkg || exit 1
+_upkg_search_progress() { :; }
+_upkg_search_progress_clear() { :; }
+_zsh_functions_load_domain() { return 0; }
+typeset -gA FIXTURE_OUT FIXTURE_ERR FIXTURE_RC
+_upkg_capture_query() {
+  local key="$*"
+  typeset -g _UPKG_QUERY_STDOUT=${FIXTURE_OUT[$key]-} _UPKG_QUERY_STDERR=${FIXTURE_ERR[$key]-}
+  return ${FIXTURE_RC[$key]-0}
+}
+scratch=$(mktemp -d) || exit 1
+trap 'rm -rf -- "$scratch"' EXIT
+if [[ ${2-} == sentinel ]]; then
+  # Converted parser loops must not reach the printing wrappers.
+  for wrapper in _upkg_search_trim _upkg_append_search_description _upkg_brew_name_from_header _upkg_brew_version_from_header; do
+    functions[saved$wrapper]=$functions[$wrapper]
+    functions[$wrapper]="print -r -- $wrapper >>${(q)scratch}/wrapper-calls; saved$wrapper \"\$@\""
+  done
+fi
+describe() {
+  local label=$1 rc=$2
+  print -r -- "== $label rc=$rc"
+  print -r -- "stdout=${(qqqq)$(<$scratch/out)}"
+  print -r -- "stderr=${(qqqq)$(<$scratch/err)}"
+  print -r -- "rows=${(qqqq)${(j:|:)_UPKG_SEARCH_ROWS}} count=${#_UPKG_SEARCH_ROWS}"
+  print -r -- "last=${(qqqq)${_UPKG_LAST_STATE-unset}}:${(qqqq)${_UPKG_LAST_DETAIL-unset}}"
+}
+run_case() {
+  local label=$1 fn=$2 rc first
+  shift 2
+  unset REPLY reply
+  _UPKG_SEARCH_ROWS=(); unset _UPKG_LAST_STATE _UPKG_LAST_DETAIL
+  $fn "$@" >$scratch/out 2>$scratch/err; rc=$?
+  first=$(describe "$label" "$rc")
+  print -r -- "$first"
+  print -r -- "unset-scratch=${+REPLY}:${+reply}"
+  REPLY=sentinel; reply=(one two)
+  _UPKG_SEARCH_ROWS=(); unset _UPKG_LAST_STATE _UPKG_LAST_DETAIL
+  $fn "$@" >$scratch/out 2>$scratch/err; rc=$?
+  [[ $(describe "$label" "$rc") == "$first" ]] || print -r -- "set-state differs"
+  print -r -- "set-scratch=${REPLY-unset}:${(j:,:)reply}"
+  () {
+    local REPLY=outer; local -a reply=(o1 o2)
+    _UPKG_SEARCH_ROWS=(); unset _UPKG_LAST_STATE _UPKG_LAST_DETAIL
+    $fn "$@" >$scratch/out 2>$scratch/err; rc=$?
+    [[ $(describe "$label" "$rc") == "$first" ]] || print -r -- "local-state differs"
+    print -r -- "local-scratch=${REPLY-unset}:${(j:,:)reply}"
+  } "$@"
+  unset REPLY reply
+}
+fx() { FIXTURE_OUT[$1]=$2; FIXTURE_ERR[$1]=${3-}; FIXTURE_RC[$1]=${4:-0}; }
+
+# pacman / paru share the format.
+pac=$'extra/ripgrep 14.1.1-1\n    recursively  search\tdirectories\r\n    for a   regex pattern  \n\ncore/empty-desc 1.0-1\n    \t  \nextra/unicode 2.0-1 [installed]\n    café 雪　wide  text\nnot a header\n  orphan continuation\nbad/ 1.0\nextra/onlyname\nextra/trailing 3.0-1\n    last line\n\n'
+for mgr in pacman paru; do
+  repo_pac=$pac; [[ $mgr == paru ]] && repo_pac=${pac//extra\//aur\/}
+  fx "$mgr --color never -Ss -- q" "$repo_pac" 'warning: native stderr'
+  fx "$mgr --color never -Ss -- empty" '' '' 1
+  fx "$mgr --color never -Ss -- fail" $'partial output\n    desc' 'error: database lock' 1
+  fx "$mgr --color never -Ss -- cancel" "$repo_pac" '' 130
+  for q in q empty fail cancel; do run_case "$mgr $q" _upkg_run_search_$mgr $q; done
+done
+
+# apt keeps only the first description line.
+fx 'apt search --names-only -- q' $'WARNING: apt does not have a stable CLI interface. Use with caution in scripts.\nSorting...\nFull Text Search...\nripgrep/stable 14.1.1-1 amd64\n  first  \tdescription\r\n  second description\nnodesc/stable 1.0 all\nbad header\nlib-x/unstable,now 2:1.0~rc1 amd64 [installed]\n  café  line\n'
+fx 'apt search --names-only -- fail' $'WARNING: apt does not have a stable CLI interface. Use with caution in scripts.\npartial' 'E: broken' 100
+fx 'apt search --names-only -- cancel' $'pkg/stable 1 all\n  d' '' 143
+for q in q fail cancel; do run_case "apt $q" _upkg_run_search_apt $q; done
+
+# nix
+fx 'nix --extra-experimental-features nix-command flakes --quiet search nixpkgs q' $'* legacyPackages.x86_64-linux.ripgrep (14.1.1)\n  recursively  search\tdirectories\r\n  with wrapped   descriptions  \n\n* legacyPackages.x86_64-linux.nodesc (1.0)\n* legacyPackages.x86_64-linux.blank (2.0)\n   \t \n* bad header\n* legacyPackages.x86_64-linux.uni (0.1-pre)\n  café 雪\n'
+fx 'nix --extra-experimental-features nix-command flakes --quiet search nixpkgs none' '' $'warning: unrelated\nerror: no results for the given search term(s)!' 1
+fx 'nix --extra-experimental-features nix-command flakes --quiet search nixpkgs fail' $'* legacyPackages.x86_64-linux.a (1)\n  d' 'error: broken' 1
+for q in q none fail; do run_case "nix $q" _upkg_run_search_nix $q; done
+
+# flatpak
+fx 'flatpak search --columns=application,version,name,description -- q' $'org.example.Viewer\t1.0\tRipgrep  Viewer\tRemote \t ripgrep\r browser\norg.example.Same\t2.0\torg.example.Same\t  desc  \norg.example.NoDesc\t\tName Only\t\nbad.app\t1\tn\td\norg.example.Short\t1\tonly three\nio.github.Uni\t3\tCafé  App\t雪  text\t extra\n'
+fx 'flatpak search --columns=application,version,name,description -- none' '' 'No matches found' 1
+for q in q none; do run_case "flatpak $q" _upkg_run_search_flatpak $q; done
+
+# npm
+fx 'npm search --parseable --json=false --color=false -- q' $'ripgrep-js\tJavaScript  wrapper\r around\tnpm-user\t2024-01-01\t3.4.5\tripgrep\nno-desc\tnpm-user\t2024-01-02\t1.0.0\tkw\nbare\t2024-01-03\t0.1.0\nold\t  spaced   desc  \tu\tprehistoric\t9.9.9-beta.1\nbadver\tdesc\tu\t2024-01-01\tnot-a-version\n@scope/pkg\tcafé  雪\tu\t2024-02-02\t1.2.3+build\n'
+fx 'npm search --parseable --json=false --color=false -- fail' 'partial' 'npm ERR! code E500' 1
+for q in q fail; do run_case "npm $q" _upkg_run_search_npm $q; done
+
+# brew: four captures; info headers drive name/version parsing.
+fx 'brew search --formula -- q' $'==> Formulae\nripgrep   ripgrep-all\nweird!name\nfd'
+fx 'brew search --cask -- q' $'==> Casks\nripgrep-app\nnoversion-app'
+fx 'brew info --formula ripgrep ripgrep-all fd' $'==> ripgrep: stable 14.1.1 (bottled), HEAD\nRecursively search\nhttps://example.invalid\n\n==> ripgrep-all: stable 0.10.6 (bottled)\n==> unrelated: stable 9.9\n==> fd: stable 10.2.0 (bottled), HEAD [keg-only]\n==> fd: duplicate header 11\n'
+fx 'brew info --cask ripgrep-app noversion-app' $'==> ripgrep-app: 1.2.3\n==> ripgrep-app (Ripgrep App): latest\n==> noversion-app: (auto_updates)\nnot a header line\n'
+fx 'brew search --formula -- none' '' 'No formulae found for "none"' 1
+fx 'brew search --cask -- none' '' 'No casks found for "none"' 1
+fx 'brew search --formula -- fail' 'x' 'Error: boom' 2
+fx 'brew search --formula -- cancel' '' '' 130
+for q in q none fail cancel; do run_case "brew $q" _upkg_run_search_brew $q; done
+
+[[ ! -e $scratch/wrapper-calls ]] || { print -r -- "wrapper called: $(<$scratch/wrapper-calls)"; exit 3; }
+if [[ ${2-} == sentinel ]]; then
+  for wrapper in _upkg_search_trim _upkg_append_search_description _upkg_brew_name_from_header _upkg_brew_version_from_header; do
+    functions[$wrapper]=$functions[saved$wrapper]
+  done
+fi
+
+# Printing wrappers keep their stdout and nonmutating scratch contracts.
+for fn in _upkg_search_trim _upkg_brew_name_from_header _upkg_brew_version_from_header; do
+  for arg in '' $'  a \t b\r\n c  ' '==> pkg (Name): stable 1.0' 'stable, (2.0)' 'no version here'; do
+    REPLY=sentinel; reply=(one two)
+    $fn "$arg" >$scratch/out 2>$scratch/err; rc=$?
+    print -r -- "$fn ${(qqqq)arg} rc=$rc out=${(qqqq)$(<$scratch/out)} err=${(qqqq)$(<$scratch/err)} scratch=$REPLY:${(j:,:)reply}"
+  done
+done
+for row in $'n\tv\t' $'n\tv\told' ''; do
+  for d in '' 'new' ' spaced '; do
+    REPLY=sentinel; reply=(one two)
+    _upkg_append_search_description "$row" "$d" >$scratch/out 2>$scratch/err; rc=$?
+    print -r -- "append ${(qqqq)row} ${(qqqq)d} rc=$rc out=${(qqqq)$(<$scratch/out)} scratch=$REPLY:${(j:,:)reply}"
+  done
+done
+EOF_ORACLE
+  IFS= read -r -d '' parser_expected <<'EOF_ORACLE'
+== pacman q rc=0
+stdout=$''
+stderr=$'warning: native stderr'
+rows=$'pacman\tripgrep\t14.1.1-1\trecursively search directories for a regex pattern|pacman\tempty-desc\t1.0-1\t|pacman\tunicode\t2.0-1\tcafé 雪　wide text orphan continuation|pacman\ttrailing\t3.0-1\tlast line' count=4
+last=$'matches found':$'4 result(s)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== pacman empty rc=0
+stdout=$''
+stderr=$''
+rows=$'' count=0
+last=$'no matches':$''
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== pacman fail rc=1
+stdout=$'partial output\n    desc'
+stderr=$'error: database lock'
+rows=$'' count=0
+last=$'failed':$'pacman -Ss failed'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== pacman cancel rc=130
+stdout=$''
+stderr=$''
+rows=$'' count=0
+last=$'cancelled':$'interrupted (status 130)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== paru q rc=0
+stdout=$''
+stderr=$'warning: native stderr'
+rows=$'paru\tripgrep\t14.1.1-1\trecursively search directories for a regex pattern|paru\tempty-desc\t1.0-1\t|paru\tunicode\t2.0-1\tcafé 雪　wide text orphan continuation|paru\ttrailing\t3.0-1\tlast line' count=4
+last=$'matches found':$'4 result(s)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== paru empty rc=0
+stdout=$''
+stderr=$''
+rows=$'' count=0
+last=$'no matches':$''
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== paru fail rc=1
+stdout=$'partial output\n    desc'
+stderr=$'error: database lock'
+rows=$'' count=0
+last=$'failed':$'paru -Ss failed'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== paru cancel rc=130
+stdout=$''
+stderr=$''
+rows=$'' count=0
+last=$'cancelled':$'interrupted (status 130)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== apt q rc=0
+stdout=$''
+stderr=$''
+rows=$'apt\tripgrep\t14.1.1-1\tfirst description|apt\tnodesc\t1.0\t|apt\tlib-x\t2:1.0~rc1\tcafé line' count=3
+last=$'matches found':$'3 result(s)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== apt fail rc=1
+stdout=$'partial'
+stderr=$'E: broken'
+rows=$'' count=0
+last=$'failed':$'apt search failed'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== apt cancel rc=143
+stdout=$''
+stderr=$''
+rows=$'' count=0
+last=$'cancelled':$'interrupted (status 143)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== nix q rc=0
+stdout=$''
+stderr=$''
+rows=$'nix\tlegacyPackages.x86_64-linux.ripgrep\t14.1.1\trecursively search directories with wrapped descriptions|nix\tlegacyPackages.x86_64-linux.nodesc\t1.0\t|nix\tlegacyPackages.x86_64-linux.blank\t2.0\t|nix\tlegacyPackages.x86_64-linux.uni\t0.1-pre\tcafé 雪' count=4
+last=$'matches found':$'4 result(s)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== nix none rc=0
+stdout=$''
+stderr=$'warning: unrelated'
+rows=$'' count=0
+last=$'no matches':$''
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== nix fail rc=1
+stdout=$'* legacyPackages.x86_64-linux.a (1)\n  d'
+stderr=$'error: broken'
+rows=$'' count=0
+last=$'failed':$'nix search failed'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== flatpak q rc=0
+stdout=$''
+stderr=$''
+rows=$'flatpak\torg.example.Viewer\t1.0\tRipgrep Viewer - Remote|flatpak\torg.example.Same\t2.0\tdesc|flatpak\torg.example.NoDesc\t\tName Only|flatpak\tio.github.Uni\t3\tCafé App - 雪 text' count=4
+last=$'matches found':$'4 result(s)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== flatpak none rc=0
+stdout=$''
+stderr=$'No matches found'
+rows=$'' count=0
+last=$'no matches':$''
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== npm q rc=0
+stdout=$''
+stderr=$''
+rows=$'npm\tripgrep-js\t3.4.5\tJavaScript wrapper around|npm\tno-desc\t1.0.0\tnpm-user|npm\tbare\t0.1.0\t|npm\told\t9.9.9-beta.1\tspaced desc|npm\t@scope/pkg\t1.2.3+build\tcafé 雪' count=5
+last=$'matches found':$'5 result(s)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== npm fail rc=1
+stdout=$'partial'
+stderr=$'npm ERR\! code E500'
+rows=$'' count=0
+last=$'failed':$'npm search failed'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== brew q rc=0
+stdout=$''
+stderr=$''
+rows=$'brew\tripgrep\t14.1.1\tformula|brew\tripgrep-all\t0.10.6\tformula|brew\tfd\t10.2.0\tformula|brew\tfd\t11\tformula|brew\tripgrep-app\t1.2.3\tcask|brew\tripgrep-app\tlatest\tcask|brew\tnoversion-app\t?\tcask' count=7
+last=$'matches found':$'7 result(s)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== brew none rc=0
+stdout=$''
+stderr=$'No formulae found for "none"\nNo casks found for "none"'
+rows=$'' count=0
+last=$'no matches':$''
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== brew fail rc=1
+stdout=$'x'
+stderr=$'Error: boom'
+rows=$'' count=0
+last=$'failed':$'brew search --formula failed'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+== brew cancel rc=130
+stdout=$''
+stderr=$''
+rows=$'' count=0
+last=$'cancelled':$'interrupted (status 130)'
+unset-scratch=0:0
+set-scratch=sentinel:one,two
+local-scratch=outer:o1,o2
+_upkg_search_trim $'' rc=0 out=$'' err=$'' scratch=sentinel:one,two
+_upkg_search_trim $'  a \t b\r\n c  ' rc=0 out=$'a b c' err=$'' scratch=sentinel:one,two
+_upkg_search_trim $'==> pkg (Name): stable 1.0' rc=0 out=$'==> pkg (Name): stable 1.0' err=$'' scratch=sentinel:one,two
+_upkg_search_trim $'stable, (2.0)' rc=0 out=$'stable, (2.0)' err=$'' scratch=sentinel:one,two
+_upkg_search_trim $'no version here' rc=0 out=$'no version here' err=$'' scratch=sentinel:one,two
+_upkg_brew_name_from_header $'' rc=0 out=$'' err=$'' scratch=sentinel:one,two
+_upkg_brew_name_from_header $'  a \t b\r\n c  ' rc=0 out=$'  a \t b\r\n c  ' err=$'' scratch=sentinel:one,two
+_upkg_brew_name_from_header $'==> pkg (Name): stable 1.0' rc=0 out=$'pkg' err=$'' scratch=sentinel:one,two
+_upkg_brew_name_from_header $'stable, (2.0)' rc=0 out=$'stable,' err=$'' scratch=sentinel:one,two
+_upkg_brew_name_from_header $'no version here' rc=0 out=$'no version here' err=$'' scratch=sentinel:one,two
+_upkg_brew_version_from_header $'' rc=0 out=$'?' err=$'' scratch=sentinel:one,two
+_upkg_brew_version_from_header $'  a \t b\r\n c  ' rc=0 out=$'?' err=$'' scratch=sentinel:one,two
+_upkg_brew_version_from_header $'==> pkg (Name): stable 1.0' rc=0 out=$'1.0' err=$'' scratch=sentinel:one,two
+_upkg_brew_version_from_header $'stable, (2.0)' rc=0 out=$'2.0' err=$'' scratch=sentinel:one,two
+_upkg_brew_version_from_header $'no version here' rc=0 out=$'?' err=$'' scratch=sentinel:one,two
+append $'n\tv\t' $'' rc=0 out=$'n\tv\t' scratch=sentinel:one,two
+append $'n\tv\t' $'new' rc=0 out=$'n\tv\tnew' scratch=sentinel:one,two
+append $'n\tv\t' $' spaced ' rc=0 out=$'n\tv\t spaced ' scratch=sentinel:one,two
+append $'n\tv\told' $'' rc=0 out=$'n\tv\told' scratch=sentinel:one,two
+append $'n\tv\told' $'new' rc=0 out=$'n\tv\told new' scratch=sentinel:one,two
+append $'n\tv\told' $' spaced ' rc=0 out=$'n\tv\told  spaced ' scratch=sentinel:one,two
+append $'' $'' rc=0 out=$'' scratch=sentinel:one,two
+append $'' $'new' rc=0 out=$' new' scratch=sentinel:one,two
+append $'' $' spaced ' rc=0 out=$'  spaced ' scratch=sentinel:one,two
+EOF_ORACLE
+
+  parser_actual=$(PATH=$original_path zsh -fc "$parser_body" parser-oracle "$repo_dir" sentinel 2>&1)
+  parser_status=$?
+  assert_status "$parser_status" 0 'search parser oracle runs without reaching printing wrappers' || return 1
+  if [[ $parser_actual != "${parser_expected%$'\n'}" ]]; then
+    print -u2 -- 'not ok: search parsers match the frozen pre-conversion oracle'
+    diff <(print -r -- "${parser_expected%$'\n'}") <(print -r -- "$parser_actual") >&2
+    return 1
+  fi
+  print -- 'ok: search parsers match the frozen pre-conversion oracle'
+}
+
 main() {
   local output cmd_status route state_role npm_stdout npm_stderr stderr_output
   local parser_stdout="$tmp_prefix/upkg-parser.stdout"
@@ -2293,6 +2639,7 @@ esac
   assert_contains "$output" '14.1.1-1.fc40' 'dnf search shows available version' || return 1
 
   test_upkg_timing || return 1
+  test_upkg_parser_oracle || return 1
 }
 
 main "$@"

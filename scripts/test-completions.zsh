@@ -359,6 +359,186 @@ test_npkg_union_invalidation() (
   assert_equals "${#reply}:${#_ZSH_NPKG_COMPLETION_CACHE_DATA}:${#_ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS}" '0:0:0' 'removed indexes leave no candidates or obsolete per-file data'
 )
 
+test_npkg_completion_oracle() {
+  local work="$tmp_dir/npkg-oracle" fakebin="$tmp_dir/npkg-oracle-bin"
+  local legacy_file="$tmp_dir/npkg-oracle-legacy.zsh" scenario_file="$tmp_dir/npkg-oracle-scenario.zsh"
+  local live frozen fallback mode
+
+  command mkdir -p -- "$fakebin" "$work/live" "$work/frozen" "$work/no-system"
+  print -r -- '#!/bin/sh
+printf "%s\n" "$*" >> "$NPKG_ORACLE_NIX_LOG"
+exit 97' > "$fakebin/nix"
+  command chmod +x "$fakebin/nix"
+  # Frozen pre-optimization helper; it captures _npkg_cache_dir and reads lines.
+  command cat > "$legacy_file" <<'EOF_LEGACY'
+  _zsh_npkg_cached_attributes() {
+    emulate -L zsh
+    setopt localoptions nullglob
+
+    local cache_dir cache_file attribute identity signature=''
+    local -a file_attributes cache_files attributes
+    local -A identities retained_data
+    integer cacheable=1
+    typeset -ga reply
+    reply=()
+
+    cache_dir=$(_npkg_cache_dir) || return 1
+    for cache_file in "$cache_dir"/nixpkgs-attrs-*.txt(N.); do
+      [[ -r $cache_file && ! -L $cache_file ]] || continue
+
+      cache_files+=( "$cache_file" )
+      if _zsh_npkg_cache_identity "$cache_file"; then
+        identities[$cache_file]=$REPLY
+      else
+        cacheable=0
+      fi
+      # Neither a filesystem path nor an identity can contain a NUL byte.
+      signature+="$cache_file"$'\0'"${identities[$cache_file]-}"$'\0'
+    done
+
+    if (( cacheable && _ZSH_NPKG_COMPLETION_UNION_VALID )) &&
+        [[ $signature == "$_ZSH_NPKG_COMPLETION_SIGNATURE" ]]; then
+      reply=( "${_ZSH_NPKG_COMPLETION_UNION[@]}" )
+      return 0
+    fi
+
+    for cache_file in "${cache_files[@]}"; do
+      identity=${identities[$cache_file]-}
+      if [[ -n $identity && ${+_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]} -eq 1 ]]; then
+        if [[ -n ${_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]} ]]; then
+          file_attributes=( "${(f)_ZSH_NPKG_COMPLETION_CACHE_DATA[$identity]}" )
+        else
+          file_attributes=()
+        fi
+      else
+        file_attributes=()
+        while IFS= read -r attribute; do
+          [[ -n $attribute ]] || continue
+          file_attributes+=("$attribute")
+        done < "$cache_file"
+        (( _ZSH_NPKG_COMPLETION_PARSE_COUNT++ ))
+      fi
+      [[ -z $identity ]] || retained_data[$identity]="${(F)file_attributes}"
+      attributes+=( "${file_attributes[@]}" )
+    done
+    # Unique expansion retains first occurrence order without per-name appends.
+    reply=( "${(@u)attributes}" )
+    _ZSH_NPKG_COMPLETION_CACHE_DATA=( "${(@kv)retained_data}" )
+    _ZSH_NPKG_COMPLETION_CACHE_PATH_KEYS=( "${(@kv)identities}" )
+    _ZSH_NPKG_COMPLETION_UNION=( "${reply[@]}" )
+    _ZSH_NPKG_COMPLETION_SIGNATURE=$signature
+    _ZSH_NPKG_COMPLETION_UNION_VALID=$cacheable
+    (( _ZSH_NPKG_COMPLETION_BUILD_COUNT++ ))
+    return 0
+  }
+EOF_LEGACY
+  command cat > "$scenario_file" <<'EOF_SCENARIO'
+emulate -L zsh
+setopt no_unset
+repo=$1 work=$2 mode=$3 legacy=$4
+compdef() { :; }
+source "$repo/60-functions.zsh" || exit 2
+source "$repo/66-compdefs.zsh" || exit 2
+if [[ $mode == frozen ]]; then
+  source "$legacy" || exit 3
+elif [[ $mode == no-system ]]; then
+  # Exercise the line-reader fallback used when zsh/system is unavailable.
+  zmodload() {
+    [[ $* == *zsh/system* ]] && return 1
+    builtin zmodload "$@"
+  }
+fi
+(( $+functions[_npkg_cache_dir_reply] )) || exit 4
+nix_loaded() {
+  if (( ${+_ZSH_FUNCTION_DOMAINS_LOADED} )); then
+    print -r -- "${_ZSH_FUNCTION_DOMAINS_LOADED[nix]:-0}"
+  else
+    print -r -- 0
+  fi
+}
+print -r -- "meta: nix-loaded-at-source=$(nix_loaded)"
+step() {
+  local label=$1 rc err
+  REPLY=sentinel
+  _zsh_npkg_cached_attributes 2>"$work/err"
+  rc=$?
+  err=$(<"$work/err")
+  [[ $REPLY == <->:<->:<->:<-> ]] && REPLY=IDENTITY
+  print -r -- "$label rc=$rc REPLY=${(q+)REPLY} n=${#reply} parse=$_ZSH_NPKG_COMPLETION_PARSE_COUNT build=$_ZSH_NPKG_COMPLETION_BUILD_COUNT err=${(q+)err}"
+  print -rl -- "${(@q+)reply}"
+}
+export XDG_CACHE_HOME=$work/cache
+d=$XDG_CACHE_HOME/npkg
+step missing-dir
+print -r -- "meta: nix-loaded-after-request=$(nix_loaded)"
+command mkdir -p -- "$d" "$work/home/.cache/npkg"
+step empty-dir
+print -rn -- $'c\r\na\n\nb\nc\nlast' >"$d/nixpkgs-attrs-a.txt"
+print -rn -- $'a\nz\n\n\n' >"$d/nixpkgs-attrs-b.txt"
+: >"$d/nixpkgs-attrs-empty.txt"
+print -rn -- $'x\0y\nq\n\\n\n' >"$d/nixpkgs-attrs-nul.txt"
+print -rn -- $'\xe9\x9b\xbb\n\xff\n \n\t\n' >"$d/nixpkgs-attrs-utf8.txt"
+print -rn -- 'no-newline-only' >"$d/nixpkgs-attrs-tail.txt"
+{
+  integer i
+  for (( i = 1; i <= 20000; i++ )); do
+    if (( i % 1009 == 0 )); then
+      print -rn -- $'\n'
+    elif (( i % 997 == 0 )); then
+      print -rn -- "python3Packages.pkg-$i"$'\r\n'
+    else
+      print -r -- "python3Packages.pkg-$i"
+    fi
+  done
+  print -rn -- 'big-tail'
+} >"$d/nixpkgs-attrs-big.txt"
+command ln -s -- "$d/nixpkgs-attrs-a.txt" "$d/nixpkgs-attrs-link.txt"
+print -r -- ignored >"$d/other.txt"
+print -r -- locked >"$d/nixpkgs-attrs-locked.txt"
+command chmod 000 "$d/nixpkgs-attrs-locked.txt"
+step populated
+step warm
+reply=(caller-mutation)
+step warm-after-caller-mutation
+print -rn -- $'d\na\n' >"$work/new"
+command mv -- "$work/new" "$d/nixpkgs-attrs-a.txt"
+step replaced
+print -r -- extra >>"$d/nixpkgs-attrs-b.txt"
+step appended
+command rm -f -- "$d/nixpkgs-attrs-b.txt"
+step deleted
+_wanted() { print -r -- "wanted ${(j: :)${(@q+)@}} :: ${#reply} ${(q+)reply[1]}"; }
+_zsh_npkg_cached_packages
+print -r -- "adapter rc=$?"
+_zsh_npkg_cache_identity() { return 1; }
+step stat-unavailable
+step stat-unavailable-again
+command chmod 600 "$d/nixpkgs-attrs-locked.txt"
+command rm -f -- "$d"/nixpkgs-attrs-*.txt
+step emptied
+_zsh_npkg_cached_packages
+print -r -- "adapter-empty rc=$?"
+print -r -- home-only >"$work/home/.cache/npkg/nixpkgs-attrs-home.txt"
+XDG_CACHE_HOME=relative HOME=$work/home step relative-xdg
+XDG_CACHE_HOME=relative HOME=relative step no-absolute-cache
+EOF_SCENARIO
+
+  for mode in live frozen no-system; do
+    PATH="$fakebin:$PATH" NPKG_ORACLE_NIX_LOG="$tmp_dir/npkg-oracle-nix.log" \
+      "$zsh_bin" -f "$scenario_file" "$repo_dir" "$work/$mode" "$mode" "$legacy_file" > "$work/$mode.out" 2>&1
+    assert_status "$?" 0 "npkg completion oracle scenario runs ($mode)" || return 1
+  done
+  live=$(<"$work/live.out")
+  frozen=$(<"$work/frozen.out")
+  fallback=$(<"$work/no-system.out")
+  assert_equals "${(F)${(@f)live:#meta: *}}" "${(F)${(@f)frozen:#meta: *}}" 'npkg completion candidates, order, counters, statuses and REPLY match the frozen helper' || return 1
+  assert_equals "${(F)${(@f)fallback:#meta: *}}" "${(F)${(@f)frozen:#meta: *}}" 'npkg completion line-reader fallback matches the frozen helper' || return 1
+  assert_equals "${(F)${(@M)${(@f)live}:#meta: *}}" $'meta: nix-loaded-at-source=0\nmeta: nix-loaded-after-request=1' 'npkg completion loads the Nix domain lazily in the parent shell' || return 1
+  assert_equals "${(F)${(@M)${(@f)frozen}:#meta: *}}" $'meta: nix-loaded-at-source=0\nmeta: nix-loaded-after-request=0' 'frozen npkg completion loaded the Nix domain only in a child' || return 1
+  assert_equals "${#${(@M)${(@f)live}:#populated rc=0 *}}" 1 'npkg completion oracle covers populated caches' || return 1
+  assert_equals "$(file_contents "$tmp_dir/npkg-oracle-nix.log")" '' 'npkg completion oracle never invokes Nix' || return 1
+}
+
 test_source_has_no_subprocesses() {
   local fakebin="$tmp_dir/source-fakebin"
   local invocation_log="$tmp_dir/source-invocations"
@@ -460,6 +640,7 @@ main() {
   test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1
   test_npkg_union_invalidation || return 1
+  test_npkg_completion_oracle || return 1
   test_cached_cgm_names || return 1
   test_source_has_no_subprocesses || return 1
 }

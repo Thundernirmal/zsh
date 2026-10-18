@@ -1091,6 +1091,740 @@ test_fbr_canonical_refs() (
   fi
 )
 
+# Frozen pre-optimization width, truncation and padding helpers. Both
+# truncators keep their distinct narrow-width rules and REPLY side effects.
+test_truncate_measures_text_once() {
+  local output
+
+  # Each truncation entry point measures the full text once, whether it fits
+  # or is cut; cuts reuse that measurement instead of rescanning the text.
+  output=$(LC_ALL=C.UTF-8 zsh -fc '
+    source "$1/25-theme.zsh" || exit 90
+    source "$1/55-ui-helpers.zsh" || exit 91
+    functions[_measure_original]=$functions[_ui_display_width]
+    integer full_scans
+    probe=''
+    _ui_display_width() {
+      [[ $* == "$probe" ]] && (( full_scans++ ))
+      _measure_original "$@"
+    }
+    check() {
+      local label=$1 entry=$2
+      shift 2
+      probe="$*"
+      full_scans=0
+      if [[ $entry == marker ]]; then
+        _ui_truncate_marker_reply "..." 10 "$@"
+      else
+        _ui_truncate_reply 10 "$@"
+      fi
+      print -r -- "$entry $label scans=$full_scans result=$REPLY"
+    }
+    for entry in wrapper marker; do
+      check fit-ascii $entry abcdef
+      check cut-ascii $entry abcdefghijklmnopqrstuvwxyz
+      check cut-mixed $entry "雪abcdefghijklmnopqrstuvwxyz"
+      check cut-cjk $entry 雪雪雪雪雪雪雪雪雪雪雪雪
+      check cut-combining $entry "éééééééééééé"
+      check cut-joined $entry abc defghij klmnopqrstuvwxyz
+    done
+  ' measure "$repo_dir")
+  assert_equals "${#${(@M)${(f)output}:#* scans=1 *}}" 12 'truncation measures fitting and cut text once per entry point' || {
+    print -u2 -r -- "$output"
+    return 1
+  }
+}
+
+test_width_truncation_oracle() {
+  local width_matrix width_reference
+  integer live_status frozen_status live_pid frozen_pid
+
+  IFS= read -r -d '' width_matrix <<'EOF_WIDTH_MATRIX'
+# Width/truncation characterization matrix; prints a transcript.
+# Usage: zsh -f width-matrix.zsh repo [reference-file] [exhaustive] [scratch]
+emulate -L zsh
+setopt NO_UNSET
+repo=$1 scratch=${4:-${TMPDIR:-/tmp}}
+source "$repo/55-ui-helpers.zsh"
+source "$repo/lib/functions-common.zsh"
+[[ -n ${2-} ]] && source "$2"
+integer exhaustive=0
+[[ ${3-} == exhaustive ]] && exhaustive=1
+integer w l
+typeset text mode out locale fn
+typeset -a widths lengths
+ascii_base='abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 ~!@#$%^&*()_+-=[]{};:,./<>?|`'"'"'"'
+while (( ${#ascii_base} < 80 )); do ascii_base+=$ascii_base; done
+probe() {
+  # probe label fn args...: records stdout, status, REPLY and reply after one call
+  local label=$1 fn=$2 rc out=''
+  shift 2
+  REPLY=sentinel; reply=(one two)
+  $fn "$@" >| "$scratch/out"; rc=$?
+  IFS= read -r -d '' out < "$scratch/out"
+  print -r -- "$label ${(qqqq)out} rc=$rc scratch=${(qqqq)REPLY}:${(j:,:)reply}"
+}
+run_set() {
+  local text=$1 both_pads=${2:-1} w
+  for w in "${widths[@]}"; do
+    probe "trunc w=$w ${(qqqq)text}" _ui_truncate_reply "$w" "$text"
+    probe "safe w=$w ${(qqqq)text}" _ui_safe_truncate "$w" "$text"
+    probe "padl w=$w ${(qqqq)text}" _ui_pad_reply left "$w" "$text"
+    (( both_pads )) && probe "padr w=$w ${(qqqq)text}" _ui_pad_reply right "$w" "$text"
+  done
+  probe "width ${(qqqq)text}" _ui_display_width "$text"
+}
+typeset empty=""
+unicode_fixtures=(
+  '' 'a' $'é' $'́abc' $'abć' $'abcdefghij́klmnop' '雪' '雪国の物語を読む' $'ab雪cd' $'ab雪́cd'
+  '😀' $'\U0001F468‍\U0001F469‍\U0001F467 family' $' branch' $'\U000F0001 nerd glyph text' $'x️⃣y'
+  $'क्ष हिन्दी' 'café crème brûlée' $'　wide space　' 'ｆｕｌｌｗｉｄｔｈ ｔｅｘｔ'
+  'a\nb\tc\e[0m' 'trailing\' '\x1b\x7f\x9f mixed' '\\double\\' '\xZZ not hex' 'ab\x1' $'tab\there' $'\x01\x02ctl'
+  'path/with\\backslash/name' 'abc雪\n雪def'
+  $'\xff' $'ab\xffcd' $'\xc3' $'abc\xc3' $'\x7f' $'a\x01b\x1bc' $'\u0085next' $'雪\xff雪' $'\xe9\x9b' $'tail\xe9\x9b'
+  "Package 雪 description ${(l:60::x:)empty}" "${(l:30::雪:)empty}" $'abc\u0301\u0301def雪ghi\u200bjkl' $'\ufeffbom text'
+)
+for mode in ascii unicode; do
+  if [[ $mode == ascii ]]; then _ui_ascii_mode() { return 0; }; else _ui_ascii_mode() { return 1; }; fi
+  for locale in C.UTF-8 C; do
+    # The real predicate always selects ASCII markers outside UTF-8 locales.
+    [[ $locale == C && $mode == unicode ]] && (( ! exhaustive )) && continue
+    LC_ALL=$locale
+    print -r -- "### mode=$mode locale=$locale"
+    if (( exhaustive )); then
+      lengths=( {0..80} ); widths=( {0..40} )
+    elif [[ $locale == C ]]; then
+      lengths=( 0 1 5 24 80 ); widths=( 0 1 3 4 5 24 )
+    else
+      lengths=( {0..7} 23 24 25 41 80 ); widths=( {0..7} 9 23 24 25 41 )
+    fi
+    for l in "${lengths[@]}"; do run_set "${ascii_base[1,l]}"; done
+    (( exhaustive )) && widths=( {0..12} 17 24 40 ) || widths=( 0 1 2 3 5 9 17 )
+    for text in "${unicode_fixtures[@]}"; do run_set "$text" "$exhaustive"; done
+  done
+done
+LC_ALL=C.UTF-8
+# Real marker-mode predicate (non-TTY plain mode) and fallback configurations.
+unfunction _ui_ascii_mode
+source "$repo/55-ui-helpers.zsh"
+[[ -n ${2-} ]] && source "$2"
+widths=( 0 1 2 3 4 5 9 24 )
+print -r -- "### real ascii-mode predicate"
+for text in "${ascii_base[1,30]}" $'ab雪́cd' 'a\nb\tc' $'́abc'; do run_set "$text"; done
+saved_width=$functions[_ui_display_width]
+saved_strip=$functions[_ui_strip_leading_marks_reply]
+for config in no-width no-strip neither; do
+  functions[_ui_display_width]=$saved_width
+  functions[_ui_strip_leading_marks_reply]=$saved_strip
+  case $config in
+    no-width) unfunction _ui_display_width ;;
+    no-strip) unfunction _ui_strip_leading_marks_reply ;;
+    neither) unfunction _ui_display_width _ui_strip_leading_marks_reply ;;
+  esac
+  print -r -- "### fallback $config"
+  for text in "${ascii_base[1,30]}" $'ab雪́cd' 'a\nb\tc' $'́abc' 'path/with\\backslash/name'; do
+    for w in 0 1 2 3 4 5 9 24; do probe "safe w=$w ${(qqqq)text}" _ui_safe_truncate "$w" "$text"; done
+  done
+done
+functions[_ui_display_width]=$saved_width
+functions[_ui_strip_leading_marks_reply]=$saved_strip
+# Unset and outer-local scratch for representative calls.
+print -r -- "### scratch states"
+for call in '_ui_truncate_reply 9 abcdefghijklmnop' '_ui_safe_truncate 9 abcdefghijklmnop' '_ui_safe_truncate 1 abcdef' \
+    '_ui_safe_truncate 4 abcdef' '_ui_pad_reply left 9 abcdefghijklmnop' '_ui_display_width abc' '_ui_safe_truncate 40 short'; do
+  unset REPLY reply
+  ${=call} >/dev/null; print -r -- "unset $call -> ${+REPLY}:${REPLY-}:${+reply}"
+  () { local REPLY=outer; local -a reply=(o1 o2); ${=call} >/dev/null; print -r -- "local $call -> $REPLY:${(j:,:)reply}"; }
+done
+print -r -- "width-data-loaded=${_ZSH_UI_WIDTH_DATA_LOADED:-0}"
+EOF_WIDTH_MATRIX
+  IFS= read -r -d '' width_reference <<'EOF_WIDTH_REFERENCE'
+_ui_char_width() {
+  emulate -L zsh
+  integer code=$1 low high middle
+  if (( code < 128 )); then
+    REPLY=1
+    return 0
+  fi
+  if (( ! ${_ZSH_UI_WIDTH_DATA_LOADED:-0} )); then
+    setopt localoptions no_aliases
+    source "$_ZSH_UI_HELPERS_DIR/lib/ui-width-data.zsh" || return 1
+  fi
+  low=1
+  high=${#_ZSH_UI_ZERO_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_ZERO_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_ZERO_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=0
+      return 0
+    fi
+  done
+  low=1
+  high=${#_ZSH_UI_WIDE_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_WIDE_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_WIDE_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=2
+      return 0
+    fi
+  done
+  REPLY=1
+}
+
+_ui_display_width() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local text=$1 char
+  local non_ascii_pattern='*[^ -~]*'
+  integer index code width=0
+
+  if [[ $text != ${~non_ascii_pattern} ]]; then
+    REPLY=${#text}
+    return 0
+  fi
+
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( width += REPLY ))
+  done
+  REPLY=$width
+}
+
+_ui_strip_leading_marks_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+  local text=$1 char
+  integer code
+  while [[ -n $text ]]; do
+    char=$text[1]
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( REPLY == 0 )) || break
+    text=${text[2,-1]}
+  done
+  REPLY=$text
+}
+
+_ui_truncate_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local width=$1
+  shift
+
+  local text="$*"
+  local marker='…'
+  local char prefix='' suffix=''
+  integer index code char_width text_width marker_width left right prefix_width suffix_width
+
+  (( width > 0 )) || {
+    REPLY=''
+    return 0
+  }
+
+  if _ui_ascii_mode; then
+    marker='...'
+  fi
+
+  _ui_display_width "$text"
+  text_width=$REPLY
+  if (( text_width <= width )); then
+    REPLY=$text
+    return 0
+  fi
+
+  _ui_display_width "$marker"
+  marker_width=$REPLY
+  if (( width <= marker_width + 1 )); then
+    prefix=''
+    prefix_width=0
+    for (( index = 1; index <= ${#text}; index++ )); do
+      char=${text[$index]}
+      printf -v code '%d' "'$char"
+      _ui_char_width $code
+      char_width=$REPLY
+      (( prefix_width + char_width > width )) && break
+      prefix+=$char
+      (( prefix_width += char_width ))
+    done
+    REPLY=$prefix
+    return 0
+  fi
+
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
+
+  prefix=''
+  prefix_width=0
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( prefix_width + char_width > left )) && break
+    prefix+=$char
+    (( prefix_width += char_width ))
+  done
+
+  suffix=''
+  suffix_width=0
+  for (( index = ${#text}; index >= 1; index-- )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( suffix_width + char_width > right )) && break
+    suffix="${char}${suffix}"
+    (( suffix_width += char_width ))
+  done
+
+  # A suffix must not attach a discarded base character's combining marks
+  # to the ellipsis. Keep complete base-plus-mark sequences at the cut.
+  _ui_strip_leading_marks_reply "$suffix"
+  REPLY="${prefix}${marker}${REPLY}"
+}
+
+_ui_truncate() {
+  _ui_truncate_reply "$@"
+  print -r -- "$REPLY"
+}
+
+_ui_pad_reply() {
+  emulate -L zsh
+
+  # 'right' = right-align text (leading spaces); 'left' = left-align (trailing spaces)
+  local align=$1
+  local width=$2
+  shift 2
+
+  _ui_truncate_reply "$width" "$*"
+  local text=$REPLY
+  local text_width
+  integer padding_width
+
+  _ui_display_width "$text"
+  text_width=$REPLY
+  padding_width=$(( width - text_width ))
+
+  (( padding_width < 0 )) && padding_width=0
+
+  if [[ $align == right ]]; then
+    printf -v REPLY '%*s%s' "$padding_width" '' "$text"
+  else
+    printf -v REPLY '%s%*s' "$text" "$padding_width" ''
+  fi
+}
+
+_ui_pad() {
+  _ui_pad_reply "$@"
+  print -nr -- "$REPLY"
+}
+
+_ui_safe_truncate() {
+  emulate -L zsh
+
+  local width=$1
+  shift
+
+  local text="$*"
+  local marker='…'
+  local token pair quad prefix='' suffix=''
+  local -a tokens
+  integer index left right token_width prefix_width suffix_width text_width marker_width
+  integer have_display_width=$(( $+functions[_ui_display_width] ))
+
+  (( width > 0 )) || {
+    print -r -- ''
+    return 0
+  }
+
+  if _ui_ascii_mode; then
+    marker='...'
+  fi
+
+  if (( have_display_width )); then
+    _ui_display_width "$text"
+    text_width=$REPLY
+    _ui_display_width "$marker"
+    marker_width=$REPLY
+  else
+    text_width=${#text}
+    marker_width=${#marker}
+  fi
+
+  if (( text_width <= width )); then
+    print -r -- "$text"
+    return 0
+  fi
+
+  if (( width <= marker_width )); then
+    print -r -- "${marker[1,width]}"
+    return 0
+  fi
+
+  for (( index = 1; index <= ${#text}; index++ )); do
+    token=${text[$index]}
+
+    if [[ $token == $'\\' ]]; then
+      pair=${text[$index,$(( index + 1 ))]}
+      quad=${text[$index,$(( index + 3 ))]}
+
+      if [[ $quad == \\x[0-9a-fA-F][0-9a-fA-F] ]]; then
+        token=$quad
+        (( index += 3 ))
+      else
+        case $pair in
+          '\n'|'\r'|'\t'|'\e'|'\a'|'\b'|'\f'|'\v')
+            token=$pair
+            (( index++ ))
+            ;;
+        esac
+      fi
+    fi
+
+    tokens+=("$token")
+  done
+
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
+
+  prefix_width=0
+  for token in "${tokens[@]}"; do
+    if (( have_display_width )); then
+      _ui_display_width "$token"
+      token_width=$REPLY
+    else
+      token_width=${#token}
+    fi
+    (( prefix_width + token_width <= left )) || break
+    prefix+=$token
+    (( prefix_width += token_width ))
+  done
+
+  suffix_width=0
+  for (( index = ${#tokens[@]}; index >= 1; index-- )); do
+    token=${tokens[$index]}
+    if (( have_display_width )); then
+      _ui_display_width "$token"
+      token_width=$REPLY
+    else
+      token_width=${#token}
+    fi
+    (( suffix_width + token_width <= right )) || break
+    suffix="${token}${suffix}"
+    (( suffix_width += token_width ))
+  done
+
+  if (( $+functions[_ui_strip_leading_marks_reply] )); then
+    _ui_strip_leading_marks_reply "$suffix"
+    suffix=$REPLY
+  fi
+  print -r -- "${prefix}${marker}${suffix}"
+}
+EOF_WIDTH_REFERENCE
+
+  print -r -- "$width_matrix" >| "$tmp_dir/width-matrix.zsh"
+  print -r -- "$width_reference" >| "$tmp_dir/width-reference.zsh"
+  command mkdir -p -- "$tmp_dir/width-live" "$tmp_dir/width-frozen"
+  zsh -f "$tmp_dir/width-matrix.zsh" "$repo_dir" '' '' "$tmp_dir/width-live" >| "$tmp_dir/width-live.txt" 2>&1 &
+  live_pid=$!
+  zsh -f "$tmp_dir/width-matrix.zsh" "$repo_dir" "$tmp_dir/width-reference.zsh" '' "$tmp_dir/width-frozen" >| "$tmp_dir/width-frozen.txt" 2>&1 &
+  frozen_pid=$!
+  wait $live_pid; live_status=$?
+  wait $frozen_pid; frozen_status=$?
+  assert_status "$live_status:$frozen_status" 0:0 'width oracle matrix runs with live and frozen helpers' || return 1
+  if [[ "$(<"$tmp_dir/width-live.txt")" != "$(<"$tmp_dir/width-frozen.txt")" ]]; then
+    print -u2 -- 'not ok: width, truncation and padding match frozen helpers'
+    command diff -- "$tmp_dir/width-frozen.txt" "$tmp_dir/width-live.txt" | command head -40 >&2
+    return 1
+  fi
+  print -- 'ok: width, truncation and padding match frozen helpers across ASCII, Unicode, escapes and locales'
+
+  local loaded
+  loaded=$(LC_ALL=C.UTF-8 zsh -fc '
+    source "$1/55-ui-helpers.zsh"
+    source "$1/lib/functions-common.zsh"
+    _ui_display_width "plain ascii label"
+    _ui_truncate_reply 9 "plain ascii label"
+    _ui_pad_reply left 9 "plain ascii label"
+    _ui_safe_truncate 9 "plain ascii label" >/dev/null
+    print -r -- "${_ZSH_UI_WIDTH_DATA_LOADED:-0}"' width "$repo_dir")
+  assert_equals "$loaded" 0 'ASCII width and truncation leave Unicode width tables unloaded' || return 1
+}
+
+# Frozen pre-chunking collector: exact records, scan state, scratch and
+# dusage/bigfiles output across tab, KiB, control, Unicode and tail cases,
+# on both the sysread path and the read fallback.
+test_scan_record_oracle() {
+  local scan_matrix scan_reference live frozen fallback
+  integer rc
+
+  IFS= read -r -d '' scan_matrix <<'EOF_SCAN_MATRIX'
+# Usage: zsh -f scan-matrix.zsh repo scratch [reference] [fallback]
+emulate -L zsh
+setopt NO_UNSET
+repo=$1 scratch=$2
+source "$repo/55-ui-helpers.zsh"
+source "$repo/60-functions.zsh"
+_zsh_functions_load files || exit 90
+[[ -n ${3-} ]] && source "$3"
+if [[ ${4-} == fallback ]]; then
+  # Simulate a build without zsh/system to exercise the read fallback.
+  zmodload() { [[ $* == *zsh/system* ]] && return 1; builtin zmodload "$@"; }
+fi
+functions[_ui_plain_mode]='return 0'
+command mkdir -p -- "$scratch/bin" "$scratch/target/entry" "$scratch/tree"
+print -r -- 'x' >| "$scratch/tree/file"
+print -r -- '#!/bin/sh
+cat -- "$SCAN_FIXTURE"
+exit "${SCAN_DU_STATUS:-0}"' >| "$scratch/bin/du"
+print -r -- '#!/bin/sh
+printf "%s\0" "$SCAN_FIND_PATH"
+exit "${SCAN_FIND_STATUS:-0}"' >| "$scratch/bin/find"
+command chmod +x -- "$scratch/bin/du" "$scratch/bin/find"
+path=("$scratch/bin" $path)
+export SCAN_FIXTURE=$scratch/fixture SCAN_FIND_PATH=$scratch/tree/file
+export TMPDIR=$scratch
+typeset -A fixtures
+fixtures=(
+  empty ''
+  simple $'1\ta\0'
+  malformed $'x1\ta\0-1\tb\0001.5\tc\0 1\td\0001 \te\0\0\0\0002\tok\0'
+  tabs $'\t\t3\tlead\0004\t\tdouble\0005\ttrail\t\t\0006\tin\tner\0007\0008\t\0\t\0009\ta\t\tb\t\0'
+  controls $'10\tline1\nline2\00011\t\r\e\x01\x7f\00012\t\\back\\slash\0'
+  unicode $'13\t雪.txt\00014\tcaf\xc3\xa9\xff\00015\t\xe9\x9b\0'
+  unterminated $'16\tok\00017\ttail-unterminated'
+  ties $'5\tfile10\0005\tfile9\0005\tfile100\00050\t2\0005\t10\0005\tfile9\0'
+)
+typeset big=''
+integer i
+for (( i = 1; i <= 9000; i++ )); do
+  if (( i % 997 == 0 )); then big+=$'\t'"$i"$'\t\tpath/'"$i"$'\t\0'; else big+="$((i % 300))"$'\t'"/synthetic/dir-$((i % 17))/file $i"$'\0'; fi
+done
+fixtures[big]=$big
+# Normalize the per-run scratch path so live and frozen runs compare exactly.
+norm() {
+  local text
+  IFS= read -r -d '' text < "$1"
+  print -rn -- "${text//$scratch/SCRATCH}"
+}
+report() {
+  print -r -- "records=${#records} sha=$(print -rn -- "${(j:|:)${(@qqqq)records}}" | command cksum)"
+  (( ${#records} <= 40 )) && print -r -- "${(j:|:)${(@qqqq)records}}"
+  print -r -- "result=${(j:,:)${(@kv)scan_result}} signal=$signal_status"
+}
+for name in ${(ko)fixtures}; do
+  print -rn -- "${fixtures[$name]}" >| "$scratch/fixture"
+  for du_status in 0 1; do
+    export SCAN_DU_STATUS=$du_status
+    print -r -- "== $name du=$du_status"
+    () {
+      local -a records
+      local -A scan_result
+      integer signal_status=0 rc
+      REPLY=sentinel; reply=(one two)
+      _zsh_scan_collect dusage "$scratch/target" "$scratch/target/entry"; rc=$?
+      print -r -- "collect rc=$rc scratch=$REPLY:${(j:,:)reply}"
+      report
+      _zsh_scan_collect bigfiles "$scratch/tree"; rc=$?
+      print -r -- "collect-bigfiles rc=$rc"
+      report
+    }
+    dusage "$scratch/target" 30 >| "$scratch/out" 2>| "$scratch/err"; rc=$?
+    print -r -- "dusage rc=$rc out=$(norm "$scratch/out" | command cksum) err=${(qqqq)$(norm "$scratch/err")}"
+    (( ${#fixtures[$name]} < 400 )) && norm "$scratch/out"
+    bigfiles "$scratch/tree" 7 >| "$scratch/out" 2>| "$scratch/err"; rc=$?
+    print -r -- "bigfiles rc=$rc out=$(norm "$scratch/out" | command cksum) err=${(qqqq)$(norm "$scratch/err")}"
+    (( ${#fixtures[$name]} < 400 )) && norm "$scratch/out"
+  done
+done
+unset SCAN_DU_STATUS
+# Partial find with a successful du.
+export SCAN_FIND_STATUS=1
+print -rn -- $'3\tfound\0' >| "$scratch/fixture"
+bigfiles "$scratch/tree" 5 >| "$scratch/out" 2>| "$scratch/err"; rc=$?
+print -r -- "partial-find rc=$rc out=${(qqqq)$(norm "$scratch/out")} err=${(qqqq)$(norm "$scratch/err")}"
+leftovers=( "$scratch"/(dusage|bigfiles).*(N) )
+print -r -- "leftovers=${#leftovers}"
+EOF_SCAN_MATRIX
+  IFS= read -r -d '' scan_reference <<'EOF_SCAN_REFERENCE'
+_zsh_scan_collect() {
+  emulate -L zsh
+  setopt localtraps
+  local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file=''
+  integer du_status=0 find_status=0 result_status=0
+  shift 2
+  trap 'signal_status=130; return 130' INT
+  trap 'signal_status=143; return 143' TERM
+  trap 'signal_status=129; return 129' HUP
+  records=()
+  scan_result=( state complete status 0 du_status 0 find_status 0 diagnostic '' )
+  {
+    path_list_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.paths.XXXXXX") || return 1
+    raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.raw.XXXXXX") || return 1
+    if [[ $mode == dusage ]]; then
+      for entry_path in "$@"; do
+        print -rn -- "$entry_path"$'\0'
+      done >"$path_list_file"
+      command du -sk --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+      du_status=$?
+    else
+      command find "$target" -type f -print0 2>/dev/null >"$path_list_file"
+      find_status=$?
+      if [[ -s $path_list_file ]]; then
+        command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+        du_status=$?
+      fi
+    fi
+    while IFS=$'\t' read -r -d '' kib entry_path; do
+      [[ $kib == <-> ]] || continue
+      records+=("${kib}"$'\t'"${entry_path}")
+    done <"$raw_output_file"
+  } always {
+    command rm -f -- "$path_list_file" "$raw_output_file"
+  }
+  scan_result[du_status]=$du_status
+  scan_result[find_status]=$find_status
+  if (( find_status )); then
+    result_status=$find_status
+    scan_result[diagnostic]="find exit $find_status"
+  fi
+  if (( du_status )); then
+    result_status=$du_status
+    [[ -n ${scan_result[diagnostic]} ]] && scan_result[diagnostic]+=', '
+    scan_result[diagnostic]+="du exit $du_status"
+  fi
+  scan_result[status]=$result_status
+  (( result_status )) && scan_result[state]=partial
+  return 0
+}
+EOF_SCAN_REFERENCE
+
+  print -r -- "$scan_matrix" >| "$tmp_dir/scan-matrix.zsh"
+  print -r -- "$scan_reference" >| "$tmp_dir/scan-reference.zsh"
+  command mkdir -p -- "$tmp_dir/scan-live" "$tmp_dir/scan-frozen" "$tmp_dir/scan-fallback"
+  live=$(LC_ALL=C.UTF-8 zsh -f "$tmp_dir/scan-matrix.zsh" "$repo_dir" "$tmp_dir/scan-live" '' '' 2>&1)
+  rc=$?
+  assert_status "$rc" 0 'scan record oracle runs with the live collector' || return 1
+  frozen=$(LC_ALL=C.UTF-8 zsh -f "$tmp_dir/scan-matrix.zsh" "$repo_dir" "$tmp_dir/scan-frozen" "$tmp_dir/scan-reference.zsh" '' 2>&1)
+  fallback=$(LC_ALL=C.UTF-8 zsh -f "$tmp_dir/scan-matrix.zsh" "$repo_dir" "$tmp_dir/scan-fallback" '' fallback 2>&1)
+  if [[ $live != "$frozen" || $fallback != "$frozen" ]]; then
+    print -u2 -- 'not ok: scan records match the frozen collector'
+    command diff <(print -r -- "$frozen") <(print -r -- "$live") | command head -30 >&2
+    command diff <(print -r -- "$frozen") <(print -r -- "$fallback") | command head -30 >&2
+    return 1
+  fi
+  assert_contains "$live" 'leftovers=0' 'scan record oracle leaves no temporary files' || return 1
+  print -- 'ok: chunked and fallback scan records match the frozen collector'
+}
+
+# A signal that arrives while records are being ingested is recorded for the
+# caller in signal_status, leaves a partial record prefix and removes both
+# temporary files (matching the pre-chunking read loop).
+test_scan_ingestion_signal() {
+  emulate -L zsh
+
+  local fakebin="$tmp_dir/scan-signal-bin" fixture_dir="$tmp_dir/scan-signal"
+  local raw="$tmp_dir/scan-signal-raw" content=$'123\t/synthetic/path/abcdefghijkl/x\0' signal_name output
+  local watcher="$tmp_dir/scan-signal-watch.zsh" marker="$tmp_dir/scan-signal-marker" outcome=''
+  integer expected index status_value record_count attempt
+  local -a leftovers
+
+  # A timed signal could land before ingestion starts or after it ends. Instead
+  # a watcher follows the collector's read offset in du's output through
+  # /proc/<pid>/fdinfo and signals inside the ingestion window.
+  if [[ ! -r /proc/$$/fdinfo/0 ]]; then
+    print -r -- 'skip: scan ingestion signal checks need /proc/<pid>/fdinfo'
+    return 0
+  fi
+
+  command mkdir -p -- "$fakebin" "$fixture_dir/entry"
+  # 262,144 fixed records (9 MiB); no adaptive growth.
+  for (( index = 0; index < 18; index++ )); do content+=$content; done
+  print -rn -- "$content" >| "$raw"
+  print -r -- '#!/bin/sh
+raw=$(readlink "/proc/$$/fd/1")
+cat -- "$SCAN_SIGNAL_RAW"
+"$SCAN_SIGNAL_ZSH" -f "$SCAN_SIGNAL_WATCHER" "$PPID" "$raw" "$SCAN_SIGNAL_NAME" "$SCAN_SIGNAL_MARKER" </dev/null >/dev/null 2>&1 &
+exit 0' >| "$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  # Signal only after two 64 KiB reads (the first chunk's records are stored)
+  # and before half the file, leaving ingestion still running. Polls every
+  # 10 ms, stops after 20 s or when the collector exits, and reports the outcome.
+  print -r -- 'emulate -L zsh
+zmodload -F zsh/stat b:zstat || exit 1
+zmodload zsh/zselect || exit 1
+local parent=$1 raw=$2 signal_name=$3 marker=$4 fd line
+local -a target size
+integer polls pos=-1 low=131072 high
+zstat -A size +size -- "$raw" || exit 1
+high=$(( size[1] / 2 ))
+for (( polls = 0; polls < 2000; polls++ )); do
+  [[ -d /proc/$parent ]] || break
+  for fd in /proc/$parent/fd/<->(N); do
+    zstat -L -A target +link -- "$fd" 2>/dev/null || continue
+    [[ ${target[1]} == "$raw" ]] || continue
+    while IFS= read -r line; do
+      if [[ $line == pos:* ]]; then
+        pos=${line##*[[:space:]]}
+        break
+      fi
+    done <"/proc/$parent/fdinfo/${fd:t}" 2>/dev/null
+    if (( pos > low && pos <= high )); then
+      print -r -- "fired $pos ${size[1]}" >| "$marker"
+      kill -s "$signal_name" "$parent"
+      exit 0
+    fi
+  done
+  zselect -t 1
+done
+print -r -- "missed $pos ${size[1]}" >| "$marker"' >| "$watcher"
+  for signal_name expected in INT 130 TERM 143; do
+    # Only a missed window is retried, at most three times; a fired signal is final.
+    for (( attempt = 1; attempt <= 3; attempt++ )); do
+      command rm -f -- "$marker"
+      output=$(PATH="$fakebin:$PATH" TMPDIR=$tmp_dir SCAN_SIGNAL_RAW=$raw SCAN_SIGNAL_NAME=$signal_name \
+        SCAN_SIGNAL_ZSH=${commands[zsh]} SCAN_SIGNAL_WATCHER=$watcher SCAN_SIGNAL_MARKER=$marker \
+        zsh -fc 'source "$1/55-ui-helpers.zsh"; source "$1/60-functions.zsh"; _zsh_functions_load files || exit 90
+          typeset -a records; typeset -A scan_result; integer signal_status=0
+          _zsh_scan_collect dusage "$2" "$2/entry"
+          print -r -- "$signal_status ${#records}"' \
+        scan-signal "$repo_dir" "$fixture_dir")
+      for (( index = 0; index < 250; index++ )); do
+        [[ -s $marker ]] && break
+        command sleep 0.1
+      done
+      outcome=''
+      [[ -s $marker ]] && outcome=$(<"$marker")
+      [[ $outcome == fired* ]] && break
+    done
+    [[ $outcome == fired* ]] || {
+      print -u2 -- "not ok: $signal_name watcher never observed the ingestion window (${outcome:-no outcome})"
+      return 1
+    }
+    status_value=${output%% *}
+    record_count=${output##* }
+    assert_equals "$status_value" "$expected" "scan collection records $signal_name during record ingestion" || return 1
+    (( record_count > 0 && record_count < 262144 )) || {
+      print -u2 -- "not ok: $signal_name during ingestion keeps a partial record prefix ($output; $outcome)"
+      return 1
+    }
+    leftovers=( "$tmp_dir"/dusage.*(N) )
+    assert_equals "${#leftovers[@]}" 0 "scan collection removes temporary files after $signal_name during ingestion" || return 1
+  done
+}
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1103,11 +1837,15 @@ main() {
   test_usage_temp_cleanup || return 1
   test_usage_partial_scan || return 1
   test_usage_signal_cleanup || return 1
+  test_scan_record_oracle || return 1
+  test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1
   test_path_empty_entries || return 1
   test_control_character_paths || return 1
   test_sanitizer_ascii_fast_path || return 1
   test_display_width || return 1
+  test_width_truncation_oracle || return 1
+  test_truncate_measures_text_once || return 1
   test_human_bytes || return 1
   test_alias_probes_are_quiet || return 1
   test_small_helper_success_paths || return 1

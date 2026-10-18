@@ -880,29 +880,38 @@ _upkg_npm_outdated_looks_valid() {
   return 1
 }
 
+# Reply-returning parser helpers avoid one command substitution per field.
+# Their printing wrappers keep the original stdout and nonmutating contracts.
+_upkg_search_trim_reply() {
+  emulate -L zsh
+
+  REPLY=$1
+
+  REPLY=${REPLY//$'\r'/}
+  REPLY=${REPLY//$'\n'/ }
+  REPLY=${REPLY//$'\t'/ }
+
+  while [ "${REPLY# }" != "$REPLY" ]; do
+    REPLY=${REPLY# }
+  done
+  while [ "${REPLY% }" != "$REPLY" ]; do
+    REPLY=${REPLY% }
+  done
+  while [[ $REPLY == *'  '* ]]; do
+    REPLY=${REPLY//'  '/' '}
+  done
+}
+
 _upkg_search_trim() {
   emulate -L zsh
 
-  local value=$1
+  local REPLY
 
-  value=${value//$'\r'/}
-  value=${value//$'\n'/ }
-  value=${value//$'\t'/ }
-
-  while [ "${value# }" != "$value" ]; do
-    value=${value# }
-  done
-  while [ "${value% }" != "$value" ]; do
-    value=${value% }
-  done
-  while [[ $value == *'  '* ]]; do
-    value=${value//'  '/' '}
-  done
-
-  print -r -- "$value"
+  _upkg_search_trim_reply "$1"
+  print -r -- "$REPLY"
 }
 
-_upkg_brew_version_from_header() {
+_upkg_brew_version_from_header_reply() {
   emulate -L zsh
 
   local header=$1 token
@@ -922,24 +931,44 @@ _upkg_brew_version_from_header() {
     esac
 
     if [[ $token == [0-9]* || $token == latest ]]; then
-      print -r -- "$token"
+      REPLY=$token
       return 0
     fi
   done
 
-  print -r -- '?'
+  REPLY='?'
+}
+
+_upkg_brew_version_from_header() {
+  emulate -L zsh
+
+  local REPLY
+
+  _upkg_brew_version_from_header_reply "$1"
+  print -r -- "$REPLY"
+}
+
+_upkg_brew_name_from_header_reply() {
+  emulate -L zsh
+
+  REPLY=$1
+
+  REPLY=${REPLY#'==> '}
+  REPLY=${REPLY%%:*}
+  REPLY=${REPLY%% \(*}
+  # Match the trailing-newline removal of the former captured result.
+  while [[ $REPLY == *$'\n' ]]; do
+    REPLY=${REPLY%$'\n'}
+  done
 }
 
 _upkg_brew_name_from_header() {
   emulate -L zsh
 
-  local header=$1
+  local REPLY
 
-  header=${header#'==> '}
-  header=${header%%:*}
-  header=${header%% \(*}
-
-  print -r -- "$header"
+  _upkg_brew_name_from_header_reply "$1"
+  print -r -- "$REPLY"
 }
 
 _upkg_search_add_rows() {
@@ -977,10 +1006,22 @@ _upkg_finish_search_results() {
   _upkg_set_last_result 'matches found' "${#rows[@]} result(s)"
 }
 
+# Rich cells were formerly captured: the helper saw a pipe and used the
+# ASCII marker, and command substitution dropped trailing newlines.
+_upkg_search_cell_reply() {
+  emulate -L zsh
+
+  _ui_truncate_marker_reply '...' "$@"
+  while [[ $REPLY == *$'\n' ]]; do
+    REPLY=${REPLY%$'\n'}
+  done
+}
+
 _upkg_format_search_rows() {
   emulate -L zsh
 
   local row manager name version description
+  local manager_cell name_cell version_cell description_cell
   local width manager_width name_width version_width desc_width REPLY
   local failed_count=0 cancelled_count=0
   local failed_managers=''
@@ -1049,24 +1090,34 @@ _upkg_format_search_rows() {
       fields=("${(@ps:\t:)row}")
       manager=${fields[1]:-}; name=${fields[2]:-}; version=${fields[3]:-}; description=${fields[4]:-}
       [ -n "$version" ] || version='?'
-      description=$(_upkg_search_trim "$description")
+      _upkg_search_trim_reply "$description"
+      description=$REPLY
+      # Color helpers overwrite REPLY, so keep each cell before printing.
+      _upkg_search_cell_reply "$manager_width" "$manager"
+      manager_cell=$REPLY
+      _upkg_search_cell_reply "$name_width" "$name"
+      name_cell=$REPLY
+      _upkg_search_cell_reply "$version_width" "$version"
+      version_cell=$REPLY
 
       _ui_panel_prefix
       _ui_color accent
-      _ui_pad left "$manager_width" "$(_ui_truncate "$manager_width" "$manager")"
+      _ui_pad left "$manager_width" "$manager_cell"
       _ui_reset
       print -nr -- ' '
       _ui_color text
-      _ui_pad left "$name_width" "$(_ui_truncate "$name_width" "$name")"
+      _ui_pad left "$name_width" "$name_cell"
       _ui_reset
       print -nr -- ' '
       _ui_color info
-      _ui_pad left "$version_width" "$(_ui_truncate "$version_width" "$version")"
+      _ui_pad left "$version_width" "$version_cell"
       _ui_reset
       if [ -n "$description" ]; then
+        _upkg_search_cell_reply "$desc_width" "$description"
+        description_cell=$REPLY
         print -nr -- ' '
         _ui_color muted
-        print -nr -- "$(_ui_truncate "$desc_width" "$description")"
+        print -nr -- "$description_cell"
         _ui_reset
       fi
       print ''
@@ -1254,22 +1305,32 @@ _upkg_search_progress_clear() {
   print -nr -- $'\r'
 }
 
-_upkg_append_search_description() {
+_upkg_append_search_description_reply() {
   emulate -L zsh
 
   local row=$1
   local description=$2
 
-  [ -n "$description" ] || {
-    print -r -- "$row"
-    return 0
-  }
-
-  if [[ $row == *$'\t' ]]; then
-    print -r -- "${row}${description}"
+  if [ -z "$description" ]; then
+    REPLY=$row
+  elif [[ $row == *$'\t' ]]; then
+    REPLY="${row}${description}"
   else
-    print -r -- "${row} ${description}"
+    REPLY="${row} ${description}"
   fi
+  # Match the trailing-newline removal of the former captured result.
+  while [[ $REPLY == *$'\n' ]]; do
+    REPLY=${REPLY%$'\n'}
+  done
+}
+
+_upkg_append_search_description() {
+  emulate -L zsh
+
+  local REPLY
+
+  _upkg_append_search_description_reply "$1" "$2"
+  print -r -- "$REPLY"
 }
 
 upkg() {

@@ -260,20 +260,30 @@ _ui_display_width() {
   emulate -L zsh
   setopt MULTIBYTE
 
-  local text=$1 char
-  local non_ascii_pattern='*[^ -~]*'
-  integer index code width=0
+  local text=$1 run
+  local non_ascii_pattern='*[^ -~]*' non_ascii_tail='[^ -~]*'
+  integer code width=0 remaining
 
   if [[ $text != ${~non_ascii_pattern} ]]; then
     REPLY=${#text}
     return 0
   fi
 
-  for (( index = 1; index <= ${#text}; index++ )); do
-    char=${text[$index]}
-    printf -v code '%d' "'$char"
+  # Count each printable-ASCII run at once; measure other code points singly.
+  # The character count bounds the walk: Zsh counts a trailing incomplete
+  # multibyte sequence as one character but slices it byte by byte.
+  remaining=${#text}
+  while (( remaining > 0 )); do
+    run=${text%%${~non_ascii_tail}}
+    if [[ -n $run ]]; then
+      (( width += ${#run}, remaining -= ${#run} ))
+      (( remaining > 0 )) || break
+      text=${text:${#run}}
+    fi
+    (( code = #text ))
     _ui_char_width $code
-    (( width += REPLY ))
+    (( width += REPLY, remaining-- ))
+    text=${text:1}
   done
   REPLY=$width
 }
@@ -293,44 +303,70 @@ _ui_strip_leading_marks_reply() {
   REPLY=$text
 }
 
-_ui_truncate_reply() {
+# Truncates with an explicit marker. Former command-substitution callers
+# always saw a pipe and therefore the ASCII marker; they pass '...'.
+_ui_truncate_marker_reply() {
   emulate -L zsh
   setopt MULTIBYTE
 
-  local width=$1
-  shift
+  local marker=$1 width=$2
+  shift 2
 
   local text="$*"
-  local marker='…'
-  local char prefix='' suffix=''
-  integer index code char_width text_width marker_width left right prefix_width suffix_width
 
   (( width > 0 )) || {
     REPLY=''
     return 0
   }
 
-  if _ui_ascii_mode; then
-    marker='...'
-  fi
-
   _ui_display_width "$text"
-  text_width=$REPLY
-  if (( text_width <= width )); then
+  if (( REPLY <= width )); then
     REPLY=$text
     return 0
   fi
 
+  _ui_truncate_cut_reply "$marker" "$width" "$text"
+}
+
+# Cuts TEXT, which callers have measured once and found wider than WIDTH,
+# around MARKER. Fitting text never reaches here.
+_ui_truncate_cut_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local marker=$1 width=$2 text=$3
+  local char prefix='' suffix=''
+  local non_ascii_pattern='*[^ -~]*'
+  integer index code char_width marker_width left right prefix_width suffix_width
+
   _ui_display_width "$marker"
   marker_width=$REPLY
+
+  # Printable ASCII is one cell per character: slice instead of measuring
+  # each character. Results match the per-character loops below exactly.
+  if [[ $text != ${~non_ascii_pattern} ]]; then
+    if (( width <= marker_width + 1 )); then
+      REPLY=${text[1,width]}
+    else
+      left=$(( (width - marker_width) / 2 ))
+      right=$(( width - marker_width - left ))
+      REPLY="${text[1,left]}${marker}${text[-right,-1]}"
+    fi
+    return 0
+  fi
+
   if (( width <= marker_width + 1 )); then
     prefix=''
     prefix_width=0
     for (( index = 1; index <= ${#text}; index++ )); do
       char=${text[$index]}
-      printf -v code '%d' "'$char"
-      _ui_char_width $code
-      char_width=$REPLY
+      (( code = #char ))
+      if (( code < 128 )); then
+        char_width=1
+      else
+        _ui_char_width $code
+        char_width=$REPLY
+      fi
       (( prefix_width + char_width > width )) && break
       prefix+=$char
       (( prefix_width += char_width ))
@@ -346,9 +382,13 @@ _ui_truncate_reply() {
   prefix_width=0
   for (( index = 1; index <= ${#text}; index++ )); do
     char=${text[$index]}
-    printf -v code '%d' "'$char"
-    _ui_char_width $code
-    char_width=$REPLY
+    (( code = #char ))
+    if (( code < 128 )); then
+      char_width=1
+    else
+      _ui_char_width $code
+      char_width=$REPLY
+    fi
     (( prefix_width + char_width > left )) && break
     prefix+=$char
     (( prefix_width += char_width ))
@@ -358,9 +398,13 @@ _ui_truncate_reply() {
   suffix_width=0
   for (( index = ${#text}; index >= 1; index-- )); do
     char=${text[$index]}
-    printf -v code '%d' "'$char"
-    _ui_char_width $code
-    char_width=$REPLY
+    (( code = #char ))
+    if (( code < 128 )); then
+      char_width=1
+    else
+      _ui_char_width $code
+      char_width=$REPLY
+    fi
     (( suffix_width + char_width > right )) && break
     suffix="${char}${suffix}"
     (( suffix_width += char_width ))
@@ -370,6 +414,32 @@ _ui_truncate_reply() {
   # to the ellipsis. Keep complete base-plus-mark sequences at the cut.
   _ui_strip_leading_marks_reply "$suffix"
   REPLY="${prefix}${marker}${REPLY}"
+}
+
+_ui_truncate_reply() {
+  emulate -L zsh
+
+  local width=$1
+  shift
+
+  (( width > 0 )) || {
+    REPLY=''
+    return 0
+  }
+
+  # Text that fits is returned as-is; only a cut needs the marker style.
+  # The text is measured once here; the cut reuses that result.
+  _ui_display_width "$*"
+  if (( REPLY <= width )); then
+    REPLY="$*"
+    return 0
+  fi
+
+  if _ui_ascii_mode; then
+    _ui_truncate_cut_reply '...' "$width" "$*"
+  else
+    _ui_truncate_cut_reply '…' "$width" "$*"
+  fi
 }
 
 _ui_truncate() {

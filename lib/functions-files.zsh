@@ -514,6 +514,8 @@ _zsh_scan_collect() {
   emulate -L zsh
   setopt localtraps
   local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file=''
+  local chunk carry='' record tab=$'\t'
+  local -a parts irregular
   integer du_status=0 find_status=0 result_status=0
   shift 2
   trap 'signal_status=130; return 130' INT
@@ -538,10 +540,40 @@ _zsh_scan_collect() {
         du_status=$?
       fi
     fi
-    while IFS=$'\t' read -r -d '' kib entry_path; do
-      [[ $kib == <-> ]] || continue
-      records+=("${kib}"$'\t'"${entry_path}")
-    done <"$raw_output_file"
+    if zmodload -F zsh/system b:sysread 2>/dev/null; then
+      # Bounded chunks replace read's one-syscall-per-byte input. Split
+      # complete NUL records and keep IFS=$'\t' read semantics: trim
+      # surrounding/repeated separator tabs, and ignore an unterminated tail.
+      while builtin sysread -s 65536 chunk; do
+        chunk=$carry$chunk
+        parts=( "${(@ps:\0:)chunk}" )
+        carry=${parts[-1]}
+        parts[-1]=()
+        (( ${#parts} )) || continue
+        irregular=( "${(@M)parts:#${tab}*}" "${(@M)parts:#*${tab}}" "${(@M)parts:#*${tab}${tab}*}" "${(@M)parts:#<->}" )
+        if (( ${#irregular} == 0 )); then
+          records+=( "${(@M)parts:#<->${tab}*}" )
+          continue
+        fi
+        for record in "${parts[@]}"; do
+          while [[ $record == ${tab}* ]]; do record=${record#$tab}; done
+          kib=${record%%${tab}*}
+          [[ $kib == <-> ]] || continue
+          entry_path=''
+          if [[ $record == *${tab}* ]]; then
+            entry_path=${record#*$tab}
+            while [[ $entry_path == ${tab}* ]]; do entry_path=${entry_path#$tab}; done
+            while [[ $entry_path == *${tab} ]]; do entry_path=${entry_path%$tab}; done
+          fi
+          records+=("${kib}"$'\t'"${entry_path}")
+        done
+      done <"$raw_output_file"
+    else
+      while IFS=$'\t' read -r -d '' kib entry_path; do
+        [[ $kib == <-> ]] || continue
+        records+=("${kib}"$'\t'"${entry_path}")
+      done <"$raw_output_file"
+    fi
   } always {
     command rm -f -- "$path_list_file" "$raw_output_file"
   }

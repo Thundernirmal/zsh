@@ -74,6 +74,7 @@ _ui_safe_truncate() {
   local text="$*"
   local marker='…'
   local token pair quad prefix='' suffix=''
+  local non_ascii_pattern='*[^ -~]*' ascii_char_pattern='[ -~]'
   local -a tokens
   integer index left right token_width prefix_width suffix_width text_width marker_width
   integer have_display_width=$(( $+functions[_ui_display_width] ))
@@ -107,6 +108,24 @@ _ui_safe_truncate() {
     return 0
   fi
 
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
+
+  # Printable ASCII without a backslash has no escape tokens: every token is
+  # one cell, so slice directly. The token loops below leave REPLY at the last
+  # measured token width (1) before the leading-mark pass; keep that scratch.
+  if [[ $text != ${~non_ascii_pattern} && $text != *\\* ]]; then
+    prefix=${text[1,left]}
+    suffix=${text[-right,-1]}
+    (( have_display_width )) && REPLY=1
+    if (( $+functions[_ui_strip_leading_marks_reply] )); then
+      _ui_strip_leading_marks_reply "$suffix"
+      suffix=$REPLY
+    fi
+    print -r -- "${prefix}${marker}${suffix}"
+    return 0
+  fi
+
   for (( index = 1; index <= ${#text}; index++ )); do
     token=${text[$index]}
 
@@ -130,13 +149,15 @@ _ui_safe_truncate() {
     tokens+=("$token")
   done
 
-  left=$(( (width - marker_width) / 2 ))
-  right=$(( width - marker_width - left ))
-
   prefix_width=0
   for token in "${tokens[@]}"; do
     if (( have_display_width )); then
-      _ui_display_width "$token"
+      # One printable ASCII character measures 1, as _ui_display_width would.
+      if [[ $token == ${~ascii_char_pattern} ]]; then
+        REPLY=1
+      else
+        _ui_display_width "$token"
+      fi
       token_width=$REPLY
     else
       token_width=${#token}
@@ -150,7 +171,12 @@ _ui_safe_truncate() {
   for (( index = ${#tokens[@]}; index >= 1; index-- )); do
     token=${tokens[$index]}
     if (( have_display_width )); then
-      _ui_display_width "$token"
+      # One printable ASCII character measures 1, as _ui_display_width would.
+      if [[ $token == ${~ascii_char_pattern} ]]; then
+        REPLY=1
+      else
+        _ui_display_width "$token"
+      fi
       token_width=$REPLY
     else
       token_width=${#token}

@@ -141,14 +141,24 @@ if (( $+functions[compdef] )); then
     emulate -L zsh
     setopt localoptions nullglob
 
-    local cache_dir cache_file attribute identity signature=''
-    local -a file_attributes cache_files attributes
+    local cache_dir cache_file attribute identity signature='' chunk carry
+    local -a file_attributes cache_files attributes lines
     local -A identities retained_data
     integer cacheable=1
     typeset -ga reply
     reply=()
 
-    cache_dir=$(_npkg_cache_dir) || return 1
+    if (( $+functions[_npkg_cache_dir_reply] )); then
+      # The fixed lazy helper loads the Nix domain once in this shell instead
+      # of in a discarded command-substitution child on every request.
+      () {
+        local REPLY
+        _npkg_cache_dir_reply || return 1
+        cache_dir=$REPLY
+      } || return 1
+    else
+      cache_dir=$(_npkg_cache_dir) || return 1
+    fi
     for cache_file in "$cache_dir"/nixpkgs-attrs-*.txt(N.); do
       [[ -r $cache_file && ! -L $cache_file ]] || continue
 
@@ -178,10 +188,24 @@ if (( $+functions[compdef] )); then
         fi
       else
         file_attributes=()
-        while IFS= read -r attribute; do
-          [[ -n $attribute ]] || continue
-          file_attributes+=("$attribute")
-        done < "$cache_file"
+        if zmodload -F zsh/system b:sysread 2>/dev/null; then
+          # Bounded chunks replace read's one-syscall-per-byte input. Keep its
+          # line contract: retain CR bytes, skip empty lines and ignore an
+          # unterminated final line.
+          carry=''
+          while builtin sysread -s 65536 chunk; do
+            chunk=$carry$chunk
+            lines=( "${(@ps:\n:)chunk}" )
+            carry=${lines[-1]}
+            lines[-1]=()
+            file_attributes+=( "${(@)lines:#}" )
+          done < "$cache_file"
+        else
+          while IFS= read -r attribute; do
+            [[ -n $attribute ]] || continue
+            file_attributes+=("$attribute")
+          done < "$cache_file"
+        fi
         (( _ZSH_NPKG_COMPLETION_PARSE_COUNT++ ))
       fi
       [[ -z $identity ]] || retained_data[$identity]="${(F)file_attributes}"

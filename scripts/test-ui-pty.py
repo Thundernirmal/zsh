@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Characterize rich UI output and live terminal checks through a real PTY."""
 import errno
+import hashlib
 import os
 from pathlib import Path
 import pty
@@ -83,6 +84,28 @@ done
 '''
 
 
+# Direct TTY truncation selects the Unicode marker while captured calls see a
+# pipe and select ASCII; both are frozen from the pre-fast-path helpers.
+TRUNCATION = r'''
+source "$1/lib/functions-common.zsh"
+COLUMNS=100
+for _ZSH_UI_GLYPH_TIER in unicode ascii; do
+  for text in abcdefghijklmnop 'ab雪cdefgh雪ijklmn' $'éxyzabcdefghij' 'tab\there\nnext line'; do
+    for w in 1 2 4 10; do
+      REPLY=sentinel
+      _ui_truncate_reply $w "$text"; print -r -- "direct-trunc $w ${(q)text} [$REPLY]"
+      print -r -- "captured-trunc $w ${(q)text} [$(_ui_truncate $w "$text")]"
+      _ui_pad_reply left $w "$text"; print -r -- "direct-pad $w ${(q)text} [$REPLY]"
+      REPLY=sentinel
+      print -rn -- "direct-safe $w ${(q)text} ["; _ui_safe_truncate $w "$text"; print -r -- "] scratch=$REPLY"
+      print -r -- "captured-safe $w ${(q)text} [$(_ui_safe_truncate $w "$text")]"
+    done
+  done
+done
+'''
+TRUNCATION_SHA256 = "3cc3bf37f8418e5bf14dc14126a1cefbaeebf538e879435db86df5fbdb39a85a"
+
+
 def main():
     for tty in (True, False):
         assert run(MATRIX, tty) == run(REFERENCE + MATRIX, tty)
@@ -116,6 +139,11 @@ path=("$HOME/bin")
 [[ $(_ui_term_width) == 80 ]] || exit 18
 _ui_is_rich_terminal || exit 19
 ''')
+    output = run(TRUNCATION)
+    assert b"direct-trunc 10 abcdefghijklmnop [abcd\xe2\x80\xa6lmnop]" in output, output
+    assert b"captured-trunc 10 abcdefghijklmnop [abc...mnop]" in output, output
+    assert b"direct-safe 4 abcdefghijklmnop [a\xe2\x80\xa6op\n] scratch=op" in output, output
+    assert hashlib.sha256(output).hexdigest() == TRUNCATION_SHA256, output.decode(errors="replace")
     print("ok: UI PTY parity, live width, fallback, scratch state, and public height override")
 
 
