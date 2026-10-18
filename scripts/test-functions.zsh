@@ -1093,6 +1093,48 @@ test_fbr_canonical_refs() (
 
 # Frozen pre-optimization width, truncation and padding helpers. Both
 # truncators keep their distinct narrow-width rules and REPLY side effects.
+test_truncate_measures_text_once() {
+  local output
+
+  # Each truncation entry point measures the full text once, whether it fits
+  # or is cut; cuts reuse that measurement instead of rescanning the text.
+  output=$(LC_ALL=C.UTF-8 zsh -fc '
+    source "$1/25-theme.zsh" || exit 90
+    source "$1/55-ui-helpers.zsh" || exit 91
+    functions[_measure_original]=$functions[_ui_display_width]
+    integer full_scans
+    probe=''
+    _ui_display_width() {
+      [[ $* == "$probe" ]] && (( full_scans++ ))
+      _measure_original "$@"
+    }
+    check() {
+      local label=$1 entry=$2
+      shift 2
+      probe="$*"
+      full_scans=0
+      if [[ $entry == marker ]]; then
+        _ui_truncate_marker_reply "..." 10 "$@"
+      else
+        _ui_truncate_reply 10 "$@"
+      fi
+      print -r -- "$entry $label scans=$full_scans result=$REPLY"
+    }
+    for entry in wrapper marker; do
+      check fit-ascii $entry abcdef
+      check cut-ascii $entry abcdefghijklmnopqrstuvwxyz
+      check cut-mixed $entry "雪abcdefghijklmnopqrstuvwxyz"
+      check cut-cjk $entry 雪雪雪雪雪雪雪雪雪雪雪雪
+      check cut-combining $entry "éééééééééééé"
+      check cut-joined $entry abc defghij klmnopqrstuvwxyz
+    done
+  ' measure "$repo_dir")
+  assert_equals "${#${(@M)${(f)output}:#* scans=1 *}}" 12 'truncation measures fitting and cut text once per entry point' || {
+    print -u2 -r -- "$output"
+    return 1
+  }
+}
+
 test_width_truncation_oracle() {
   local width_matrix width_reference
   integer live_status frozen_status live_pid frozen_pid
@@ -1803,6 +1845,7 @@ main() {
   test_sanitizer_ascii_fast_path || return 1
   test_display_width || return 1
   test_width_truncation_oracle || return 1
+  test_truncate_measures_text_once || return 1
   test_human_bytes || return 1
   test_alias_probes_are_quiet || return 1
   test_small_helper_success_paths || return 1

@@ -313,9 +313,6 @@ _ui_truncate_marker_reply() {
   shift 2
 
   local text="$*"
-  local char prefix='' suffix=''
-  local non_ascii_pattern='*[^ -~]*'
-  integer index code char_width text_width marker_width left right prefix_width suffix_width
 
   (( width > 0 )) || {
     REPLY=''
@@ -323,11 +320,24 @@ _ui_truncate_marker_reply() {
   }
 
   _ui_display_width "$text"
-  text_width=$REPLY
-  if (( text_width <= width )); then
+  if (( REPLY <= width )); then
     REPLY=$text
     return 0
   fi
+
+  _ui_truncate_cut_reply "$marker" "$width" "$text"
+}
+
+# Cuts TEXT, which callers have measured once and found wider than WIDTH,
+# around MARKER. Fitting text never reaches here.
+_ui_truncate_cut_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local marker=$1 width=$2 text=$3
+  local char prefix='' suffix=''
+  local non_ascii_pattern='*[^ -~]*'
+  integer index code char_width marker_width left right prefix_width suffix_width
 
   _ui_display_width "$marker"
   marker_width=$REPLY
@@ -418,17 +428,17 @@ _ui_truncate_reply() {
   }
 
   # Text that fits is returned as-is; only a cut needs the marker style.
+  # The text is measured once here; the cut reuses that result.
   _ui_display_width "$*"
   if (( REPLY <= width )); then
     REPLY="$*"
     return 0
   fi
 
-  set -- "$width" "$@"
   if _ui_ascii_mode; then
-    _ui_truncate_marker_reply '...' "$@"
+    _ui_truncate_cut_reply '...' "$width" "$*"
   else
-    _ui_truncate_marker_reply '…' "$@"
+    _ui_truncate_cut_reply '…' "$width" "$*"
   fi
 }
 
