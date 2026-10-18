@@ -1091,6 +1091,439 @@ test_fbr_canonical_refs() (
   fi
 )
 
+# Frozen pre-optimization width, truncation and padding helpers. Both
+# truncators keep their distinct narrow-width rules and REPLY side effects.
+test_width_truncation_oracle() {
+  local width_matrix width_reference
+  integer live_status frozen_status live_pid frozen_pid
+
+  IFS= read -r -d '' width_matrix <<'EOF_WIDTH_MATRIX'
+# Width/truncation characterization matrix; prints a transcript.
+# Usage: zsh -f width-matrix.zsh repo [reference-file] [exhaustive] [scratch]
+emulate -L zsh
+setopt NO_UNSET
+repo=$1 scratch=${4:-${TMPDIR:-/tmp}}
+source "$repo/55-ui-helpers.zsh"
+source "$repo/lib/functions-common.zsh"
+[[ -n ${2-} ]] && source "$2"
+integer exhaustive=0
+[[ ${3-} == exhaustive ]] && exhaustive=1
+integer w l
+typeset text mode out locale fn
+typeset -a widths lengths
+ascii_base='abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 ~!@#$%^&*()_+-=[]{};:,./<>?|`'"'"'"'
+while (( ${#ascii_base} < 80 )); do ascii_base+=$ascii_base; done
+probe() {
+  # probe label fn args...: records stdout, status, REPLY and reply after one call
+  local label=$1 fn=$2 rc out=''
+  shift 2
+  REPLY=sentinel; reply=(one two)
+  $fn "$@" >| "$scratch/out"; rc=$?
+  IFS= read -r -d '' out < "$scratch/out"
+  print -r -- "$label ${(qqqq)out} rc=$rc scratch=${(qqqq)REPLY}:${(j:,:)reply}"
+}
+run_set() {
+  local text=$1 both_pads=${2:-1} w
+  for w in "${widths[@]}"; do
+    probe "trunc w=$w ${(qqqq)text}" _ui_truncate_reply "$w" "$text"
+    probe "safe w=$w ${(qqqq)text}" _ui_safe_truncate "$w" "$text"
+    probe "padl w=$w ${(qqqq)text}" _ui_pad_reply left "$w" "$text"
+    (( both_pads )) && probe "padr w=$w ${(qqqq)text}" _ui_pad_reply right "$w" "$text"
+  done
+  probe "width ${(qqqq)text}" _ui_display_width "$text"
+}
+typeset empty=""
+unicode_fixtures=(
+  '' 'a' $'é' $'́abc' $'abć' $'abcdefghij́klmnop' '雪' '雪国の物語を読む' $'ab雪cd' $'ab雪́cd'
+  '😀' $'\U0001F468‍\U0001F469‍\U0001F467 family' $' branch' $'\U000F0001 nerd glyph text' $'x️⃣y'
+  $'क्ष हिन्दी' 'café crème brûlée' $'　wide space　' 'ｆｕｌｌｗｉｄｔｈ ｔｅｘｔ'
+  'a\nb\tc\e[0m' 'trailing\' '\x1b\x7f\x9f mixed' '\\double\\' '\xZZ not hex' 'ab\x1' $'tab\there' $'\x01\x02ctl'
+  'path/with\\backslash/name' 'abc雪\n雪def'
+  $'\xff' $'ab\xffcd' $'\xc3' $'abc\xc3' $'\x7f' $'a\x01b\x1bc' $'\u0085next' $'雪\xff雪' $'\xe9\x9b' $'tail\xe9\x9b'
+  "Package 雪 description ${(l:60::x:)empty}" "${(l:30::雪:)empty}" $'abc\u0301\u0301def雪ghi\u200bjkl' $'\ufeffbom text'
+)
+for mode in ascii unicode; do
+  if [[ $mode == ascii ]]; then _ui_ascii_mode() { return 0; }; else _ui_ascii_mode() { return 1; }; fi
+  for locale in C.UTF-8 C; do
+    # The real predicate always selects ASCII markers outside UTF-8 locales.
+    [[ $locale == C && $mode == unicode ]] && (( ! exhaustive )) && continue
+    LC_ALL=$locale
+    print -r -- "### mode=$mode locale=$locale"
+    if (( exhaustive )); then
+      lengths=( {0..80} ); widths=( {0..40} )
+    elif [[ $locale == C ]]; then
+      lengths=( 0 1 5 24 80 ); widths=( 0 1 3 4 5 24 )
+    else
+      lengths=( {0..7} 23 24 25 41 80 ); widths=( {0..7} 9 23 24 25 41 )
+    fi
+    for l in "${lengths[@]}"; do run_set "${ascii_base[1,l]}"; done
+    (( exhaustive )) && widths=( {0..12} 17 24 40 ) || widths=( 0 1 2 3 5 9 17 )
+    for text in "${unicode_fixtures[@]}"; do run_set "$text" "$exhaustive"; done
+  done
+done
+LC_ALL=C.UTF-8
+# Real marker-mode predicate (non-TTY plain mode) and fallback configurations.
+unfunction _ui_ascii_mode
+source "$repo/55-ui-helpers.zsh"
+[[ -n ${2-} ]] && source "$2"
+widths=( 0 1 2 3 4 5 9 24 )
+print -r -- "### real ascii-mode predicate"
+for text in "${ascii_base[1,30]}" $'ab雪́cd' 'a\nb\tc' $'́abc'; do run_set "$text"; done
+saved_width=$functions[_ui_display_width]
+saved_strip=$functions[_ui_strip_leading_marks_reply]
+for config in no-width no-strip neither; do
+  functions[_ui_display_width]=$saved_width
+  functions[_ui_strip_leading_marks_reply]=$saved_strip
+  case $config in
+    no-width) unfunction _ui_display_width ;;
+    no-strip) unfunction _ui_strip_leading_marks_reply ;;
+    neither) unfunction _ui_display_width _ui_strip_leading_marks_reply ;;
+  esac
+  print -r -- "### fallback $config"
+  for text in "${ascii_base[1,30]}" $'ab雪́cd' 'a\nb\tc' $'́abc' 'path/with\\backslash/name'; do
+    for w in 0 1 2 3 4 5 9 24; do probe "safe w=$w ${(qqqq)text}" _ui_safe_truncate "$w" "$text"; done
+  done
+done
+functions[_ui_display_width]=$saved_width
+functions[_ui_strip_leading_marks_reply]=$saved_strip
+# Unset and outer-local scratch for representative calls.
+print -r -- "### scratch states"
+for call in '_ui_truncate_reply 9 abcdefghijklmnop' '_ui_safe_truncate 9 abcdefghijklmnop' '_ui_safe_truncate 1 abcdef' \
+    '_ui_safe_truncate 4 abcdef' '_ui_pad_reply left 9 abcdefghijklmnop' '_ui_display_width abc' '_ui_safe_truncate 40 short'; do
+  unset REPLY reply
+  ${=call} >/dev/null; print -r -- "unset $call -> ${+REPLY}:${REPLY-}:${+reply}"
+  () { local REPLY=outer; local -a reply=(o1 o2); ${=call} >/dev/null; print -r -- "local $call -> $REPLY:${(j:,:)reply}"; }
+done
+print -r -- "width-data-loaded=${_ZSH_UI_WIDTH_DATA_LOADED:-0}"
+EOF_WIDTH_MATRIX
+  IFS= read -r -d '' width_reference <<'EOF_WIDTH_REFERENCE'
+_ui_char_width() {
+  emulate -L zsh
+  integer code=$1 low high middle
+  if (( code < 128 )); then
+    REPLY=1
+    return 0
+  fi
+  if (( ! ${_ZSH_UI_WIDTH_DATA_LOADED:-0} )); then
+    setopt localoptions no_aliases
+    source "$_ZSH_UI_HELPERS_DIR/lib/ui-width-data.zsh" || return 1
+  fi
+  low=1
+  high=${#_ZSH_UI_ZERO_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_ZERO_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_ZERO_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=0
+      return 0
+    fi
+  done
+  low=1
+  high=${#_ZSH_UI_WIDE_START}
+  while (( low <= high )); do
+    middle=$(( (low + high) / 2 ))
+    if (( code < _ZSH_UI_WIDE_START[middle] )); then
+      high=$(( middle - 1 ))
+    elif (( code > _ZSH_UI_WIDE_END[middle] )); then
+      low=$(( middle + 1 ))
+    else
+      REPLY=2
+      return 0
+    fi
+  done
+  REPLY=1
+}
+
+_ui_display_width() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local text=$1 char
+  local non_ascii_pattern='*[^ -~]*'
+  integer index code width=0
+
+  if [[ $text != ${~non_ascii_pattern} ]]; then
+    REPLY=${#text}
+    return 0
+  fi
+
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( width += REPLY ))
+  done
+  REPLY=$width
+}
+
+_ui_strip_leading_marks_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+  local text=$1 char
+  integer code
+  while [[ -n $text ]]; do
+    char=$text[1]
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    (( REPLY == 0 )) || break
+    text=${text[2,-1]}
+  done
+  REPLY=$text
+}
+
+_ui_truncate_reply() {
+  emulate -L zsh
+  setopt MULTIBYTE
+
+  local width=$1
+  shift
+
+  local text="$*"
+  local marker='…'
+  local char prefix='' suffix=''
+  integer index code char_width text_width marker_width left right prefix_width suffix_width
+
+  (( width > 0 )) || {
+    REPLY=''
+    return 0
+  }
+
+  if _ui_ascii_mode; then
+    marker='...'
+  fi
+
+  _ui_display_width "$text"
+  text_width=$REPLY
+  if (( text_width <= width )); then
+    REPLY=$text
+    return 0
+  fi
+
+  _ui_display_width "$marker"
+  marker_width=$REPLY
+  if (( width <= marker_width + 1 )); then
+    prefix=''
+    prefix_width=0
+    for (( index = 1; index <= ${#text}; index++ )); do
+      char=${text[$index]}
+      printf -v code '%d' "'$char"
+      _ui_char_width $code
+      char_width=$REPLY
+      (( prefix_width + char_width > width )) && break
+      prefix+=$char
+      (( prefix_width += char_width ))
+    done
+    REPLY=$prefix
+    return 0
+  fi
+
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
+
+  prefix=''
+  prefix_width=0
+  for (( index = 1; index <= ${#text}; index++ )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( prefix_width + char_width > left )) && break
+    prefix+=$char
+    (( prefix_width += char_width ))
+  done
+
+  suffix=''
+  suffix_width=0
+  for (( index = ${#text}; index >= 1; index-- )); do
+    char=${text[$index]}
+    printf -v code '%d' "'$char"
+    _ui_char_width $code
+    char_width=$REPLY
+    (( suffix_width + char_width > right )) && break
+    suffix="${char}${suffix}"
+    (( suffix_width += char_width ))
+  done
+
+  # A suffix must not attach a discarded base character's combining marks
+  # to the ellipsis. Keep complete base-plus-mark sequences at the cut.
+  _ui_strip_leading_marks_reply "$suffix"
+  REPLY="${prefix}${marker}${REPLY}"
+}
+
+_ui_truncate() {
+  _ui_truncate_reply "$@"
+  print -r -- "$REPLY"
+}
+
+_ui_pad_reply() {
+  emulate -L zsh
+
+  # 'right' = right-align text (leading spaces); 'left' = left-align (trailing spaces)
+  local align=$1
+  local width=$2
+  shift 2
+
+  _ui_truncate_reply "$width" "$*"
+  local text=$REPLY
+  local text_width
+  integer padding_width
+
+  _ui_display_width "$text"
+  text_width=$REPLY
+  padding_width=$(( width - text_width ))
+
+  (( padding_width < 0 )) && padding_width=0
+
+  if [[ $align == right ]]; then
+    printf -v REPLY '%*s%s' "$padding_width" '' "$text"
+  else
+    printf -v REPLY '%s%*s' "$text" "$padding_width" ''
+  fi
+}
+
+_ui_pad() {
+  _ui_pad_reply "$@"
+  print -nr -- "$REPLY"
+}
+
+_ui_safe_truncate() {
+  emulate -L zsh
+
+  local width=$1
+  shift
+
+  local text="$*"
+  local marker='…'
+  local token pair quad prefix='' suffix=''
+  local -a tokens
+  integer index left right token_width prefix_width suffix_width text_width marker_width
+  integer have_display_width=$(( $+functions[_ui_display_width] ))
+
+  (( width > 0 )) || {
+    print -r -- ''
+    return 0
+  }
+
+  if _ui_ascii_mode; then
+    marker='...'
+  fi
+
+  if (( have_display_width )); then
+    _ui_display_width "$text"
+    text_width=$REPLY
+    _ui_display_width "$marker"
+    marker_width=$REPLY
+  else
+    text_width=${#text}
+    marker_width=${#marker}
+  fi
+
+  if (( text_width <= width )); then
+    print -r -- "$text"
+    return 0
+  fi
+
+  if (( width <= marker_width )); then
+    print -r -- "${marker[1,width]}"
+    return 0
+  fi
+
+  for (( index = 1; index <= ${#text}; index++ )); do
+    token=${text[$index]}
+
+    if [[ $token == $'\\' ]]; then
+      pair=${text[$index,$(( index + 1 ))]}
+      quad=${text[$index,$(( index + 3 ))]}
+
+      if [[ $quad == \\x[0-9a-fA-F][0-9a-fA-F] ]]; then
+        token=$quad
+        (( index += 3 ))
+      else
+        case $pair in
+          '\n'|'\r'|'\t'|'\e'|'\a'|'\b'|'\f'|'\v')
+            token=$pair
+            (( index++ ))
+            ;;
+        esac
+      fi
+    fi
+
+    tokens+=("$token")
+  done
+
+  left=$(( (width - marker_width) / 2 ))
+  right=$(( width - marker_width - left ))
+
+  prefix_width=0
+  for token in "${tokens[@]}"; do
+    if (( have_display_width )); then
+      _ui_display_width "$token"
+      token_width=$REPLY
+    else
+      token_width=${#token}
+    fi
+    (( prefix_width + token_width <= left )) || break
+    prefix+=$token
+    (( prefix_width += token_width ))
+  done
+
+  suffix_width=0
+  for (( index = ${#tokens[@]}; index >= 1; index-- )); do
+    token=${tokens[$index]}
+    if (( have_display_width )); then
+      _ui_display_width "$token"
+      token_width=$REPLY
+    else
+      token_width=${#token}
+    fi
+    (( suffix_width + token_width <= right )) || break
+    suffix="${token}${suffix}"
+    (( suffix_width += token_width ))
+  done
+
+  if (( $+functions[_ui_strip_leading_marks_reply] )); then
+    _ui_strip_leading_marks_reply "$suffix"
+    suffix=$REPLY
+  fi
+  print -r -- "${prefix}${marker}${suffix}"
+}
+EOF_WIDTH_REFERENCE
+
+  print -r -- "$width_matrix" >| "$tmp_dir/width-matrix.zsh"
+  print -r -- "$width_reference" >| "$tmp_dir/width-reference.zsh"
+  command mkdir -p -- "$tmp_dir/width-live" "$tmp_dir/width-frozen"
+  zsh -f "$tmp_dir/width-matrix.zsh" "$repo_dir" '' '' "$tmp_dir/width-live" >| "$tmp_dir/width-live.txt" 2>&1 &
+  live_pid=$!
+  zsh -f "$tmp_dir/width-matrix.zsh" "$repo_dir" "$tmp_dir/width-reference.zsh" '' "$tmp_dir/width-frozen" >| "$tmp_dir/width-frozen.txt" 2>&1 &
+  frozen_pid=$!
+  wait $live_pid; live_status=$?
+  wait $frozen_pid; frozen_status=$?
+  assert_status "$live_status:$frozen_status" 0:0 'width oracle matrix runs with live and frozen helpers' || return 1
+  if [[ "$(<"$tmp_dir/width-live.txt")" != "$(<"$tmp_dir/width-frozen.txt")" ]]; then
+    print -u2 -- 'not ok: width, truncation and padding match frozen helpers'
+    command diff -- "$tmp_dir/width-frozen.txt" "$tmp_dir/width-live.txt" | command head -40 >&2
+    return 1
+  fi
+  print -- 'ok: width, truncation and padding match frozen helpers across ASCII, Unicode, escapes and locales'
+
+  local loaded
+  loaded=$(LC_ALL=C.UTF-8 zsh -fc '
+    source "$1/55-ui-helpers.zsh"
+    source "$1/lib/functions-common.zsh"
+    _ui_display_width "plain ascii label"
+    _ui_truncate_reply 9 "plain ascii label"
+    _ui_pad_reply left 9 "plain ascii label"
+    _ui_safe_truncate 9 "plain ascii label" >/dev/null
+    print -r -- "${_ZSH_UI_WIDTH_DATA_LOADED:-0}"' width "$repo_dir")
+  assert_equals "$loaded" 0 'ASCII width and truncation leave Unicode width tables unloaded' || return 1
+}
+
+# Frozen pre-chunking collector: exact records, scan state, scratch and
+# dusage/bigfiles output across tab, KiB, control, Unicode and tail cases,
+# on both the sysread path and the read fallback.
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1108,6 +1541,7 @@ main() {
   test_control_character_paths || return 1
   test_sanitizer_ascii_fast_path || return 1
   test_display_width || return 1
+  test_width_truncation_oracle || return 1
   test_human_bytes || return 1
   test_alias_probes_are_quiet || return 1
   test_small_helper_success_paths || return 1

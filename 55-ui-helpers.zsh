@@ -260,20 +260,30 @@ _ui_display_width() {
   emulate -L zsh
   setopt MULTIBYTE
 
-  local text=$1 char
-  local non_ascii_pattern='*[^ -~]*'
-  integer index code width=0
+  local text=$1 run
+  local non_ascii_pattern='*[^ -~]*' non_ascii_tail='[^ -~]*'
+  integer code width=0 remaining
 
   if [[ $text != ${~non_ascii_pattern} ]]; then
     REPLY=${#text}
     return 0
   fi
 
-  for (( index = 1; index <= ${#text}; index++ )); do
-    char=${text[$index]}
-    printf -v code '%d' "'$char"
+  # Count each printable-ASCII run at once; measure other code points singly.
+  # The character count bounds the walk: Zsh counts a trailing incomplete
+  # multibyte sequence as one character but slices it byte by byte.
+  remaining=${#text}
+  while (( remaining > 0 )); do
+    run=${text%%${~non_ascii_tail}}
+    if [[ -n $run ]]; then
+      (( width += ${#run}, remaining -= ${#run} ))
+      (( remaining > 0 )) || break
+      text=${text:${#run}}
+    fi
+    (( code = #text ))
     _ui_char_width $code
-    (( width += REPLY ))
+    (( width += REPLY, remaining-- ))
+    text=${text:1}
   done
   REPLY=$width
 }
@@ -303,6 +313,7 @@ _ui_truncate_reply() {
   local text="$*"
   local marker='…'
   local char prefix='' suffix=''
+  local non_ascii_pattern='*[^ -~]*'
   integer index code char_width text_width marker_width left right prefix_width suffix_width
 
   (( width > 0 )) || {
@@ -323,14 +334,32 @@ _ui_truncate_reply() {
 
   _ui_display_width "$marker"
   marker_width=$REPLY
+
+  # Printable ASCII is one cell per character: slice instead of measuring
+  # each character. Results match the per-character loops below exactly.
+  if [[ $text != ${~non_ascii_pattern} ]]; then
+    if (( width <= marker_width + 1 )); then
+      REPLY=${text[1,width]}
+    else
+      left=$(( (width - marker_width) / 2 ))
+      right=$(( width - marker_width - left ))
+      REPLY="${text[1,left]}${marker}${text[-right,-1]}"
+    fi
+    return 0
+  fi
+
   if (( width <= marker_width + 1 )); then
     prefix=''
     prefix_width=0
     for (( index = 1; index <= ${#text}; index++ )); do
       char=${text[$index]}
-      printf -v code '%d' "'$char"
-      _ui_char_width $code
-      char_width=$REPLY
+      (( code = #char ))
+      if (( code < 128 )); then
+        char_width=1
+      else
+        _ui_char_width $code
+        char_width=$REPLY
+      fi
       (( prefix_width + char_width > width )) && break
       prefix+=$char
       (( prefix_width += char_width ))
@@ -346,9 +375,13 @@ _ui_truncate_reply() {
   prefix_width=0
   for (( index = 1; index <= ${#text}; index++ )); do
     char=${text[$index]}
-    printf -v code '%d' "'$char"
-    _ui_char_width $code
-    char_width=$REPLY
+    (( code = #char ))
+    if (( code < 128 )); then
+      char_width=1
+    else
+      _ui_char_width $code
+      char_width=$REPLY
+    fi
     (( prefix_width + char_width > left )) && break
     prefix+=$char
     (( prefix_width += char_width ))
@@ -358,9 +391,13 @@ _ui_truncate_reply() {
   suffix_width=0
   for (( index = ${#text}; index >= 1; index-- )); do
     char=${text[$index]}
-    printf -v code '%d' "'$char"
-    _ui_char_width $code
-    char_width=$REPLY
+    (( code = #char ))
+    if (( code < 128 )); then
+      char_width=1
+    else
+      _ui_char_width $code
+      char_width=$REPLY
+    fi
     (( suffix_width + char_width > right )) && break
     suffix="${char}${suffix}"
     (( suffix_width += char_width ))
