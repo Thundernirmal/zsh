@@ -1,8 +1,0 @@
-width/40/cjk: baseline median=5783.080ms p95=6433.112ms n=5 rss<=4588KiB  candidate median=5669.711ms p95=5787.740ms n=5 rss<=4604KiB  baseline/candidate=1.02x
-width/1000/cjk: baseline median=279.605ms p95=290.778ms n=5 rss<=4628KiB  candidate median=170.822ms p95=174.197ms n=5 rss<=4688KiB  baseline/candidate=1.64x
-truncate/40/cjk: baseline median=8272.329ms p95=8796.811ms n=5 rss<=4668KiB  candidate median=8431.890ms p95=9677.847ms n=5 rss<=4564KiB  baseline/candidate=0.98x
-truncate/1000/cjk: baseline median=296.211ms p95=308.677ms n=5 rss<=4644KiB  candidate median=182.534ms p95=226.435ms n=5 rss<=4700KiB  baseline/candidate=1.62x
-safe-truncate/40/cjk: baseline median=9736.704ms p95=11267.680ms n=5 rss<=4688KiB  candidate median=9713.183ms p95=10188.309ms n=5 rss<=4620KiB  baseline/candidate=1.00x
-safe-truncate/1000/cjk: baseline median=451.747ms p95=456.824ms n=5 rss<=4684KiB  candidate median=334.403ms p95=339.816ms n=5 rss<=4732KiB  baseline/candidate=1.35x
-pad/40/cjk: baseline median=9762.586ms p95=10857.035ms n=5 rss<=4628KiB  candidate median=9684.593ms p95=9923.225ms n=5 rss<=4608KiB  baseline/candidate=1.01x
-pad/1000/cjk: baseline median=314.603ms p95=360.680ms n=5 rss<=4656KiB  candidate median=190.745ms p95=204.398ms n=5 rss<=4672KiB  baseline/candidate=1.65x

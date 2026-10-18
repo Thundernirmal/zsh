@@ -1,3 +1,0 @@
-records/1000: baseline median=35.309ms p95=37.955ms n=5 rss<=4920KiB  candidate median=9.060ms p95=9.803ms n=5 rss<=5524KiB  baseline/candidate=3.90x
-records/10000: baseline median=355.023ms p95=357.783ms n=5 rss<=5880KiB  candidate median=33.655ms p95=34.791ms n=5 rss<=6904KiB  baseline/candidate=10.55x
-records/100000: baseline median=8129.125ms p95=8164.955ms n=5 rss<=17492KiB  candidate median=336.544ms p95=338.873ms n=5 rss<=17696KiB  baseline/candidate=24.15x
