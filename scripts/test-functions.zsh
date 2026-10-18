@@ -1695,30 +1695,87 @@ test_scan_ingestion_signal() {
 
   local fakebin="$tmp_dir/scan-signal-bin" fixture_dir="$tmp_dir/scan-signal"
   local raw="$tmp_dir/scan-signal-raw" content=$'123\t/synthetic/path/abcdefghijkl/x\0' signal_name output
-  integer expected index status_value record_count
+  local watcher="$tmp_dir/scan-signal-watch.zsh" marker="$tmp_dir/scan-signal-marker" outcome=''
+  integer expected index status_value record_count attempt
   local -a leftovers
 
+  # A timed signal could land before ingestion starts or after it ends. Instead
+  # a watcher follows the collector's read offset in du's output through
+  # /proc/<pid>/fdinfo and signals inside the ingestion window.
+  if [[ ! -r /proc/$$/fdinfo/0 ]]; then
+    print -r -- 'skip: scan ingestion signal checks need /proc/<pid>/fdinfo'
+    return 0
+  fi
+
   command mkdir -p -- "$fakebin" "$fixture_dir/entry"
-  # 262,144 records keep ingestion running well past the 0.2s signal delay.
+  # 262,144 fixed records (9 MiB); no adaptive growth.
   for (( index = 0; index < 18; index++ )); do content+=$content; done
   print -rn -- "$content" >| "$raw"
   print -r -- '#!/bin/sh
+raw=$(readlink "/proc/$$/fd/1")
 cat -- "$SCAN_SIGNAL_RAW"
-( sleep 0.2; kill -s "$SCAN_SIGNAL_NAME" "$PPID" ) >/dev/null 2>&1 &
+"$SCAN_SIGNAL_ZSH" -f "$SCAN_SIGNAL_WATCHER" "$PPID" "$raw" "$SCAN_SIGNAL_NAME" "$SCAN_SIGNAL_MARKER" </dev/null >/dev/null 2>&1 &
 exit 0' >| "$fakebin/du"
   command chmod +x -- "$fakebin/du"
+  # Signal only after two 64 KiB reads (the first chunk's records are stored)
+  # and before half the file, leaving ingestion still running. Polls every
+  # 10 ms, stops after 20 s or when the collector exits, and reports the outcome.
+  print -r -- 'emulate -L zsh
+zmodload -F zsh/stat b:zstat || exit 1
+zmodload zsh/zselect || exit 1
+local parent=$1 raw=$2 signal_name=$3 marker=$4 fd line
+local -a target size
+integer polls pos=-1 low=131072 high
+zstat -A size +size -- "$raw" || exit 1
+high=$(( size[1] / 2 ))
+for (( polls = 0; polls < 2000; polls++ )); do
+  [[ -d /proc/$parent ]] || break
+  for fd in /proc/$parent/fd/<->(N); do
+    zstat -L -A target +link -- "$fd" 2>/dev/null || continue
+    [[ ${target[1]} == "$raw" ]] || continue
+    while IFS= read -r line; do
+      if [[ $line == pos:* ]]; then
+        pos=${line##*[[:space:]]}
+        break
+      fi
+    done <"/proc/$parent/fdinfo/${fd:t}" 2>/dev/null
+    if (( pos > low && pos <= high )); then
+      print -r -- "fired $pos ${size[1]}" >| "$marker"
+      kill -s "$signal_name" "$parent"
+      exit 0
+    fi
+  done
+  zselect -t 1
+done
+print -r -- "missed $pos ${size[1]}" >| "$marker"' >| "$watcher"
   for signal_name expected in INT 130 TERM 143; do
-    output=$(PATH="$fakebin:$PATH" TMPDIR=$tmp_dir SCAN_SIGNAL_RAW=$raw SCAN_SIGNAL_NAME=$signal_name \
-      zsh -fc 'source "$1/55-ui-helpers.zsh"; source "$1/60-functions.zsh"; _zsh_functions_load files || exit 90
-        typeset -a records; typeset -A scan_result; integer signal_status=0
-        _zsh_scan_collect dusage "$2" "$2/entry"
-        print -r -- "$signal_status ${#records}"' \
-      scan-signal "$repo_dir" "$fixture_dir")
+    # Only a missed window is retried, at most three times; a fired signal is final.
+    for (( attempt = 1; attempt <= 3; attempt++ )); do
+      command rm -f -- "$marker"
+      output=$(PATH="$fakebin:$PATH" TMPDIR=$tmp_dir SCAN_SIGNAL_RAW=$raw SCAN_SIGNAL_NAME=$signal_name \
+        SCAN_SIGNAL_ZSH=${commands[zsh]} SCAN_SIGNAL_WATCHER=$watcher SCAN_SIGNAL_MARKER=$marker \
+        zsh -fc 'source "$1/55-ui-helpers.zsh"; source "$1/60-functions.zsh"; _zsh_functions_load files || exit 90
+          typeset -a records; typeset -A scan_result; integer signal_status=0
+          _zsh_scan_collect dusage "$2" "$2/entry"
+          print -r -- "$signal_status ${#records}"' \
+        scan-signal "$repo_dir" "$fixture_dir")
+      for (( index = 0; index < 250; index++ )); do
+        [[ -s $marker ]] && break
+        command sleep 0.1
+      done
+      outcome=''
+      [[ -s $marker ]] && outcome=$(<"$marker")
+      [[ $outcome == fired* ]] && break
+    done
+    [[ $outcome == fired* ]] || {
+      print -u2 -- "not ok: $signal_name watcher never observed the ingestion window (${outcome:-no outcome})"
+      return 1
+    }
     status_value=${output%% *}
     record_count=${output##* }
     assert_equals "$status_value" "$expected" "scan collection records $signal_name during record ingestion" || return 1
     (( record_count > 0 && record_count < 262144 )) || {
-      print -u2 -- "not ok: $signal_name during ingestion keeps a partial record prefix ($output)"
+      print -u2 -- "not ok: $signal_name during ingestion keeps a partial record prefix ($output; $outcome)"
       return 1
     }
     leftovers=( "$tmp_dir"/dusage.*(N) )
