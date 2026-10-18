@@ -1006,10 +1006,22 @@ _upkg_finish_search_results() {
   _upkg_set_last_result 'matches found' "${#rows[@]} result(s)"
 }
 
+# Rich cells were formerly captured: the helper saw a pipe and used the
+# ASCII marker, and command substitution dropped trailing newlines.
+_upkg_search_cell_reply() {
+  emulate -L zsh
+
+  _ui_truncate_marker_reply '...' "$@"
+  while [[ $REPLY == *$'\n' ]]; do
+    REPLY=${REPLY%$'\n'}
+  done
+}
+
 _upkg_format_search_rows() {
   emulate -L zsh
 
   local row manager name version description
+  local manager_cell name_cell version_cell description_cell
   local width manager_width name_width version_width desc_width REPLY
   local failed_count=0 cancelled_count=0
   local failed_managers=''
@@ -1078,24 +1090,34 @@ _upkg_format_search_rows() {
       fields=("${(@ps:\t:)row}")
       manager=${fields[1]:-}; name=${fields[2]:-}; version=${fields[3]:-}; description=${fields[4]:-}
       [ -n "$version" ] || version='?'
-      description=$(_upkg_search_trim "$description")
+      _upkg_search_trim_reply "$description"
+      description=$REPLY
+      # Color helpers overwrite REPLY, so keep each cell before printing.
+      _upkg_search_cell_reply "$manager_width" "$manager"
+      manager_cell=$REPLY
+      _upkg_search_cell_reply "$name_width" "$name"
+      name_cell=$REPLY
+      _upkg_search_cell_reply "$version_width" "$version"
+      version_cell=$REPLY
 
       _ui_panel_prefix
       _ui_color accent
-      _ui_pad left "$manager_width" "$(_ui_truncate "$manager_width" "$manager")"
+      _ui_pad left "$manager_width" "$manager_cell"
       _ui_reset
       print -nr -- ' '
       _ui_color text
-      _ui_pad left "$name_width" "$(_ui_truncate "$name_width" "$name")"
+      _ui_pad left "$name_width" "$name_cell"
       _ui_reset
       print -nr -- ' '
       _ui_color info
-      _ui_pad left "$version_width" "$(_ui_truncate "$version_width" "$version")"
+      _ui_pad left "$version_width" "$version_cell"
       _ui_reset
       if [ -n "$description" ]; then
+        _upkg_search_cell_reply "$desc_width" "$description"
+        description_cell=$REPLY
         print -nr -- ' '
         _ui_color muted
-        print -nr -- "$(_ui_truncate "$desc_width" "$description")"
+        print -nr -- "$description_cell"
         _ui_reset
       fi
       print ''

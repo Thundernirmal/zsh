@@ -119,7 +119,8 @@ case $workload in
     case $workload in
       formatter-plain) _ui_is_rich_terminal() { return 1; }; _UPKG_THEME_MODE='' ;;
       # Forced predicate with a file sink: not a PTY and not an output oracle.
-      formatter-rich) _ui_is_rich_terminal() { return 0; }; _UPKG_THEME_MODE=1 ;;
+      # Subshells (command substitutions) stay plain, as they see a pipe.
+      formatter-rich) _ui_is_rich_terminal() { (( ZSH_SUBSHELL == 0 )); }; _UPKG_THEME_MODE=1 ;;
       formatter-pty) _UPKG_THEME_MODE=1 ;;
     esac
     if [[ $workload == formatter-pty ]]; then

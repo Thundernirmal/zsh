@@ -303,15 +303,16 @@ _ui_strip_leading_marks_reply() {
   REPLY=$text
 }
 
-_ui_truncate_reply() {
+# Truncates with an explicit marker. Former command-substitution callers
+# always saw a pipe and therefore the ASCII marker; they pass '...'.
+_ui_truncate_marker_reply() {
   emulate -L zsh
   setopt MULTIBYTE
 
-  local width=$1
-  shift
+  local marker=$1 width=$2
+  shift 2
 
   local text="$*"
-  local marker='…'
   local char prefix='' suffix=''
   local non_ascii_pattern='*[^ -~]*'
   integer index code char_width text_width marker_width left right prefix_width suffix_width
@@ -320,10 +321,6 @@ _ui_truncate_reply() {
     REPLY=''
     return 0
   }
-
-  if _ui_ascii_mode; then
-    marker='...'
-  fi
 
   _ui_display_width "$text"
   text_width=$REPLY
@@ -407,6 +404,32 @@ _ui_truncate_reply() {
   # to the ellipsis. Keep complete base-plus-mark sequences at the cut.
   _ui_strip_leading_marks_reply "$suffix"
   REPLY="${prefix}${marker}${REPLY}"
+}
+
+_ui_truncate_reply() {
+  emulate -L zsh
+
+  local width=$1
+  shift
+
+  (( width > 0 )) || {
+    REPLY=''
+    return 0
+  }
+
+  # Text that fits is returned as-is; only a cut needs the marker style.
+  _ui_display_width "$*"
+  if (( REPLY <= width )); then
+    REPLY="$*"
+    return 0
+  fi
+
+  set -- "$width" "$@"
+  if _ui_ascii_mode; then
+    _ui_truncate_marker_reply '...' "$@"
+  else
+    _ui_truncate_marker_reply '…' "$@"
+  fi
 }
 
 _ui_truncate() {
