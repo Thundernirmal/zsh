@@ -62,20 +62,28 @@
     _npkg_nix eval --impure --raw --expr 'builtins.currentSystem'
   }
 
-  _npkg_cache_dir() {
+  _npkg_cache_dir_reply() {
     emulate -L zsh
 
     if [[ -n ${XDG_CACHE_HOME:-} && $XDG_CACHE_HOME == /* ]]; then
-      print -r -- "$XDG_CACHE_HOME/npkg"
+      REPLY="$XDG_CACHE_HOME/npkg"
       return 0
     fi
     if [[ -n ${HOME:-} && $HOME == /* ]]; then
-      print -r -- "$HOME/.cache/npkg"
+      REPLY="$HOME/.cache/npkg"
       return 0
     fi
 
     print -u2 -r -- 'npkg: HOME and XDG_CACHE_HOME do not provide an absolute cache path.'
     return 1
+  }
+
+  _npkg_cache_dir() {
+    emulate -L zsh
+    local REPLY
+
+    _npkg_cache_dir_reply || return 1
+    print -r -- "$REPLY"
   }
 
   _npkg_attr_cache_file() {

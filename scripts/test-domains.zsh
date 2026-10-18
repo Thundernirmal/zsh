@@ -69,3 +69,28 @@ PATH="$tmp_dir/bin:$PATH" NIX_SEARCH_LOG="$tmp_dir/nix-search.log" "$zsh_bin" -f
   [[ $(<"$2/search.out") == *ripgrep* && -s $NIX_SEARCH_LOG ]] || exit 32
   print -r -- "ok: fresh-shell upkg Nix search loads its adapter without prior npkg use"
 ' zsh "$repo_dir" "$tmp_dir"
+
+# The reply cache-path helper shares the printing helper's lazy domain and policy.
+print -r -- '#!/bin/sh
+exit 88' > "$tmp_dir/bin/nix"
+command chmod +x -- "$tmp_dir/bin/nix"
+PATH="$tmp_dir/bin:$PATH" "$zsh_bin" -fc '
+  source "$1/60-functions.zsh"
+  (( $+functions[_npkg_cache_dir_reply] && ! ${+_ZSH_FUNCTION_DOMAINS_LOADED} )) || exit 40
+  REPLY=sentinel
+  printed=$(XDG_CACHE_HOME=/xdg/cache _npkg_cache_dir) || exit 41
+  [[ $printed == /xdg/cache/npkg && $REPLY == sentinel && ${_ZSH_FUNCTION_DOMAINS_LOADED[nix]:-0} == 0 ]] || exit 42
+  XDG_CACHE_HOME=/xdg/cache _npkg_cache_dir_reply || exit 43
+  [[ $REPLY == /xdg/cache/npkg ]] && (( ${_ZSH_FUNCTION_DOMAINS_LOADED[nix]:-0} && ! ${_ZSH_FUNCTION_DOMAINS_LOADED[upkg]:-0} )) || exit 44
+  XDG_CACHE_HOME=relative HOME=/home/fixture _npkg_cache_dir_reply || exit 45
+  [[ $REPLY == /home/fixture/.cache/npkg ]] || exit 46
+  REPLY=sentinel
+  XDG_CACHE_HOME=/xdg/cache _npkg_cache_dir >/dev/null || exit 47
+  [[ $REPLY == sentinel ]] || exit 48
+  reply_error=$(XDG_CACHE_HOME=relative HOME=relative _npkg_cache_dir_reply 2>&1)
+  (( $? == 1 )) || exit 49
+  printed_error=$(XDG_CACHE_HOME=relative HOME=relative _npkg_cache_dir 2>&1)
+  (( $? == 1 )) || exit 50
+  [[ $reply_error == "$printed_error" && $reply_error == "npkg: HOME and XDG_CACHE_HOME do not provide an absolute cache path." && $REPLY == sentinel ]] || exit 51
+  print -r -- "ok: reply cache-path helper loads only the Nix domain and matches the printed policy"
+' zsh "$repo_dir"

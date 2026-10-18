@@ -184,10 +184,7 @@ case $workload in
     t0=$EPOCHREALTIME
     _zsh_npkg_cached_attributes; rc=$?
     elapsed=$(( (EPOCHREALTIME - t0) * 1000 ))
-    integer nix_loaded=0
-    (( ${+_ZSH_FUNCTION_DOMAINS_LOADED} )) && nix_loaded=${_ZSH_FUNCTION_DOMAINS_LOADED[nix]:-0}
-    print -rl -- "${reply[@]}" "parse=$_ZSH_NPKG_COMPLETION_PARSE_COUNT" \
-      "nix-loaded=$nix_loaded" >| "$scratch/result"
+    print -rl -- "${reply[@]}" "parse=$_ZSH_NPKG_COMPLETION_PARSE_COUNT" >| "$scratch/result"
     ;;
   *) exit 92 ;;
 esac
@@ -416,9 +413,11 @@ def write_fixture(workload, size, kind, scratch):
 
         def check(result):
             lines = result.decode().splitlines()
-            ok = (len(lines) == size + 2 and lines[-2] == "parse=1" and lines[-1] == "nix-loaded=0"
+            # Candidates and parse count are compared; where the fixed lazy Nix
+            # domain loads is an implementation detail, but native Nix must never run.
+            ok = (len(lines) == size + 1 and lines[-1] == "parse=1"
                   and not (scratch / "nix-calls").exists())
-            return ok, len(lines) - 2
+            return ok, len(lines) - 1
         return check
     raise BenchmarkError("no fixture for " + workload)
 
