@@ -20,8 +20,10 @@ import platform
 import pty
 import re
 import select
+import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tarfile
@@ -54,6 +56,8 @@ TEXT_KINDS = ["ascii", "mixed", "cjk"]
 SHORT_TEXT_LIMIT = 80
 SHORT_TEXT_BATCH = 1000
 TRUNCATE_WIDTH = 24
+# Absolute zsh resolved once from the invoking PATH; children keep a fixed PATH.
+ZSH_BIN = "zsh"
 STARTUP_WARMUPS = 3
 
 # The child body is fixed: it sources only the modules each workload needs
@@ -335,6 +339,21 @@ def expected_width(kind, size):
     return {"ascii": size, "mixed": size + 1, "cjk": 2 * size}[kind]
 
 
+def expected_text_result(kind, size):
+    """Exact truncation of the fixed fixtures at TRUNCATE_WIDTH; returns (text, cells).
+
+    Results go to a file, so helpers use the ASCII '...' marker and a cut keeps
+    10 cells before it and 11 after. A CJK cut leaves one cell unused.
+    """
+    assert TRUNCATE_WIDTH == 24
+    width = expected_width(kind, size)
+    if width <= TRUNCATE_WIDTH:
+        return text_fixture(kind, size), width
+    return {"ascii": ("a" * 10 + "..." + "a" * 11, 24),
+            "mixed": ("雪" + "a" * 8 + "..." + "a" * 11, 24),
+            "cjk": ("雪" * 5 + "..." + "雪" * 5, 23)}[kind]
+
+
 def write_fixture(workload, size, kind, scratch):
     """Write the synthetic fixture; return a validator for the result bytes."""
     fixture = scratch / "fixture"
@@ -365,15 +384,15 @@ def write_fixture(workload, size, kind, scratch):
         (scratch / "text").write_text(text)
         width = expected_width(kind, size)
         batch = SHORT_TEXT_BATCH if size <= SHORT_TEXT_LIMIT else 1
+        truncated, cells = expected_text_result(kind, size)
+        expected = {"width": f"{width}\n", "truncate": truncated + "\n",
+                    "pad": truncated + " " * (TRUNCATE_WIDTH - cells) + "\n",
+                    "safe-truncate": (truncated + "\n") * batch}[workload]
 
         def check(result):
-            value = result.decode()
-            if workload == "width":
-                return value == f"{width}\n", value.strip()
-            if workload == "safe-truncate":
-                lines = value.splitlines()
-                return len(lines) == batch and len(set(lines)) == 1, len(lines)
-            return value.endswith("\n") and len(value) > 1, value.strip()
+            value = result.decode(errors="replace")
+            observed = len(value.splitlines()) if workload == "safe-truncate" else value.rstrip("\n")
+            return value == expected, observed
         return check
     if workload == "records":
         (scratch / "bin").mkdir(exist_ok=True)
@@ -433,7 +452,7 @@ def run_sample(repo, workload, size, kind, scratch, timeout):
     env["BENCH_NIX_LOG"] = str(scratch / "nix-calls")
     if workload.startswith("completion-"):
         env["PATH"] = f"{scratch / 'bin'}:{env['PATH']}"
-    args = ["zsh", "-dfc", CHILD, "bench", str(repo), workload, str(size), kind, str(scratch)]
+    args = [ZSH_BIN, "-dfc", CHILD, "bench", str(repo), workload, str(size), kind, str(scratch)]
     if workload == "formatter-pty":
         status, output, err = run_child_pty(args, env, scratch, timeout)
         result = output.replace(b"\r\n", b"\n")
@@ -468,14 +487,14 @@ def run_startup_sample(repo, workload, scratch, timeout):
     install = install_copy(repo, scratch)
     env = private_env(scratch)
     script = scratch / "startup-input"
-    script.write_text(f"source {install}/init.zsh\nexit\n")
+    script.write_text(f"source {shlex.quote(str(install / 'init.zsh'))}\nexit\n")
     flag = "-dfi" if workload == "startup-interactive" else "-df"
     for _ in range(STARTUP_WARMUPS):
         with script.open("rb") as stdin:
-            run_child(["zsh", flag], env, scratch, timeout, stdin=stdin)
+            run_child([ZSH_BIN, flag], env, scratch, timeout, stdin=stdin)
     with script.open("rb") as stdin:
         started = time.perf_counter()
-        status, _, _ = run_child(["zsh", flag], env, scratch, timeout, stdin=stdin)
+        status, _, _ = run_child([ZSH_BIN, flag], env, scratch, timeout, stdin=stdin)
         elapsed = (time.perf_counter() - started) * 1000
     if status != 0:
         raise BenchmarkError(f"{workload} startup exited {status}")
@@ -499,7 +518,35 @@ def revision_info(repo):
         result = subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, timeout=30)
         return result.stdout.strip() if result.returncode == 0 else None
     status = git("status", "--porcelain", "--untracked-files=no")
-    return {"sha": git("rev-parse", "HEAD"), "dirty": bool(status) if status is not None else None}
+    return {"sha": git("rev-parse", "HEAD"), "dirty": bool(status) if status is not None else None,
+            "tracked_content_sha256": tracked_content_sha256(repo)}
+
+
+def tracked_content_sha256(repo):
+    """Digest of every tracked path with its working-tree bytes, link target and
+    owner-execute bit (the bit Git records as 100755/100644), read via lstat.
+
+    Untracked files are excluded. Files are read directly, so git diff drivers,
+    textconv and diff settings cannot change it, and access policy (noexec
+    mounts, ACLs, privileges) is not consulted for the mode.
+    """
+    try:
+        listing = subprocess.run(["git", "ls-files", "-z"], cwd=repo, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if listing.returncode != 0:
+        return None
+    digest = hashlib.sha256()
+    for name in sorted(filter(None, listing.stdout.split(b"\0"))):
+        full = Path(repo) / os.fsdecode(name)
+        if full.is_symlink():
+            entry = b"L" + os.fsencode(os.readlink(full))
+        elif full.is_file():
+            entry = (b"X" if full.lstat().st_mode & stat.S_IXUSR else b"F") + full.read_bytes()
+        else:
+            entry = b"M"
+        digest.update(b"%d\0" % len(name) + name + b"%d\0" % len(entry) + entry)
+    return digest.hexdigest()
 
 
 def archive_ref(ref, scratch):
@@ -525,7 +572,7 @@ def tool_versions():
             return subprocess.run(args, text=True, capture_output=True, timeout=10).stdout.splitlines()[0]
         except (OSError, IndexError, subprocess.TimeoutExpired):
             return None
-    return {"zsh": first_line("zsh", "--version"), "python": platform.python_version(),
+    return {"zsh": first_line(ZSH_BIN, "--version"), "zsh_path": ZSH_BIN, "python": platform.python_version(),
             "git": first_line("git", "--version")}
 
 
@@ -614,6 +661,9 @@ def print_group(group):
 
 def self_test():
     """Synthetic callbacks: failure, timeout, interrupt and hostile inherited env."""
+    if not __debug__:
+        print("self-test needs assertions; run without -O or PYTHONOPTIMIZE", file=sys.stderr)
+        return 2
     with tempfile.TemporaryDirectory(prefix="zsh-workloads-selftest-") as root:
         base = Path(root)
         env = private_env(base / "env")
@@ -623,7 +673,7 @@ def self_test():
         # Timeout: the session (including a grandchild) is terminated and reaped.
         marker = base / "grandchild.pid"
         try:
-            run_child(["sh", "-c", f"sleep 30 & echo $! > {marker}; wait"], env, base, 1)
+            run_child(["sh", "-c", f"sleep 30 & echo $! > {shlex.quote(str(marker))}; wait"], env, base, 1)
         except BenchmarkError:
             pass
         else:
@@ -640,17 +690,54 @@ def self_test():
         hostile = base / "hostile"
         for name in ("home", "cache", "zdot"):
             (hostile / name).mkdir(parents=True)
-        (hostile / "zdot" / ".zshenv").write_text(f"print hostile > {hostile}/zshenv-ran\n")
+        (hostile / "zdot" / ".zshenv").write_text(f"print hostile > {shlex.quote(str(hostile / 'zshenv-ran'))}\n")
         driver_env = dict(os.environ, HOME=str(hostile / "home"), XDG_CACHE_HOME=str(hostile / "cache"),
                           ZDOTDIR=str(hostile / "zdot"), ZSH_UI_THEME="bogus", ENV=str(hostile / "env"),
                           TMPDIR=str(base))
-        proc = subprocess.Popen([sys.executable, __file__, "--workload", "completion-cold", "--samples", "5"],
-                                env=driver_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        # A fake zsh first on the driver's PATH blocks only for a workload sample
+        # (zsh -dfc CHILD bench REPO WORKLOAD SIZE KIND SCRATCH); other calls such
+        # as the version probe run the real zsh. Its marker names the sample's
+        # scratch directory, so SIGINT provably lands during run_sample().
+        real_zsh = shutil.which("zsh")
+        assert real_zsh, "self-test requires zsh on PATH"
+        fakebin = base / "fake-zsh-bin"
+        fakebin.mkdir()
+        started = base / "fake-zsh.started"
+        pending = shlex.quote(str(started) + ".tmp")
+        (fakebin / "zsh").write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = -dfc ] && [ "$3" = bench ]; then\n'
+            f'  printf "%s\\n%s\\n" "$$" "$8" > {pending} && mv {pending} {shlex.quote(str(started))}\n'
+            "  exec sleep 60\n"
+            "fi\n"
+            f'exec {shlex.quote(real_zsh)} "$@"\n')
+        (fakebin / "zsh").chmod(0o755)
+        interrupt_env = dict(driver_env, PATH=f"{fakebin}:{os.environ.get('PATH', '/usr/bin:/bin')}")
+        proc = subprocess.Popen([sys.executable, __file__, "--workload", "width", "--kind", "ascii",
+                                 "--size", "40", "--samples", "5"],
+                                env=interrupt_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 start_new_session=True)
-        time.sleep(1.0)
+        deadline = time.monotonic() + 60
+        while not started.exists():
+            if proc.poll() is not None or time.monotonic() > deadline:
+                stop_group(proc)
+                raise AssertionError("driver never started a sample child")
+            time.sleep(.05)
+        sample_child, sample_scratch = started.read_text().split("\n")[:2]
+        sample_scratch = Path(sample_scratch)
+        assert sample_scratch.is_dir(), sample_scratch
+        assert sample_scratch.parent.parent == base and sample_scratch.parent.name.startswith("zsh-workloads-"), \
+            sample_scratch
         os.killpg(proc.pid, signal.SIGINT)
-        proc.communicate(timeout=60)
-        assert proc.returncode != 0, "interrupted driver reported success"
+        _, err = proc.communicate(timeout=60)
+        assert proc.returncode == 130, (proc.returncode, err)
+        assert b"benchmark interrupted; scratch removed" in err, err
+        try:
+            os.kill(int(sample_child), 0)
+            raise AssertionError("interrupted sample child survived")
+        except ProcessLookupError:
+            pass
+        assert not sample_scratch.exists(), sample_scratch
         leftovers = [p for p in base.iterdir() if p.name.startswith("zsh-workloads-")]
         assert not leftovers, leftovers
         # Hostile inherited settings: a full short run leaves host paths untouched.
@@ -674,9 +761,13 @@ def main(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if args.self_test:
         return self_test()
-    if shutil.which("zsh") is None:
+    global ZSH_BIN
+    resolved = shutil.which("zsh")
+    if resolved is None:
         print("benchmark requires zsh on PATH", file=sys.stderr)
         return 2
+    # Keep the invoked name: zsh selects its emulation from argv[0].
+    ZSH_BIN = os.path.abspath(resolved)
 
     def interrupted(signum, _frame):
         raise KeyboardInterrupt
