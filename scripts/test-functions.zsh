@@ -1524,6 +1524,208 @@ EOF_WIDTH_REFERENCE
 # Frozen pre-chunking collector: exact records, scan state, scratch and
 # dusage/bigfiles output across tab, KiB, control, Unicode and tail cases,
 # on both the sysread path and the read fallback.
+test_scan_record_oracle() {
+  local scan_matrix scan_reference live frozen fallback
+  integer rc
+
+  IFS= read -r -d '' scan_matrix <<'EOF_SCAN_MATRIX'
+# Usage: zsh -f scan-matrix.zsh repo scratch [reference] [fallback]
+emulate -L zsh
+setopt NO_UNSET
+repo=$1 scratch=$2
+source "$repo/55-ui-helpers.zsh"
+source "$repo/60-functions.zsh"
+_zsh_functions_load files || exit 90
+[[ -n ${3-} ]] && source "$3"
+if [[ ${4-} == fallback ]]; then
+  # Simulate a build without zsh/system to exercise the read fallback.
+  zmodload() { [[ $* == *zsh/system* ]] && return 1; builtin zmodload "$@"; }
+fi
+functions[_ui_plain_mode]='return 0'
+command mkdir -p -- "$scratch/bin" "$scratch/target/entry" "$scratch/tree"
+print -r -- 'x' >| "$scratch/tree/file"
+print -r -- '#!/bin/sh
+cat -- "$SCAN_FIXTURE"
+exit "${SCAN_DU_STATUS:-0}"' >| "$scratch/bin/du"
+print -r -- '#!/bin/sh
+printf "%s\0" "$SCAN_FIND_PATH"
+exit "${SCAN_FIND_STATUS:-0}"' >| "$scratch/bin/find"
+command chmod +x -- "$scratch/bin/du" "$scratch/bin/find"
+path=("$scratch/bin" $path)
+export SCAN_FIXTURE=$scratch/fixture SCAN_FIND_PATH=$scratch/tree/file
+export TMPDIR=$scratch
+typeset -A fixtures
+fixtures=(
+  empty ''
+  simple $'1\ta\0'
+  malformed $'x1\ta\0-1\tb\0001.5\tc\0 1\td\0001 \te\0\0\0\0002\tok\0'
+  tabs $'\t\t3\tlead\0004\t\tdouble\0005\ttrail\t\t\0006\tin\tner\0007\0008\t\0\t\0009\ta\t\tb\t\0'
+  controls $'10\tline1\nline2\00011\t\r\e\x01\x7f\00012\t\\back\\slash\0'
+  unicode $'13\t雪.txt\00014\tcaf\xc3\xa9\xff\00015\t\xe9\x9b\0'
+  unterminated $'16\tok\00017\ttail-unterminated'
+  ties $'5\tfile10\0005\tfile9\0005\tfile100\00050\t2\0005\t10\0005\tfile9\0'
+)
+typeset big=''
+integer i
+for (( i = 1; i <= 9000; i++ )); do
+  if (( i % 997 == 0 )); then big+=$'\t'"$i"$'\t\tpath/'"$i"$'\t\0'; else big+="$((i % 300))"$'\t'"/synthetic/dir-$((i % 17))/file $i"$'\0'; fi
+done
+fixtures[big]=$big
+# Normalize the per-run scratch path so live and frozen runs compare exactly.
+norm() {
+  local text
+  IFS= read -r -d '' text < "$1"
+  print -rn -- "${text//$scratch/SCRATCH}"
+}
+report() {
+  print -r -- "records=${#records} sha=$(print -rn -- "${(j:|:)${(@qqqq)records}}" | command cksum)"
+  (( ${#records} <= 40 )) && print -r -- "${(j:|:)${(@qqqq)records}}"
+  print -r -- "result=${(j:,:)${(@kv)scan_result}} signal=$signal_status"
+}
+for name in ${(ko)fixtures}; do
+  print -rn -- "${fixtures[$name]}" >| "$scratch/fixture"
+  for du_status in 0 1; do
+    export SCAN_DU_STATUS=$du_status
+    print -r -- "== $name du=$du_status"
+    () {
+      local -a records
+      local -A scan_result
+      integer signal_status=0 rc
+      REPLY=sentinel; reply=(one two)
+      _zsh_scan_collect dusage "$scratch/target" "$scratch/target/entry"; rc=$?
+      print -r -- "collect rc=$rc scratch=$REPLY:${(j:,:)reply}"
+      report
+      _zsh_scan_collect bigfiles "$scratch/tree"; rc=$?
+      print -r -- "collect-bigfiles rc=$rc"
+      report
+    }
+    dusage "$scratch/target" 30 >| "$scratch/out" 2>| "$scratch/err"; rc=$?
+    print -r -- "dusage rc=$rc out=$(norm "$scratch/out" | command cksum) err=${(qqqq)$(norm "$scratch/err")}"
+    (( ${#fixtures[$name]} < 400 )) && norm "$scratch/out"
+    bigfiles "$scratch/tree" 7 >| "$scratch/out" 2>| "$scratch/err"; rc=$?
+    print -r -- "bigfiles rc=$rc out=$(norm "$scratch/out" | command cksum) err=${(qqqq)$(norm "$scratch/err")}"
+    (( ${#fixtures[$name]} < 400 )) && norm "$scratch/out"
+  done
+done
+unset SCAN_DU_STATUS
+# Partial find with a successful du.
+export SCAN_FIND_STATUS=1
+print -rn -- $'3\tfound\0' >| "$scratch/fixture"
+bigfiles "$scratch/tree" 5 >| "$scratch/out" 2>| "$scratch/err"; rc=$?
+print -r -- "partial-find rc=$rc out=${(qqqq)$(norm "$scratch/out")} err=${(qqqq)$(norm "$scratch/err")}"
+leftovers=( "$scratch"/(dusage|bigfiles).*(N) )
+print -r -- "leftovers=${#leftovers}"
+EOF_SCAN_MATRIX
+  IFS= read -r -d '' scan_reference <<'EOF_SCAN_REFERENCE'
+_zsh_scan_collect() {
+  emulate -L zsh
+  setopt localtraps
+  local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file=''
+  integer du_status=0 find_status=0 result_status=0
+  shift 2
+  trap 'signal_status=130; return 130' INT
+  trap 'signal_status=143; return 143' TERM
+  trap 'signal_status=129; return 129' HUP
+  records=()
+  scan_result=( state complete status 0 du_status 0 find_status 0 diagnostic '' )
+  {
+    path_list_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.paths.XXXXXX") || return 1
+    raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.raw.XXXXXX") || return 1
+    if [[ $mode == dusage ]]; then
+      for entry_path in "$@"; do
+        print -rn -- "$entry_path"$'\0'
+      done >"$path_list_file"
+      command du -sk --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+      du_status=$?
+    else
+      command find "$target" -type f -print0 2>/dev/null >"$path_list_file"
+      find_status=$?
+      if [[ -s $path_list_file ]]; then
+        command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+        du_status=$?
+      fi
+    fi
+    while IFS=$'\t' read -r -d '' kib entry_path; do
+      [[ $kib == <-> ]] || continue
+      records+=("${kib}"$'\t'"${entry_path}")
+    done <"$raw_output_file"
+  } always {
+    command rm -f -- "$path_list_file" "$raw_output_file"
+  }
+  scan_result[du_status]=$du_status
+  scan_result[find_status]=$find_status
+  if (( find_status )); then
+    result_status=$find_status
+    scan_result[diagnostic]="find exit $find_status"
+  fi
+  if (( du_status )); then
+    result_status=$du_status
+    [[ -n ${scan_result[diagnostic]} ]] && scan_result[diagnostic]+=', '
+    scan_result[diagnostic]+="du exit $du_status"
+  fi
+  scan_result[status]=$result_status
+  (( result_status )) && scan_result[state]=partial
+  return 0
+}
+EOF_SCAN_REFERENCE
+
+  print -r -- "$scan_matrix" >| "$tmp_dir/scan-matrix.zsh"
+  print -r -- "$scan_reference" >| "$tmp_dir/scan-reference.zsh"
+  command mkdir -p -- "$tmp_dir/scan-live" "$tmp_dir/scan-frozen" "$tmp_dir/scan-fallback"
+  live=$(LC_ALL=C.UTF-8 zsh -f "$tmp_dir/scan-matrix.zsh" "$repo_dir" "$tmp_dir/scan-live" '' '' 2>&1)
+  rc=$?
+  assert_status "$rc" 0 'scan record oracle runs with the live collector' || return 1
+  frozen=$(LC_ALL=C.UTF-8 zsh -f "$tmp_dir/scan-matrix.zsh" "$repo_dir" "$tmp_dir/scan-frozen" "$tmp_dir/scan-reference.zsh" '' 2>&1)
+  fallback=$(LC_ALL=C.UTF-8 zsh -f "$tmp_dir/scan-matrix.zsh" "$repo_dir" "$tmp_dir/scan-fallback" '' fallback 2>&1)
+  if [[ $live != "$frozen" || $fallback != "$frozen" ]]; then
+    print -u2 -- 'not ok: scan records match the frozen collector'
+    command diff <(print -r -- "$frozen") <(print -r -- "$live") | command head -30 >&2
+    command diff <(print -r -- "$frozen") <(print -r -- "$fallback") | command head -30 >&2
+    return 1
+  fi
+  assert_contains "$live" 'leftovers=0' 'scan record oracle leaves no temporary files' || return 1
+  print -- 'ok: chunked and fallback scan records match the frozen collector'
+}
+
+# A signal that arrives while records are being ingested is recorded for the
+# caller in signal_status, leaves a partial record prefix and removes both
+# temporary files (matching the pre-chunking read loop).
+test_scan_ingestion_signal() {
+  emulate -L zsh
+
+  local fakebin="$tmp_dir/scan-signal-bin" fixture_dir="$tmp_dir/scan-signal"
+  local raw="$tmp_dir/scan-signal-raw" content=$'123\t/synthetic/path/abcdefghijkl/x\0' signal_name output
+  integer expected index status_value record_count
+  local -a leftovers
+
+  command mkdir -p -- "$fakebin" "$fixture_dir/entry"
+  # 262,144 records keep ingestion running well past the 0.2s signal delay.
+  for (( index = 0; index < 18; index++ )); do content+=$content; done
+  print -rn -- "$content" >| "$raw"
+  print -r -- '#!/bin/sh
+cat -- "$SCAN_SIGNAL_RAW"
+( sleep 0.2; kill -s "$SCAN_SIGNAL_NAME" "$PPID" ) >/dev/null 2>&1 &
+exit 0' >| "$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  for signal_name expected in INT 130 TERM 143; do
+    output=$(PATH="$fakebin:$PATH" TMPDIR=$tmp_dir SCAN_SIGNAL_RAW=$raw SCAN_SIGNAL_NAME=$signal_name \
+      zsh -fc 'source "$1/55-ui-helpers.zsh"; source "$1/60-functions.zsh"; _zsh_functions_load files || exit 90
+        typeset -a records; typeset -A scan_result; integer signal_status=0
+        _zsh_scan_collect dusage "$2" "$2/entry"
+        print -r -- "$signal_status ${#records}"' \
+      scan-signal "$repo_dir" "$fixture_dir")
+    status_value=${output%% *}
+    record_count=${output##* }
+    assert_equals "$status_value" "$expected" "scan collection records $signal_name during record ingestion" || return 1
+    (( record_count > 0 && record_count < 262144 )) || {
+      print -u2 -- "not ok: $signal_name during ingestion keeps a partial record prefix ($output)"
+      return 1
+    }
+    leftovers=( "$tmp_dir"/dusage.*(N) )
+    assert_equals "${#leftovers[@]}" 0 "scan collection removes temporary files after $signal_name during ingestion" || return 1
+  done
+}
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1536,6 +1738,8 @@ main() {
   test_usage_temp_cleanup || return 1
   test_usage_partial_scan || return 1
   test_usage_signal_cleanup || return 1
+  test_scan_record_oracle || return 1
+  test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1
   test_path_empty_entries || return 1
   test_control_character_paths || return 1

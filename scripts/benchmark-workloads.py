@@ -40,6 +40,7 @@ DEFAULT_SIZES = {
     "safe-truncate": [40, 1000],
     "pad": [40, 1000],
     "records": [1000, 10000],
+    "bigfiles-tree": [2000],
     "completion-cold": [60000],
     "completion-warm": [60000],
     "startup-command": [1],
@@ -67,8 +68,12 @@ integer i n=$size batch=1 rc=0
 typeset text=''
 typeset -a rows
 _finish() {
+  local hwm=''
+  # Peak resident set of this shell (Linux /proc only; empty elsewhere).
+  [[ -r /proc/$$/status ]] && hwm=${${(M)${(f)"$(</proc/$$/status)"}:#VmHWM:*}//[^0-9]/}
   print -r -- "$elapsed" >| "$scratch/timing"
   print -r -- "$rc" >| "$scratch/status"
+  print -r -- "$hwm" >| "$scratch/rss"
 }
 case $workload in
   parser|formatter-*)
@@ -84,7 +89,7 @@ case $workload in
     text=$(<"$scratch/text")
     (( size <= SHORT_LIMIT )) && batch=SHORT_BATCH
     ;;
-  records)
+  records|bigfiles-tree)
     source "$repo/55-ui-helpers.zsh"
     source "$repo/60-functions.zsh"
     _zsh_functions_load files || exit 90
@@ -164,6 +169,13 @@ case $workload in
     _zsh_scan_collect dusage "$scratch" "$scratch/fixture"; rc=$?
     elapsed=$(( (EPOCHREALTIME - t0) * 1000 ))
     print -rl -- "${records[@]}" "status=${scan_result[status]}" >| "$scratch/result"
+    ;;
+  bigfiles-tree)
+    # Real find/du over a synthetic tree; plain renderer into a file sink.
+    _ui_is_rich_terminal() { return 1; }
+    t0=$EPOCHREALTIME
+    bigfiles "$scratch/tree" 20 >| "$scratch/result"; rc=$?
+    elapsed=$(( (EPOCHREALTIME - t0) * 1000 ))
     ;;
   completion-cold|completion-warm)
     if [[ $workload == completion-warm ]]; then
@@ -380,6 +392,17 @@ def write_fixture(workload, size, kind, scratch):
             lines = result.decode().splitlines()
             return len(lines) == size + 1 and lines[-1] == "status=0", len(lines) - 1
         return check
+    if workload == "bigfiles-tree":
+        tree = scratch / "tree"
+        for i in range(size):
+            directory = tree / f"dir-{i % 37}"
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / f"file-{i}.bin").write_bytes(b"x" * (512 * (i % 29 + 1)))
+
+        def check(result):
+            lines = result.decode().splitlines()
+            return len(lines) == 20 and all("/tree/dir-" in line for line in lines), len(lines)
+        return check
     if workload.startswith("completion-"):
         cache = scratch / "cache" / "npkg"
         cache.mkdir(parents=True, exist_ok=True)
@@ -426,7 +449,8 @@ def run_sample(repo, workload, size, kind, scratch, timeout):
     if not ok:
         raise BenchmarkError(f"{workload}/{size}/{kind} fixture validation failed ({observed})")
     ms = float((scratch / "timing").read_text())
-    return ms, hashlib.sha256(result).hexdigest(), observed
+    rss = (scratch / "rss").read_text().strip()
+    return ms, hashlib.sha256(result).hexdigest(), observed, int(rss) if rss else None
 
 
 def install_copy(source, scratch):
@@ -455,7 +479,7 @@ def run_startup_sample(repo, workload, scratch, timeout):
         elapsed = (time.perf_counter() - started) * 1000
     if status != 0:
         raise BenchmarkError(f"{workload} startup exited {status}")
-    return elapsed, None, 1
+    return elapsed, None, 1, None
 
 
 def lower_middle(values):
@@ -539,24 +563,27 @@ def benchmark(args):
                                              and size <= SHORT_TEXT_LIMIT else 1),
                              "revisions": {}}
                     for name, _ in revisions:
-                        group["revisions"][name] = {"samples_ms": [], "sha256": None, "observed": None}
+                        group["revisions"][name] = {"samples_ms": [], "peak_rss_kib": [],
+                                                    "sha256": None, "observed": None}
                     for index in range(samples):
                         # Alternate which revision runs first in each round.
                         order = revisions if index % 2 == 0 else list(reversed(revisions))
                         for name, repo in order:
-                            scratch = scratch_root / f"{name}-scratch"
+                            # One scratch path for both revisions keeps outputs comparable.
+                            scratch = scratch_root / "work"
                             if scratch.exists():
                                 shutil.rmtree(scratch)
                             scratch.mkdir()
                             if startup:
-                                ms, digest, observed = run_startup_sample(repo, workload, scratch, args.timeout)
+                                ms, digest, observed, rss = run_startup_sample(repo, workload, scratch, args.timeout)
                             else:
-                                ms, digest, observed = run_sample(repo, workload, size, kind, scratch, args.timeout)
+                                ms, digest, observed, rss = run_sample(repo, workload, size, kind, scratch, args.timeout)
                             record = group["revisions"][name]
                             if record["sha256"] not in (None, digest):
                                 raise BenchmarkError(f"{name} {workload}/{size}/{kind} result changed between samples")
                             record["sha256"], record["observed"] = digest, observed
                             record["samples_ms"].append(ms)
+                            record["peak_rss_kib"].append(rss)
                     for record in group["revisions"].values():
                         record.update(summarize(record["samples_ms"]))
                     if len(revisions) == 2 and not startup:
@@ -575,7 +602,9 @@ def print_group(group):
     label = f"{group['workload']}/{group['size']}" + (f"/{group['kind']}" if group["kind"] != "-" else "")
     parts = []
     for name, record in group["revisions"].items():
-        parts.append(f"{name} median={record['median_ms']:.3f}ms p95={record['p95_ms']:.3f}ms n={record['n']}")
+        rss = [value for value in record["peak_rss_kib"] if value is not None]
+        rss_text = f" rss<={max(rss)}KiB" if rss else ""
+        parts.append(f"{name} median={record['median_ms']:.3f}ms p95={record['p95_ms']:.3f}ms n={record['n']}{rss_text}")
     revisions = group["revisions"]
     if "baseline" in revisions:
         ratio = revisions["baseline"]["median_ms"] / max(revisions["candidate"]["median_ms"], 1e-9)
