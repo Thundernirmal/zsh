@@ -33,6 +33,7 @@ _zsh_tip_pool=(
   "Run dusage [path] [count] to rank immediate entries by size"
   "Run bigfiles [path] [count] to rank files recursively"
   "Run ports to show listening sockets and their processes"
+  "Run ports 8080 or ports nginx to narrow the listening sockets"
   "Run myip to show your public IP address"
   "Run weather for a concise HTTPS forecast"
   "Run peek <file> for a quick file preview"

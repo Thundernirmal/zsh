@@ -336,23 +336,24 @@ ports() {
 
   case ${1:-} in
     -h|--help)
-      print 'Usage: ports'
-      print 'Show listening TCP and UDP sockets with owning processes when permitted.'
+      print 'Usage: ports [port|process]'
+      print 'Show listening sockets, TCP first, with owning processes when permitted.'
+      print 'A number matches one port exactly; other text matches process names.'
       return 0
       ;;
   esac
-  if (( $# > 0 )); then
-    print -u2 -r -- 'Usage: ports'
+  if (( $# > 1 )); then
+    print -u2 -r -- 'Usage: ports [port|process]'
     return 1
   fi
 
-  local output header parsed line netid state state_role port address process pid shown more pid_text
+  local filter=${1:-} output header parsed line netid state state_role port address process pid pid_text
   local -a lines rows
   local row_delim=$'\t'
-  integer width addr_width proc_width
+  integer width addr_width proc_width missing_owner=0
   local REPLY
 
-  if _ui_plain_mode; then
+  if [[ -z $filter ]] && _ui_plain_mode; then
     command ss -tulnp
     return $?
   fi
@@ -361,6 +362,32 @@ ports() {
     command ss -tulnp
     return $?
   }
+
+  if [[ -n $filter ]]; then
+    # ENVIRON keeps awk from interpreting escapes in user text.
+    output=$(print -r -- "$output" | PORTS_FILTER=$filter command awk '
+      NR == 1 { print; next }
+      {
+        needle = ENVIRON["PORTS_FILTER"]
+        if (needle ~ /^[0-9]+$/) {
+          port = $5
+          sub(/^.*:/, "", port)
+          if (port == needle) print
+        } else if (match($0, /users:\(\(.*\)\)/)) {
+          if (index(tolower(substr($0, RSTART, RLENGTH)), tolower(needle))) print
+        }
+      }
+    ')
+    if [[ $output != *$'\n'* ]]; then
+      _ui_safe_text_reply "$filter"
+      print -u2 -r -- "ports: no listening sockets match '$REPLY'"
+      return 1
+    fi
+    if _ui_plain_mode; then
+      print -r -- "$output"
+      return 0
+    fi
+  fi
 
   lines=( ${(f)output} )
   for line in "${lines[@]}"; do
@@ -417,7 +444,7 @@ ports() {
 
       print netid "\t" state "\t" address "\t" port "\t" proc "\t" pid
     }
-  ')
+  ' | LC_ALL=C command sort -s -t "$row_delim" -k1,1 -k4,4n)
 
   rows=( ${(f)parsed} )
   (( ${#rows[@]} > 0 )) || {
@@ -425,8 +452,6 @@ ports() {
     return 0
   }
 
-  shown=$(_ui_visible_count 999 "${#rows[@]}" 8)
-  more=$(( ${#rows[@]} - shown ))
   _ui_term_width_reply
   width=$REPLY
 
@@ -437,10 +462,14 @@ ports() {
 
   _ui_title_line 'Listening Ports' 'ss -tulnp' accent '󰒋' '*'
   _ui_panel_kv 'Sockets' "${#rows[@]}" muted text
+  if [[ -n $filter ]]; then
+    _ui_safe_text_reply "$filter"
+    _ui_panel_kv 'Filter' "$REPLY" muted text
+  fi
   _ui_section_break
 
   integer idx
-  for (( idx = 1; idx <= shown; idx++ )); do
+  for (( idx = 1; idx <= ${#rows[@]}; idx++ )); do
     line=${rows[$idx]}
     netid=${line%%${row_delim}*}
     line=${line#*${row_delim}}
@@ -452,6 +481,9 @@ ports() {
     line=${line#*${row_delim}}
     process=${line%%${row_delim}*}
     pid=${line#*${row_delim}}
+    [[ $process == - ]] && missing_owner=1
+    _ui_safe_text_reply "$process"
+    process=$REPLY
     case $state in
       LISTEN|UNCONN) state_role=success ;;
       *) state_role=warning ;;
@@ -481,15 +513,14 @@ ports() {
     print ''
   done
 
-  if (( more > 0 )); then
-    _ui_panel_kv 'More' "+${more} not shown" muted muted
+  if (( missing_owner )); then
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'An owner shown as - needs root to read: sudo ss -tulnp'
+    _ui_reset
   fi
-
-  _ui_section_break
-  print -nr -- '  '
-  _ui_color muted
-  print -r -- 'Raw fallback: ss -tulnp'
-  _ui_reset
+  return 0
 }
 
 # Show the default forecast over HTTPS

@@ -100,7 +100,7 @@ test_registration() {
     fbr _zsh_no_arguments
     croot _zsh_no_arguments
     path _zsh_no_arguments
-    ports _zsh_no_arguments
+    ports _zsh_ports
     weather _zsh_no_arguments
     myip _zsh_no_arguments
     gitcount _zsh_no_arguments

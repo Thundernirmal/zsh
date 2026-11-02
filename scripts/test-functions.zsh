@@ -1866,6 +1866,58 @@ test_scan_count_is_honored() (
   assert_contains "$output" 'showing 25/30 entries' 'dusage honors an explicit count on a short terminal' || return 1
 )
 
+test_ports_order_and_filter() (
+  local fakebin="$tmp_dir/ports-bin" output
+
+  command mkdir -p -- "$fakebin" || return 1
+  print -r -- '#!/bin/sh
+cat <<"FIXTURE"
+Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+udp   UNCONN 0      0      127.0.0.1:53       0.0.0.0:*
+udp   UNCONN 0      0      0.0.0.0:5353       0.0.0.0:*         users:(("avahi",pid=11,fd=3))
+tcp   LISTEN 0      128    0.0.0.0:22         0.0.0.0:*
+tcp   LISTEN 0      128    127.0.0.1:8080     0.0.0.0:*         users:(("nginx",pid=22,fd=6))
+tcp   LISTEN 0      128    [::]:443           [::]:*            users:(("Caddy",pid=33,fd=7))
+FIXTURE' > "$fakebin/ss"
+  command chmod +x -- "$fakebin/ss"
+  PATH="$fakebin:$PATH"
+  rehash
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  functions[_ui_term_height]='print -r -- 5'
+  output=$(ports)
+  assert_status "$?" 0 'ports succeeds on a short terminal' || return 1
+  [[ $output == *'] 0.0.0.0'*':   22'*':  443'*': 8080'*'[udp]'*':   53'*': 5353'* ]] || {
+    print -u2 -- 'not ok: ports lists every socket, TCP before UDP, by port'
+    print -u2 -- "output: $output"
+    return 1
+  }
+  print -- 'ok: ports lists every socket, TCP before UDP, by port'
+  assert_contains "$output" 'sudo ss -tulnp' 'ports explains hidden owners' || return 1
+
+  output=$(ports 8080)
+  assert_contains "$output" 'nginx' 'ports filters by exact port' || return 1
+  assert_not_contains "$output" 'Caddy' 'a port filter excludes other sockets' || return 1
+  assert_not_contains "$output" 'sudo ss' 'ports skips the owner hint when every owner is known' || return 1
+  output=$(ports caddy)
+  assert_contains "$output" 'Caddy' 'ports filters by process name, ignoring case' || return 1
+  assert_not_contains "$output" 'nginx' 'a process filter excludes other sockets' || return 1
+  output=$(ports 80 2>&1)
+  assert_status "$?" 1 'ports matches a port exactly and fails when nothing matches' || return 1
+  assert_contains "$output" "no listening sockets match '80'" 'ports names a filter with no match' || return 1
+
+  functions[_ui_plain_mode]='return 0'
+  output=$(ports)
+  assert_contains "$output" 'udp   UNCONN' 'plain ports keeps native output' || return 1
+  output=$(ports nginx)
+  assert_contains "$output" 'Netid State' 'plain filtered ports keeps the header' || return 1
+  assert_contains "$output" 'pid=22' 'plain filtered ports keeps the match' || return 1
+  assert_not_contains "$output" 'Caddy' 'plain filtered ports drops other sockets' || return 1
+  output=$(ports a b 2>&1)
+  assert_status "$?" 1 'ports rejects extra arguments' || return 1
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1879,6 +1931,7 @@ main() {
   test_usage_partial_scan || return 1
   test_usage_signal_cleanup || return 1
   test_scan_count_is_honored || return 1
+  test_ports_order_and_filter || return 1
   test_scan_record_oracle || return 1
   test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1

@@ -361,6 +361,10 @@ if (( $+functions[compdef] )); then
     _arguments '(-h --help)'{-h,--help}'[show usage]' '--all[select processes from all users]' '-a[select processes from all users]' '1:signal:_signals' '*: :_message "no additional arguments"'
   }
 
+  _zsh_ports() {
+    _arguments '1:port number or process name:' '*: :_message "no additional arguments"'
+  }
+
   _zsh_headers() {
     _arguments '1:URL:_message "URL"' '*: :_message "no additional arguments"'
   }
@@ -446,10 +450,11 @@ if (( $+functions[compdef] )); then
   compdef _zsh_bigfiles bigfiles
   compdef _zsh_fkill fkill
   compdef _zsh_headers headers
+  compdef _zsh_ports ports
   compdef _zsh_zhelp zhelp
   compdef _zsh_zdoctor zdoctor
   compdef _zsh_ztheme ztheme
-  compdef _zsh_no_arguments fbr croot path ports myip weather gitcount fanprofile tips
+  compdef _zsh_no_arguments fbr croot path myip weather gitcount fanprofile tips
 
   if (( $+functions[npkg] )); then
     compdef _zsh_npkg npkg
