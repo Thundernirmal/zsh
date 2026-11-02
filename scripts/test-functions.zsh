@@ -1846,6 +1846,26 @@ print -r -- "missed $pos ${size[1]}" >| "$marker"' >| "$watcher"
   done
 }
 
+test_scan_count_is_honored() (
+  local fixture="$tmp_dir/count-fixture" output
+  integer index
+
+  command mkdir -p -- "$fixture" || return 1
+  for (( index = 1; index <= 30; index++ )); do
+    print -r -- data > "$fixture/file$index"
+  done
+
+  # A 12-row terminal must not cut an explicit count of 25.
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  functions[_ui_term_height]='print -r -- 12'
+  output=$(bigfiles "$fixture" 25 2>&1)
+  assert_contains "$output" 'showing 25/30 files' 'bigfiles honors an explicit count on a short terminal' || return 1
+  assert_contains "$output" '+5 not shown' 'bigfiles counts rows beyond the requested count' || return 1
+  output=$(dusage "$fixture" 25 2>&1)
+  assert_contains "$output" 'showing 25/30 entries' 'dusage honors an explicit count on a short terminal' || return 1
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1858,6 +1878,7 @@ main() {
   test_usage_temp_cleanup || return 1
   test_usage_partial_scan || return 1
   test_usage_signal_cleanup || return 1
+  test_scan_count_is_honored || return 1
   test_scan_record_oracle || return 1
   test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1

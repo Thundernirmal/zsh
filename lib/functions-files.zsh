@@ -689,7 +689,8 @@ dusage() {
     total_kib=$(( total_kib + kib ))
   done
 
-  shown=$(_ui_visible_count "$limit" "${#lines[@]}" 6)
+  shown=$limit
+  (( shown > ${#lines[@]} )) && shown=${#lines[@]}
   more=$(( ${#lines[@]} - shown ))
   visible_count=$shown
   _ui_term_width_reply
@@ -864,7 +865,8 @@ bigfiles() {
     total_kib=$(( total_kib + kib ))
   done
 
-  shown=$(_ui_visible_count "$limit" "$line_count" 6)
+  shown=$limit
+  (( shown > line_count )) && shown=$line_count
   more=$(( line_count - shown ))
 
   _ui_term_width_reply
