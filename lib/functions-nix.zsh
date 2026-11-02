@@ -917,14 +917,41 @@
       version_width=10
     fi
 
-    visible_count=$(_ui_visible_count "$pkg_count" "$pkg_count" 9)
-    more=$(( pkg_count - visible_count ))
+    # Rows that need attention come first and are never hidden. Only current
+    # rows give way when the terminal is short.
+    local -a display_rows current_rows
+    integer status_width=18
+    for (( idx = 1; idx <= pkg_count; idx++ )); do
+      if [[ ${statuses[$idx]} == current ]]; then
+        current_rows+=( "$idx" )
+      else
+        display_rows+=( "$idx" )
+      fi
+    done
+    visible_count=$(_ui_visible_count "$pkg_count" "$pkg_count" 10)
+    visible_count=$(( visible_count - ${#display_rows} ))
+    (( visible_count < 0 )) && visible_count=0
+    (( visible_count > ${#current_rows} )) && visible_count=${#current_rows}
+    more=$(( ${#current_rows} - visible_count ))
+    display_rows+=( "${(@)current_rows[1,visible_count]}" )
 
     _ui_title_line 'Nix Package Drift' "$pkg_count package(s) checked" accent '󱄅' '*'
     _ui_panel_kv 'Command' 'npkg outdated' muted text
     _ui_section_break
 
-    for (( idx = 1; idx <= visible_count; idx++ )); do
+    _ui_panel_prefix
+    _ui_color muted
+    _ui_pad left "$status_width" 'Status'
+    print -nr -- ' '
+    _ui_pad left "$name_width" 'Package'
+    print -nr -- ' '
+    _ui_pad left "$version_width" 'Installed'
+    print -nr -- ' '
+    _ui_pad left "$version_width" 'Available'
+    _ui_reset
+    print ''
+
+    for idx in "${display_rows[@]}"; do
       package_state=${statuses[$idx]}
       case $package_state in
         current) marker=current; role=success ;;
@@ -934,6 +961,7 @@
 
       _ui_panel_prefix
       _ui_badge "$marker" "$role"
+      _ui_repeat "$(( status_width - ${#marker} - 2 ))" ' '
       print -nr -- ' '
       _ui_color text
       _ui_pad left "$name_width" "$(_ui_safe_truncate "$name_width" "${names[$idx]}")"
@@ -950,7 +978,7 @@
     done
 
     if (( more > 0 )); then
-      _ui_panel_kv 'More' "+${more} not shown" muted muted
+      _ui_panel_kv 'More' "+${more} current not shown" muted muted
     fi
 
     if (( unknown > 0 )); then

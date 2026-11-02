@@ -2527,10 +2527,19 @@ esac
     cmd_status=$?
     output=$NPKG_TEST_OUTPUT
     assert_status "$cmd_status" 0 'rich report with hidden rows remains complete' || return 1
-    assert_equals "$_NPKG_OUTDATED_STATE" changed 'hidden changed row still exposes changed state' || return 1
-    assert_equals "$_NPKG_OUTDATED_CHANGED" 1 'hidden changed row contributes to the change total' || return 1
-    assert_contains "$output" '+9 not shown' 'rich dashboard reports rows hidden by terminal height' || return 1
-    assert_contains "$output" '1 change(s) available. Run npkg upgrade to apply.' 'rich summary counts a hidden changed row' || return 1
+    assert_equals "$_NPKG_OUTDATED_STATE" changed 'short terminal still exposes changed state' || return 1
+    assert_equals "$_NPKG_OUTDATED_CHANGED" 1 'short terminal still counts the changed row' || return 1
+    assert_contains "$output" 'Status' 'rich dashboard labels its status column' || return 1
+    assert_contains "$output" 'Installed' 'rich dashboard labels its installed column' || return 1
+    assert_contains "$output" 'Available' 'rich dashboard labels its available column' || return 1
+    [[ $output == *'change available'*pkg12*pkg1* ]] || {
+      print -u2 -- 'not ok: rich dashboard names a changed package ahead of current rows on a short terminal'
+      print -u2 -- "output: $output"
+      return 1
+    }
+    print -- 'ok: rich dashboard names a changed package ahead of current rows on a short terminal'
+    assert_contains "$output" '+10 current not shown' 'rich dashboard hides only current rows' || return 1
+    assert_contains "$output" '1 change(s) available. Run npkg upgrade to apply.' 'rich summary counts the changed row' || return 1
 
     run_npkg_interrupt_capture "$npkg_tmp_dir"
     cmd_status=$?
