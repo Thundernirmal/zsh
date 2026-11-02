@@ -113,7 +113,7 @@ _fbr_activate() {
       print -u2 -r -- "Remote '$branch' does not track local '$local_branch' (no upstream). Refusing to switch."
     fi
     print -u2 -r -- "To enter the local branch: git switch -- ${(q)local_branch}"
-    print -u2 -r -- "To track the remote under a new name: git switch --track -b NEW_BRANCH -- ${(q)branch}"
+    print -u2 -r -- "To track the remote under a new name: git switch --track -c NEW_BRANCH -- ${(q)branch}"
     print -u2 -r -- "To inspect the remote without changing branches: git switch --detach -- ${(q)branch}"
     return 1
   fi

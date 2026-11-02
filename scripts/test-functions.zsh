@@ -995,7 +995,11 @@ test_fbr_remote_collision() {
   assert_equals "$after_ref" "$before_ref" 'fbr keeps the current checkout after refusing a collision' || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" 'does not track local' 'fbr explains the upstream mismatch' || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" "git switch -- topic" 'fbr offers entering the local branch' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "git switch --track -b NEW_BRANCH -- refs/remotes/origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --track -c NEW_BRANCH -- refs/remotes/origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  # Run the suggested command for real: git rejected the -b spelling this hint used to print.
+  command git switch -q --track -c hint-check -- refs/remotes/origin/topic; rc=$?
+  assert_status "$rc" 0 'the suggested tracking command works in real git' || { builtin cd -- "$original_dir"; return 1; }
+  command git switch -q - && command git branch -q -D hint-check || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" "git switch --detach -- refs/remotes/origin/topic" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
 
   upstream=$(command git for-each-ref --format='%(upstream:short)' 'refs/heads/topic' 2>/dev/null) || upstream=''
