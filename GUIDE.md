@@ -434,10 +434,8 @@ A recorded blocked fzf integration is a failure even when its binary version is 
 | `la` | Listing including hidden entries |
 | `lt` | Tree to depth 3; defined only with `lsd` or `tree` |
 | `cat` | `bat --style=numbers --paging=never` when `bat` or `batcat` is present; flags only GNU `cat` understands, such as `-v`, `-e`, and `-T`, run the real `cat` |
-| `grep` | Adds `--color=auto` on Linux |
-| `diff` | Adds `--color=auto` on Linux |
-
-Under the zero-probe startup policy, the built-in `ls`, `ll`, and `la` fallbacks and the `grep` and `diff` aliases add automatic color only on Linux. On macOS and BSD they keep the corresponding plain command behavior rather than running capability probes while the shell starts. `lsd`, when installed, remains the preferred listing backend on every platform where it is available.
+| `grep` | Adds `--color=auto` |
+| `diff` | Adds `--color=auto` |
 
 ### Git extras
 
@@ -925,7 +923,7 @@ These are the cross-cutting rules most likely to surprise a new user:
 18. **Inventories have limits.** APT and Paru repository queries use cached metadata; Pacman refreshes a separate database when `checkupdates` is available, and DNF may refresh expired metadata. Native upgrades resolve transactions. `npkg` reports output identity rather than version ordering.
 19. **Partial package results fail.** `upkg` continues other managers but returns nonzero for partial, failed, or blocked selected backends. `npkg` returns nonzero when any row is unknown.
 20. **Rich output is presentation.** Use a pipe, redirect, `NO_COLOR`, or an explicit plain option for stable machine-readable text.
-21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows are Linux-oriented.
+21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows require it. macOS and BSD are not supported.
 22. **Network helpers contact external services.** `weather` requests `wttr.in`, `myip` requests `ifconfig.me`, and `headers` contacts the URL supplied by the user.
 23. **Automation must load the layer explicitly.** Aliases and functions are interactive shell features; scripts should call real binaries or source `init.zsh` inside Zsh.
 24. **Helper failures stay on stderr.** Successful data remains pipeable on stdout; usage errors, missing dependencies, and invalid paths do not contaminate command substitutions.

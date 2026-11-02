@@ -67,7 +67,7 @@ Captured package queries require readable Linux `/proc` process identities and `
 
 If the packaged fzf is older than 0.68.0, upgrade it through a current package source or follow the upstream installation link printed by `scripts/check-deps.sh`.
 
-The configuration targets GNU/Linux. Some commands and flags are not portable to BSD or macOS userlands without adjustment.
+The configuration targets GNU/Linux only; macOS and BSD are not supported.
 
 ## Configuration boundary
 
