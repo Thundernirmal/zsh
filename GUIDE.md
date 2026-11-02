@@ -599,7 +599,7 @@ All three commands apply the safe-text contract described in [Terminal output mo
 
 #### ports and myip
 
-`ports` uses `ss -tulnp`. The dashboard lists TCP before UDP, sorted by port, and shows every socket, so a long list scrolls. `ports 8080` matches one port exactly, and `ports nginx` matches process names; no match prints a diagnostic and returns 1. Piped output keeps native `ss` format and applies the same filter. Process details can be limited by system permissions: `-` means the owner is hidden, and the dashboard then points at `sudo ss -tulnp`. `myip` queries `https://ifconfig.me/ip`. Both use rich dashboards only in capable terminals. `myip` only prints a response that looks like an IP address, so a captive portal's page fails with a diagnostic instead of being shown.
+`ports` uses `ss -tulnp`. The dashboard lists TCP before UDP, sorted by port, and shows every socket, so a long list scrolls. `ports 8080` matches one port exactly, and `ports nginx` matches process names; no match prints a diagnostic and returns 1. Piped output keeps native `ss` format and applies the same filter. Process details can be limited by system permissions: `-` means the owner is hidden, and the dashboard then points at `sudo ss -tulnp`. `myip` queries `https://ifconfig.me/ip`. Both use rich dashboards only in capable terminals. `myip` only prints a valid IPv4 or IPv6 address, so a captive portal's page or other unexpected response fails with a diagnostic instead of being shown.
 
 #### fkill and fbr
 

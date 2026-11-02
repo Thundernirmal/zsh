@@ -2616,6 +2616,24 @@ esac
   assert_contains "$output" 'not an IP address' 'myip explains a rejected response' || return 1
   assert_not_contains "$output" '<html>' 'myip never prints a rejected response' || return 1
 
+  local myip_candidate
+  for myip_candidate in 999.999.999.999 abc.def 1.2 deadbeef. 1.2.3.4.5 256.1.1.1 01.2.3.4 \
+    1:2 1::2::3 12345::1 1:2:3:4:5:6:7:8:9 1:2:3:4:5:6:7::8 :1 1: ::: g::1 fe80::1%eth0 ::ffff:999.0.0.1; do
+    write_fake curl "printf '%s' '$myip_candidate'"
+    output=$(myip 2>&1)
+    cmd_status=$?
+    assert_status "$cmd_status" 1 "myip rejects $myip_candidate" || return 1
+    assert_not_contains "$output" "$myip_candidate" "myip never prints the rejected $myip_candidate" || return 1
+  done
+  for myip_candidate in 203.0.113.42 0.0.0.0 255.255.255.255 2001:db8::42 ::1 :: 1:: 1:2:3:4:5:6:7:8 \
+    1:2:3:4:5:6:: ::ffff:203.0.113.5 1:2:3:4:5:6:1.2.3.4 ABCD::ef; do
+    write_fake curl "printf '%s' '$myip_candidate'"
+    output=$(myip 2>&1)
+    cmd_status=$?
+    assert_status "$cmd_status" 0 "myip accepts $myip_candidate" || return 1
+    assert_contains "$output" "$myip_candidate" "myip prints $myip_candidate" || return 1
+  done
+
   typeset -ga _UPKG_SEARCH_ROWS=()
   _upkg_search_add_rows npm $'evil-pkg\t1.0.0\e[2J\tHelpful \e]52;c;QUJD\a\e[2Jtitle'
   [[ ${_UPKG_SEARCH_ROWS[1]} != *$'\e'* && ${_UPKG_SEARCH_ROWS[1]} != *$'\a'* ]] || {

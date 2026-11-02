@@ -550,6 +550,56 @@ weather() {
   }
 }
 
+_myip_is_ipv4() {
+  emulate -L zsh
+
+  local part
+  local -a parts=( "${(@s:.:)1}" )
+
+  (( ${#parts} == 4 )) || return 1
+  for part in "${parts[@]}"; do
+    [[ $part == <-> && ${#part} -le 3 && ( $part == 0 || $part != 0* ) ]] || return 1
+    (( part <= 255 )) || return 1
+  done
+}
+
+# RFC 4291 text form: one :: at most, and an optional dotted IPv4 tail. Zone IDs
+# never belong on a public address.
+_myip_is_ipv6() {
+  emulate -L zsh
+
+  local ip=$1 part
+  local -a groups
+  integer count compressed=0
+
+  [[ $ip == *:* ]] || return 1
+  if [[ $ip == *::* ]]; then
+    [[ ${ip#*::} != *::* ]] || return 1
+    compressed=1
+    [[ -z ${ip%%::*} ]] || groups+=( "${(@s/:/)${ip%%::*}}" )
+    [[ -z ${ip#*::} ]] || groups+=( "${(@s/:/)${ip#*::}}" )
+  else
+    groups=( "${(@s/:/)ip}" )
+  fi
+
+  count=${#groups}
+  # A dotted tail stands in for the last two groups.
+  if [[ ${groups[-1]-} == *.* ]]; then
+    _myip_is_ipv4 "${groups[-1]}" || return 1
+    groups[-1]=()
+    (( count++ ))
+  fi
+  for part in "${groups[@]}"; do
+    [[ -n $part && ${#part} -le 4 && $part != *[^0-9A-Fa-f]* ]] || return 1
+  done
+
+  if (( compressed )); then
+    (( count <= 7 ))
+  else
+    (( count == 8 ))
+  fi
+}
+
 # Show public IP address over HTTPS
 myip() {
   emulate -L zsh
@@ -580,7 +630,7 @@ myip() {
   }
   # A captive portal can answer 200 with a page, so only print a real address.
   ip=${ip//$'\r'/}
-  if [[ -z $ip || ${#ip} -gt 45 || $ip == *[^0-9A-Fa-f:.]* || $ip != *[:.]* ]]; then
+  if ! _myip_is_ipv4 "$ip" && ! _myip_is_ipv6 "$ip"; then
     print -u2 -r -- 'myip: the response is not an IP address; a captive portal or proxy may be answering'
     return 1
   fi
