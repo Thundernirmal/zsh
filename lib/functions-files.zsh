@@ -400,7 +400,7 @@ ff() {
 
 # Print the content-search options without depending on a backend.
 _ft_usage() {
-  print 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] <pattern> [path]'
+  print 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]'
   print 'Search text with rg or grep; fixed-string matching is available on both backends.'
   print 'The grep fallback already traverses hidden files and does not read ignore files.'
 }
@@ -410,7 +410,7 @@ ft() {
   emulate -L zsh
 
   local arg pattern='' search_root='.'
-  local -i hidden=0 no_ignore=0 follow=0 fixed_strings=0 options_done=0
+  local -i hidden=0 no_ignore=0 follow=0 fixed_strings=0 ignore_case=0 options_done=0
   local -a operands search_args
 
   while (( $# > 0 )); do
@@ -436,6 +436,10 @@ ft() {
           ;;
         --fixed-strings|-F)
           fixed_strings=1
+          continue
+          ;;
+        --ignore-case|-i)
+          ignore_case=1
           continue
           ;;
         --)
@@ -465,6 +469,7 @@ ft() {
     (( no_ignore )) && search_args+=(--no-ignore)
     (( follow )) && search_args+=(--follow)
     (( fixed_strings )) && search_args+=(--fixed-strings)
+    (( ignore_case )) && search_args+=(--ignore-case)
     search_args+=(--color=auto -- "$pattern" "$search_root")
     command rg "${search_args[@]}"
   else
@@ -481,6 +486,7 @@ ft() {
     else
       search_args+=(-E)
     fi
+    (( ignore_case )) && search_args+=(-i)
     search_args+=(--color=auto -- "$pattern" "$search_root")
     command grep "${search_args[@]}"
   fi

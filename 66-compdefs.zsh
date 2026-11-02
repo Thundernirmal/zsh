@@ -344,7 +344,7 @@ if (( $+functions[compdef] )); then
     if [[ ${words[1]} == ff ]]; then
       search_flags+=( '--no-hidden[exclude hidden entries]' '--no-follow[do not follow symlinks]' )
     else
-      search_flags+=( '--fixed-strings[match literal text]' '-F[match literal text]' )
+      search_flags+=( '--fixed-strings[match literal text]' '-F[match literal text]' '--ignore-case[ignore letter case]' '-i[ignore letter case]' )
     fi
     _arguments '(-h --help)'{-h,--help}'[show usage]' "${search_flags[@]}" '1:search pattern:'  '2:search root:_directories' '*: :_message "no additional arguments"'
   }

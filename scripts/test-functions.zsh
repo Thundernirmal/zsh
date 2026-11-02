@@ -105,7 +105,7 @@ test_missing_arguments() {
   assert_missing_arg_usage extract 'Usage: extract [--keep] [--destination <dir>] <file>' || return 1
   assert_missing_arg_usage mkcd 'Usage: mkcd <directory>' || return 1
   assert_missing_arg_usage ff 'Usage: ff [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]' || return 1
-  assert_missing_arg_usage ft 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] <pattern> [path]' || return 1
+  assert_missing_arg_usage ft 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]' || return 1
   assert_missing_arg_usage headers 'Usage: headers <url>' || return 1
   assert_missing_arg_usage peek 'Usage: peek <file>' || return 1
 }

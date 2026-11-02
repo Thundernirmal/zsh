@@ -21,7 +21,7 @@ _zsh_tip_pool=(
   "Use extract --destination DIR link.gz to retain a compressed link target"
   "Use a nonempty existing directory with extract --destination DIR archive.tar.gz"
   "Use ff --no-ignore or ft --hidden --no-ignore to broaden a search"
-  "Use ft --fixed-strings to search literal text"
+  "Use ft -i to ignore case or ft -F to search literal text"
   "Use --help with a general helper to see usage before doing any work"
   "Run mkcd <dir> to create and enter a directory"
   "Run croot to jump to the current Git repository root"
