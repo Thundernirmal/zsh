@@ -146,6 +146,10 @@ test_plain_rendering_and_availability() {
   _zsh_help_matches '' 1
   assert_contains " ${(j: :)reply} " ' npkg ' '--all results include unavailable commands' || return 1
 
+  output=$(zhelp --plain --all -)
+  assert_status "$?" 0 'zhelp - looks up the - alias' || return 1
+  assert_contains "$output" 'Return to the previous directory' 'zhelp - shows the record that completion offers' || return 1
+
   output=$(zhelp --plain --all package)
   assert_contains "$output" 'Manage Nix profiles; helper commands support --help [needs nix; jq and fzf 0.68.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
 

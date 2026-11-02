@@ -282,6 +282,10 @@ zhelp() {
         query_parts+=("$@")
         break
         ;;
+      -)
+        # The alias for cd -, which completion offers as a command name.
+        query_parts+=("$1")
+        ;;
       -*)
         print -u2 -- "Unknown zhelp option: $1"
         _zsh_help_usage >&2
