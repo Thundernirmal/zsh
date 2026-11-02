@@ -36,7 +36,7 @@ _zsh_tip_pool=(
   "Run ports 8080 or ports nginx to narrow the listening sockets"
   "Run myip to show your public IP address"
   "Run weather for a concise HTTPS forecast"
-  "Run peek <file> for a quick file preview"
+  "Run peek <file> to preview its first 200 lines"
   "Run headers <url> to follow redirects and print HTTP headers"
   "Use command substitutions safely; helper errors stay on stderr"
   "Press Tab after a custom command to see valid arguments"

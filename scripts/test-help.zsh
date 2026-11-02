@@ -106,7 +106,7 @@ test_catalogue() {
 
   assert_equals "${_ZSH_HELP_SUMMARY[upkg]}" 'Check, search, upgrade, and clean detected managers' 'upkg help summary is concise and includes cleanup' || return 1
   assert_equals "${_ZSH_HELP_USAGE[weather]}" 'weather' 'weather help does not promise an unsupported location argument' || return 1
-  assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat or cat' 'peek help names its real fallback' || return 1
+  assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat or sed' 'peek help names its real fallback' || return 1
   assert_equals "${_ZSH_HELP_USAGE[ztheme]}" 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme help exposes every public subcommand' || return 1
 
   assert_equals "${_ZSH_COMMAND_CANONICAL[gcount]}" gitcount 'alias metadata points to its canonical command' || return 1

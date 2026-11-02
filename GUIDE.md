@@ -126,7 +126,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 
 | Command | Effect when present | Fallback or absence behavior |
 |---|---|---|
-| `bat` | Highlighted `cat` alias, `peek`, and file previews | `peek` uses `cat`; fzf previews use `sed` |
+| `bat` | Highlighted `cat` alias, `peek`, and file previews | `peek` and fzf previews use `sed` |
 | `tree` | `lt` and directory previews when `lsd` is absent | Preview uses `ls`; `lt` is unavailable without `lsd` or `tree` |
 | `fd` / `fdfind` | Faster `ff` search | GNU `find` |
 | `rg` | Faster `ft` content search | Recursive `grep` |
@@ -545,7 +545,7 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 | `mkcd <dir>` | Create a directory and enter it |
 | `ff [options] <pattern> [path]` | Find names case-insensitively |
 | `ft [options] <pattern> [path]` | Search file contents |
-| `peek <file>` | Preview with `bat` or `cat` |
+| `peek <file>` | Preview the first 200 lines with `bat` or `sed`; a note on stderr says when the file is longer |
 | `headers <url>` | Follow redirects and print HTTP headers |
 | `fanprofile` | Show the current Linux platform or ASUS fan profile |
 | `dusage [path] [count]` | Rank immediate entries by disk usage |

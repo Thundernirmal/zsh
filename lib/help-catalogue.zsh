@@ -45,7 +45,7 @@ _zsh_help_is_available() {
       command -v zoxide >/dev/null 2>&1 && _zsh_help_fzf_is_ready_cached
       ;;
     peek)
-      command -v bat >/dev/null 2>&1 || command -v cat >/dev/null 2>&1
+      command -v bat >/dev/null 2>&1 || command -v sed >/dev/null 2>&1
       ;;
     disk)
       command -v find >/dev/null 2>&1 && command -v du >/dev/null 2>&1

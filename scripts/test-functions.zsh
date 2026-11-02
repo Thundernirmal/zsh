@@ -732,6 +732,24 @@ test_small_helper_success_paths() {
   output=$(peek "$fixture_dir/preview.txt") || return 1
   assert_equals "$output" 'needle' 'peek prints a readable file through its fallback' || return 1
 
+  # peek stops at line 200 on both backends and says so only when lines remain.
+  local sed_only="$tmp_dir/peek-sed-only" bat_stub="$tmp_dir/peek-bat-stub"
+  command mkdir -p -- "$sed_only" "$bat_stub"
+  command ln -sf -- "${commands[sed]}" "$sed_only/sed"
+  print -r -- '#!/bin/sh
+printf "%s\n" "$@"' >"$bat_stub/bat"
+  command chmod +x -- "$bat_stub/bat"
+  print -rl -- {1..250} >"$fixture_dir/long.txt"
+  print -rl -- {1..200} >"$fixture_dir/exact.txt"
+  output=$(PATH=$sed_only peek "$fixture_dir/long.txt" 2>"$fixture_dir/peek.err") || return 1
+  assert_equals "${#${(f)output}}" 200 'peek fallback stops at line 200' || return 1
+  assert_contains "$(<"$fixture_dir/peek.err")" 'first 200 lines' 'peek says when a file is longer than the preview' || return 1
+  output=$(PATH=$sed_only peek "$fixture_dir/exact.txt" 2>"$fixture_dir/peek.err") || return 1
+  assert_equals "${#${(f)output}}" 200 'peek fallback shows a file of exactly 200 lines' || return 1
+  assert_equals "$(<"$fixture_dir/peek.err")" '' 'peek stays quiet when nothing was cut' || return 1
+  output=$(PATH="$bat_stub:$sed_only" peek "$fixture_dir/exact.txt" 2>/dev/null) || return 1
+  assert_contains "$output" '--line-range=:200' 'peek limits bat to the same 200 lines' || return 1
+
   print -r -- '#!/bin/sh
 printf "%s\n" "HTTP/1.1 204 No Content"' >"$fakebin/curl"
   command chmod +x -- "$fakebin/curl"

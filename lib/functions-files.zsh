@@ -493,7 +493,7 @@ peek() {
   case ${1:-} in
     -h|--help)
       print 'Usage: peek <file>'
-      print 'Preview a file with bat when available, otherwise cat.'
+      print 'Preview the first 200 lines of a file with bat when available, otherwise sed.'
       return 0
       ;;
   esac
@@ -503,11 +503,18 @@ peek() {
     return 1
   fi
 
+  local rc
   if command -v bat >/dev/null 2>&1; then
-    bat --style=numbers --paging=never -- "$1"
+    bat --style=numbers --paging=never --line-range=:200 -- "$1"
   else
-    command cat -- "$1"
+    command sed -n '1,200p;200Q' -- "$1"
   fi
+  rc=$?
+  # Stops reading at line 201, so a huge file costs no more than a short one.
+  if (( rc == 0 )) && [[ -f $1 && -n $(command sed -n '201{s/^/x/p;q}' -- "$1" 2>/dev/null) ]]; then
+    print -u2 -r -- 'peek: showing the first 200 lines; use cat for the whole file'
+  fi
+  return $rc
 }
 
 # Collect disk records before choosing a renderer. The caller owns local
