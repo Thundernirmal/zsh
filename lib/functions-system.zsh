@@ -673,6 +673,28 @@ _zdoctor_usage() {
   print '  --secrets   Ping Secret Service over D-Bus without retrieving any value'
 }
 
+# Names the first reason output falls back to plain, in the rich-mode check's order.
+_zdoctor_output_mode() {
+  emulate -L zsh
+
+  if [[ ! -t 1 ]]; then
+    REPLY='plain (stdout is not a terminal)'
+  elif [[ -z ${TERM:-} || $TERM == dumb ]]; then
+    REPLY='plain (TERM is unset or dumb)'
+  elif [[ -n ${NO_COLOR:-} ]]; then
+    REPLY='plain (NO_COLOR is set)'
+  elif ! _ui_locale_is_utf8; then
+    REPLY='plain (the locale is not UTF-8)'
+  else
+    _ui_term_width_reply
+    if (( REPLY < 60 )); then
+      REPLY='plain (the terminal is narrower than 60 columns)'
+    else
+      REPLY=rich
+    fi
+  fi
+}
+
 # On-demand setup and integration diagnosis. Reads local state only unless
 # the explicit probe flags are given; never edits configuration.
 zdoctor() {
@@ -854,8 +876,10 @@ zdoctor() {
     if (( ${+galiases[G]} )); then
       _zdoctor_report ok 'global aliases are enabled (ZSH_GLOBAL_ALIASES=1)'
     else
-      _zdoctor_report warn "global aliases are disabled; export ZSH_GLOBAL_ALIASES=1 before startup to enable them"
+      print -r -- 'note: global aliases are disabled; export ZSH_GLOBAL_ALIASES=1 before startup to enable them'
     fi
+    _zdoctor_output_mode
+    print -r -- "note: output mode: $REPLY"
 
     if (( check_network )); then
       if ! command -v curl >/dev/null 2>&1; then

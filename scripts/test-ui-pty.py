@@ -106,7 +106,29 @@ done
 TRUNCATION_SHA256 = "3cc3bf37f8418e5bf14dc14126a1cefbaeebf538e879435db86df5fbdb39a85a"
 
 
+OUTPUT_MODES = r'''
+source "$1/lib/functions-common.zsh"
+source "$1/lib/functions-system.zsh"
+show() { _zdoctor_output_mode; print -r -- "$REPLY"; }
+COLUMNS=120
+show
+NO_COLOR=1 show
+TERM=dumb show
+LC_ALL=C show
+COLUMNS=40
+show
+'''
+
+
 def main():
+    assert run(OUTPUT_MODES).decode().split() == " ".join([
+        "rich",
+        "plain (NO_COLOR is set)",
+        "plain (TERM is unset or dumb)",
+        "plain (the locale is not UTF-8)",
+        "plain (the terminal is narrower than 60 columns)",
+    ]).split()
+    assert b"plain (stdout is not a terminal)" in run(OUTPUT_MODES, False)
     for tty in (True, False):
         assert run(MATRIX, tty) == run(REFERENCE + MATRIX, tty)
     run(r'''
