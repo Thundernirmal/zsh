@@ -290,7 +290,11 @@ mkcd() {
     return 1
   fi
 
-  command mkdir -p -- "$1" && builtin cd -- "$1"
+  # A bare -, -N, or +N would select the directory stack instead of the new
+  # directory, and CDPATH could redirect a relative name.
+  local target=$1
+  [[ $target == /* ]] || target=./$target
+  command mkdir -p -- "$1" && builtin cd -- "$target"
 }
 
 # Print the name-search options without depending on a backend.

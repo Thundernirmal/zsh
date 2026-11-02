@@ -140,6 +140,23 @@ test_local_emulation_and_leading_dash_operands() {
   }
 
   builtin cd -- "$fixture_dir" || return 1
+  mkcd - && assert_equals "$PWD" "$fixture_dir/-" 'mkcd enters a directory named - rather than the previous directory' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  builtin cd -- "$fixture_dir" || return 1
+  mkcd +1 && assert_equals "$PWD" "$fixture_dir/+1" 'mkcd enters a directory named +1 rather than a directory stack entry' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  builtin cd -- "$fixture_dir" || return 1
+  command mkdir -p -- "$fixture_dir/elsewhere/sibling"
+  CDPATH="$fixture_dir/elsewhere" mkcd sibling && assert_equals "$PWD" "$fixture_dir/sibling" 'mkcd enters the directory it created even when CDPATH has the same name' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+
+  builtin cd -- "$fixture_dir" || return 1
   command mkdir -- -scan
   print -r -- data > -scan/file.txt
   output=$(bigfiles -scan 1) || return 1
