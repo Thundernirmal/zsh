@@ -357,20 +357,8 @@ test_tip_capabilities() (
       *) [[ $output != *'--only=dnf'* && $output != *'--only dnf'* ]] || return 1 ;;
     esac
     case $manager in
-      npm) [[ $output == *'--only npm'* ]] || return 1 ;;
-      *) [[ $output != *'--only npm'* ]] || return 1 ;;
-    esac
-    case $manager in
-      flatpak) [[ $output == *'--only flatpak'* ]] || return 1 ;;
-      *) [[ $output != *'--only flatpak'* ]] || return 1 ;;
-    esac
-    case $manager in
-      apt) [[ $output == *'APT refresh errors'* ]] || return 1 ;;
-      *) [[ $output != *'APT refresh errors'* ]] || return 1 ;;
-    esac
-    case $manager in
-      paru) [[ $output == *'Devel in paru.conf'* ]] || return 1 ;;
-      *) [[ $output != *'Devel in paru.conf'* ]] || return 1 ;;
+      apt) [[ $output == *'--only=apt'* ]] || return 1 ;;
+      *) [[ $output != *'--only=apt'* ]] || return 1 ;;
     esac
     [[ $output != *'Run checkupdates'* ]] || return 1
   done

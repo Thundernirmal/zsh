@@ -10,19 +10,17 @@ _zsh_tip_pool=(
   "Start a command with a space to keep it out of saved history"
   "Use ZSH_HISTFILE=path before sourcing init.zsh to keep history elsewhere"
   "Run zhelp to find a command and queue an editable example"
-  "Run zdoctor in an interactive shell; repair blocked fzf and restart"
+  "Run zdoctor to check the setup and see why output looks plain"
   "Use ztheme show custom to inspect; ztheme use custom applies the palette"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
   "Run ll for a detailed listing that includes hidden entries"
   "Run ff <pattern> [path] to find files by name"
-  "Use ff or ft stderr to diagnose failed searches on fallback backends"
   "Run ft <pattern> [path] to search file contents"
   "Run extract --keep file.gz to preserve the compressed input"
-  "Use extract --destination DIR link.gz to retain a compressed link target"
-  "Use a nonempty existing directory with extract --destination DIR archive.tar.gz"
+  "Run extract --destination DIR archive.tar.gz to unpack somewhere else"
   "Use ff --no-ignore or ft --hidden --no-ignore to broaden a search"
   "Use ft -i to ignore case or ft -F to search literal text"
-  "Use --help with a general helper to see usage before doing any work"
+  "Use --help with any helper to see its usage"
   "Run mkcd <dir> to create and enter a directory"
   "Run croot to jump to the current Git repository root"
   "Run glog to see the latest 20 commits as a graph"
@@ -38,7 +36,6 @@ _zsh_tip_pool=(
   "Run weather for a concise HTTPS forecast"
   "Run peek <file> to preview its first 200 lines"
   "Run headers <url> to follow redirects and print HTTP headers"
-  "Use command substitutions safely; helper errors stay on stderr"
   "Press Tab after a custom command to see valid arguments"
 )
 
@@ -60,21 +57,20 @@ fi
 
 if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_EXECUTION_STRING:-} ]]; then
   _zsh_tip_pool+=(
-    "Press Ctrl+R to insert history; Ctrl+P toggles its preview and ? stays searchable"
+    "Press Ctrl+R to search history and insert a command"
     "Press Ctrl+T to insert a selected file path"
     "Press Alt+C to select and enter a directory"
-    "Type in the unfilled fzf input row to filter; use the footer for keys"
-    "On short terminals hide previews with Ctrl+P or enlarge the window; Ctrl+/ wraps"
+      "Press Ctrl+P in a picker to hide its preview; Ctrl+/ toggles wrapping"
     "Run fkill TERM to stop selected processes; use fkill 9 only to force"
     "Run fkill --all to include processes from all users"
-    "Run fbr to select exact branches even when branch and tag names collide"
+    "Run fbr to pick a branch and check it out or enter its worktree"
     "Use [WT] in fbr to spot branches checked out in another worktree"
   )
 
   if (( $+commands[zoxide] )); then
     _zsh_tip_pool+=(
       "Use zi to select a remembered directory interactively"
-      "Press Ctrl+P in zi to preview a directory; typing keeps zoxide's ranking"
+      "Press Ctrl+P in zi to preview a directory"
     )
   fi
 fi
@@ -85,8 +81,7 @@ fi
 
 if (( $+functions[cgm] )); then
   _zsh_tip_pool+=(
-    "Use plain scalars with cgm env; padding and case conversion are rejected"
-    "Run cgm set OPENAI_KEY to store a credential securely"
+      "Run cgm set OPENAI_KEY to store a credential securely"
     "Run cgm env OPENAI_KEY to load a credential into this shell"
     "Run cgm list to show saved names without retrieving values"
     "Run cgm status to check which saved names are exported in this shell"
@@ -106,25 +101,23 @@ fi
 
 if (( $+commands[nix] && $+commands[jq] )); then
   _zsh_tip_pool+=(
-    "Run npkg refresh --help for usage without rebuilding the attribute cache"
+    "Run npkg refresh to rebuild the cached nixpkgs attribute list"
     "Run npkg outdated to check for Nix output changes"
   )
 fi
 
 if (( $+commands[nix] && $+commands[jq] )) && [[ ${_FZF_STATE:-blocked} == ready ]]; then
   _zsh_tip_pool+=(
-    "Use npkg find -- --help to search for the literal --help query"
-    "Run npkg outdated to check every active profile entry for output changes"
-    "Run npkg remove with no arguments to select active installed packages"
+        "Run npkg remove with no arguments to select active installed packages"
   )
 fi
 
 if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dnf] || $+commands[brew] || $+commands[flatpak] || ($+commands[nix] && $+functions[npkg]) || $+commands[npm] )); then
   _zsh_tip_pool+=(
-    "Run upkg to check detected package managers; review warnings on stderr"
-    "Run upkg search ripgrep; native warnings stay separate from package results"
+    "Run upkg to check every detected package manager for updates"
+    "Run upkg search ripgrep to search every detected manager"
     "Run upkg managers to show active and alternate backends"
-    "Run upkg plan to inventory updates; review the native upgrade transaction"
+    "Run upkg plan to list updates without installing anything"
     "Run upkg clean --dry-run before package cleanup"
     "Use Ctrl+C during upkg to stop remaining managers and cleanup phases"
     "Run upkg plan and compare per-manager elapsed times in the summary"
@@ -142,31 +135,13 @@ if (( $+commands[dnf] )); then
   _zsh_tip_pool+=(
     "Run upkg search ripgrep --only=dnf to search RPM package names"
     'Use upkg --only dnf to select DNF even when another distro backend is active'
-    "Run upkg clean --dry-run --only dnf to preview cache removal; check failures"
-  )
-fi
-
-if (( $+commands[npm] )); then
-  _zsh_tip_pool+=(
-    "Run upkg outdated --only npm for a stable table and visible native warnings"
-  )
-fi
-
-if (( $+commands[flatpak] )); then
-  _zsh_tip_pool+=(
-    "Run upkg outdated --only flatpak to include hidden extension update refs"
+    "Run upkg clean --dry-run --only dnf to preview cache removal"
   )
 fi
 
 if (( $+commands[apt] )); then
   _zsh_tip_pool+=(
-    "Run upkg upgrade --sudo --only=apt after resolving APT refresh errors"
-  )
-fi
-
-if (( $+commands[paru] )); then
-  _zsh_tip_pool+=(
-    "Use Devel in paru.conf to enable development-package commit update checks"
+    "Run upkg upgrade --sudo --only=apt to upgrade APT packages"
   )
 fi
 
