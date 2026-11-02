@@ -1967,6 +1967,52 @@ test_ff_keeps_paths_as_typed() (
   fi
 )
 
+test_bigfiles_ranks_outside_the_shell() (
+  local fakebin="$tmp_dir/rank-bin" fixture="$tmp_dir/rank-fixture" raw="$tmp_dir/rank-raw" output
+  local -a records
+  local -A scan_result
+  integer signal_status=0 index total=0
+  local content=''
+
+  command mkdir -p -- "$fakebin" "$fixture" || return 1
+  : > "$fixture/file"
+  for (( index = 1; index <= 40000; index++ )); do
+    content+="$index"$'\t'"/tree/dir/file-$index"$'\0'
+    (( total += index ))
+  done
+  print -rn -- "$content" > "$raw"
+  print -r -- '#!/bin/sh
+cat -- "$RANK_RAW"' > "$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  PATH="$fakebin:$PATH"
+  export RANK_RAW=$raw
+  rehash
+
+  local scan_limit=3
+  _zsh_scan_collect bigfiles "$fixture"
+  assert_equals "${scan_result[count]}" 40000 'ranked scan counts every record' || return 1
+  assert_equals "${scan_result[total_kib]}" "$total" 'ranked scan totals every record' || return 1
+  (( ${#records} < 40000 )) || {
+    print -u2 -- 'not ok: ranked scan loads only part of a large record set'
+    return 1
+  }
+  print -- 'ok: ranked scan loads only part of a large record set'
+  assert_equals "${records[1]%%$'\t'*}" 40000 'ranked scan starts at the largest record' || return 1
+  unset scan_limit
+
+  functions[_ui_plain_mode]='return 0'
+  output=$(bigfiles "$fixture" 2) || return 1
+  assert_equals "$output" $'39MiB    /tree/dir/file-40000\n39MiB    /tree/dir/file-39999' 'bigfiles prints the top rows of a ranked scan' || return 1
+  output=$(bigfiles "$fixture" 0) || return 1
+  assert_equals "$output" '' 'bigfiles with a count of 0 prints no rows' || return 1
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  output=$(bigfiles "$fixture" 2 2>&1)
+  assert_contains "$output" 'showing 2/40000 files' 'rich bigfiles reports the full count from a ranked scan' || return 1
+  assert_contains "$output" 'Total: 763GiB' 'rich bigfiles reports the full total from a ranked scan' || return 1
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1982,6 +2028,7 @@ main() {
   test_scan_count_is_honored || return 1
   test_ports_order_and_filter || return 1
   test_ff_keeps_paths_as_typed || return 1
+  test_bigfiles_ranks_outside_the_shell || return 1
   test_scan_record_oracle || return 1
   test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1

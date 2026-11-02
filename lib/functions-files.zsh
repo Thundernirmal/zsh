@@ -531,13 +531,18 @@ peek() {
 # records (array), scan_result (association), and signal_status. Partial scans
 # are successful collections with an explicit nonzero result status; setup
 # failures/signals return early. Neither rich nor plain rendering runs here.
+# A caller may also set scan_limit: regular du records are then counted and
+# sorted outside the shell, scan_result gains count and total_kib, and records
+# holds only the rows that limit can show, plus any that tie with the last one.
 _zsh_scan_collect() {
   emulate -L zsh
   setopt localtraps
   local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file=''
   local chunk carry='' record tab=$'\t'
   local -a parts irregular
-  integer du_status=0 find_status=0 result_status=0
+  local rank_summary
+  local -a rank_fields
+  integer du_status=0 find_status=0 result_status=0 ranked=0
   shift 2
   trap 'signal_status=130; return 130' INT
   trap 'signal_status=143; return 143' TERM
@@ -561,6 +566,25 @@ _zsh_scan_collect() {
         du_status=$?
       fi
     fi
+    # Odd tabs, a missing size, or a missing final NUL keep the in-shell path
+    # below, whose read rules define those records.
+    if (( ${+scan_limit} )) && [[ -s $raw_output_file ]] &&
+        zmodload -F zsh/system b:sysread 2>/dev/null &&
+        [[ $(command tail -c 1 -- "$raw_output_file" | LC_ALL=C command tr -d '\0' | command wc -c) == 0 ]]; then
+      LC_ALL=C command grep -qazE "^\$|^[^0-9]|^[0-9]+(\$|[^0-9${tab}])|${tab}${tab}|${tab}\$" -- "$raw_output_file"
+      if (( $? == 1 )); then
+        rank_summary=$(LC_ALL=C command cut -z -f1 -- "$raw_output_file" | command tr '\0' '\n' |
+          command awk '{ total += $1 } END { printf "%d %.0f", NR, total }')
+        rank_fields=( ${=rank_summary} )
+        if [[ ${rank_fields[1]-} == <-> && ${rank_fields[2]-} == <-> ]] &&
+            LC_ALL=C command sort -z -t "$tab" -k1,1nr -o "$raw_output_file" -- "$raw_output_file"; then
+          ranked=1
+          scan_result[count]=${rank_fields[1]}
+          scan_result[total_kib]=${rank_fields[2]}
+          (( scan_limit > 0 )) || : >| "$raw_output_file"
+        fi
+      fi
+    fi
     if zmodload -F zsh/system b:sysread 2>/dev/null; then
       # Bounded chunks replace read's one-syscall-per-byte input. Split
       # complete NUL records and keep IFS=$'\t' read semantics: trim
@@ -574,6 +598,11 @@ _zsh_scan_collect() {
         irregular=( "${(@M)parts:#${tab}*}" "${(@M)parts:#*${tab}}" "${(@M)parts:#*${tab}${tab}*}" "${(@M)parts:#<->}" )
         if (( ${#irregular} == 0 )); then
           records+=( "${(@M)parts:#<->${tab}*}" )
+          # Sorted input: stop once past the last size the limit can show.
+          if (( ranked && ${#records} >= scan_limit )) &&
+              (( ${records[-1]%%${tab}*} < ${records[scan_limit]%%${tab}*} )); then
+            break
+          fi
           continue
         fi
         for record in "${parts[@]}"; do
@@ -831,12 +860,13 @@ bigfiles() {
   esac
 
   local -A scan_result
+  local scan_limit=$limit
   _zsh_scan_collect bigfiles "$target" || return $?
 
   incomplete_detail=${scan_result[diagnostic]}
   incomplete_status=${scan_result[status]}
 
-  if (( ${#records[@]} == 0 )); then
+  if (( ${#records[@]} == 0 && ${scan_result[count]:-0} == 0 )); then
     if (( incomplete_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
       return $incomplete_status
@@ -857,7 +887,7 @@ bigfiles() {
   fi
 
   lines=( "${(@On)records}" )
-  line_count=${#lines[@]}
+  line_count=${scan_result[count]:-${#lines[@]}}
 
   if _ui_plain_mode; then
     shown=$limit
@@ -877,10 +907,14 @@ bigfiles() {
     return 0
   fi
 
-  for line in "${lines[@]}"; do
-    kib=${line%%$'\t'*}
-    total_kib=$(( total_kib + kib ))
-  done
+  if [[ -n ${scan_result[total_kib]-} ]]; then
+    total_kib=${scan_result[total_kib]}
+  else
+    for line in "${lines[@]}"; do
+      kib=${line%%$'\t'*}
+      total_kib=$(( total_kib + kib ))
+    done
+  fi
 
   shown=$limit
   (( shown > line_count )) && shown=$line_count
