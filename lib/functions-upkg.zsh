@@ -1257,6 +1257,7 @@ _upkg_search_progress() {
 
   local manager=$1
   local detail=$2
+  local verb=${3:-Searching}
 
   [ -n "${_UPKG_THEME_MODE:-}" ] || return 0
   _ui_plain_mode && return 0
@@ -1268,7 +1269,7 @@ _upkg_search_progress() {
   _ui_reset
   print -nr -- ' '
   _ui_color muted
-  print -nr -- 'Searching'
+  print -nr -- "$verb"
   _ui_reset
   print -nr -- ' '
   _ui_color accent
@@ -1306,6 +1307,18 @@ _upkg_search_progress_clear() {
   print -nr -- $'\r'
   _ui_repeat "$width" ' '
   print -nr -- $'\r'
+}
+
+# Inventories are captured until they finish, so show what is running meanwhile.
+_upkg_inventory_query() {
+  local manager=$1 rc
+  shift
+
+  _upkg_search_progress "$manager" '' Checking
+  _upkg_capture_query "$@"
+  rc=$?
+  _upkg_search_progress_clear
+  return "$rc"
 }
 
 _upkg_append_search_description_reply() {

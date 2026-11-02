@@ -1383,6 +1383,22 @@ done
       functions[_ui_color]=':'
       functions[_ui_reset]=':'
       functions[_ui_icon]='print -nr -- "*"'
+      functions[_upkg_capture_query]='print -r -- "query: $*"; return 7'
+      _UPKG_THEME_MODE=1
+      _upkg_inventory_query flatpak flatpak remote-ls
+      print -r -- "status=$?"
+    )
+  )
+  assert_contains "$output" 'Checking * Flatpak...' 'inventory progress names the running manager' || return 1
+  assert_contains "$output" 'query: flatpak remote-ls' 'inventory progress wraps the native query' || return 1
+  assert_contains "$output" 'status=7' 'inventory progress preserves the query status' || return 1
+
+  output=$(
+    (
+      functions[_ui_plain_mode]='return 1'
+      functions[_ui_color]=':'
+      functions[_ui_reset]=':'
+      functions[_ui_icon]='print -nr -- "*"'
       functions[_ui_badge]='print -nr -- "[$1]"'
       functions[_ui_section_break]=':'
       _UPKG_THEME_MODE=1

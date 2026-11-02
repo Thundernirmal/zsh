@@ -771,7 +771,7 @@ Cancelled cleanup summaries retain completed and failed phase counts, earlier fa
 
 Tab completion describes `--dry-run` as an update inventory or cleanup preview, matching the shared flag reference.
 
-Search progress is cleared when each query finishes, before diagnostics, cancellation returns, or the final summary.
+Search and inventory progress lines appear only in rich output. Each is cleared when its query finishes, before diagnostics, cancellation returns, or the final summary.
 
 Multi-manager runs continue after an ordinary backend failure. Cancellation stops the remaining managers and cleanup phases, preserving status `130` (INT), `143` (TERM), or `129` (HUP). Pressing Ctrl-C while a native upgrade or cleanup command runs still prints the cancelled summary before `upkg` returns `130`:
 

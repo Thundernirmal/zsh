@@ -553,7 +553,7 @@ _upkg_run_outdated_apt() {
 
   _upkg_print_section apt
 
-  _upkg_capture_query apt list --upgradable
+  _upkg_inventory_query apt apt list --upgradable
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -588,7 +588,7 @@ _upkg_run_outdated_dnf() {
 
   _upkg_print_section dnf
 
-  _upkg_capture_query dnf check-update
+  _upkg_inventory_query dnf dnf check-update
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -634,7 +634,7 @@ _upkg_run_outdated_pacman() {
       trap '_upkg_check_interrupt 130; return 130' INT
       trap '_upkg_check_interrupt 143; return 143' TERM
       trap '_upkg_check_interrupt 129; return 129' HUP
-      CHECKUPDATES_DB=$database _upkg_capture_query checkupdates --nocolor
+      CHECKUPDATES_DB=$database _upkg_inventory_query pacman checkupdates --nocolor
       rc=$?
     } always {
       command rm -rf -- "$database"
@@ -645,7 +645,7 @@ _upkg_run_outdated_pacman() {
     fi
   else
     print 'Cached repository inventory: install pacman-contrib for fresh checkupdates checks.'
-    _upkg_capture_query pacman -Qu
+    _upkg_inventory_query pacman pacman -Qu
     rc=$?
   fi
   output=$_UPKG_QUERY_STDOUT
@@ -676,7 +676,7 @@ _upkg_run_outdated_paru() {
   local output diagnostic rc
   _upkg_print_section paru
   print 'Configured Paru update inventory (repository versions use cached metadata):'
-  _upkg_capture_query paru -Qu
+  _upkg_inventory_query paru paru -Qu
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -709,7 +709,7 @@ _upkg_run_outdated_brew() {
 
   _upkg_print_section brew
 
-  _upkg_capture_query brew outdated
+  _upkg_inventory_query brew brew outdated
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -738,7 +738,7 @@ _upkg_run_outdated_flatpak() {
 
   _upkg_print_section flatpak
 
-  _upkg_capture_query flatpak remote-ls --updates --all
+  _upkg_inventory_query flatpak flatpak remote-ls --updates --all
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -781,8 +781,10 @@ _upkg_run_outdated_nix() {
   _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$capture_dir" )
   # Invoke in this process: result globals survive, streams stay independent.
   {
+    _upkg_search_progress nix '' Checking
     npkg outdated >"$capture_dir/stdout" 2>"$capture_dir/stderr"
     rc=$?
+    _upkg_search_progress_clear
     output=$(<"$capture_dir/stdout")
     diagnostic=$(<"$capture_dir/stderr")
   } always {
@@ -826,7 +828,7 @@ _upkg_run_outdated_npm() {
   local stdout_output stderr_output rc
 
   _upkg_print_section npm
-  LC_ALL=C _upkg_capture_query npm outdated -g --depth=0 --json=false --parseable=false --color=false
+  LC_ALL=C _upkg_inventory_query npm npm outdated -g --depth=0 --json=false --parseable=false --color=false
   rc=$?
   stdout_output=$_UPKG_QUERY_STDOUT
   stderr_output=$_UPKG_QUERY_STDERR
