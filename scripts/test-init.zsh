@@ -407,6 +407,19 @@ test_benchmark_keeps_real_history() {
   print -- 'ok: startup benchmark leaves the real history file alone'
 }
 
+test_batcat_backs_the_cat_alias() {
+  local stub_bin="$tmp_home/batcat-bin" output
+
+  command mkdir -p -- "$stub_bin" || return 1
+  print -r -- '#!/bin/sh' > "$stub_bin/batcat"
+  command chmod +x -- "$stub_bin/batcat"
+  output=$(HOME="$tmp_home" PATH="$stub_bin" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; print -r -- "$aliases[cat]"' 2>&1)
+  assert_equals "$output" 'batcat --style=numbers --paging=never' 'the cat alias uses batcat when only that name exists' || return 1
+
+  output=$(PATH="$stub_bin:/usr/bin:/bin" /bin/sh "$repo_dir/scripts/check-deps.sh" 2>&1)
+  assert_contains "$output" 'ok: bat/batcat' 'the dependency checker accepts batcat' || return 1
+}
+
 test_extended_glob_stays_off() {
   local fixture_dir="$tmp_home/extended-glob-fixture"
   local output
@@ -1309,6 +1322,7 @@ main() {
   test_zoxide_rejected_cache_directory || return 1
   test_glob_policy || return 1
   test_extended_glob_stays_off || return 1
+  test_batcat_backs_the_cat_alias || return 1
   test_benchmark_keeps_real_history || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1

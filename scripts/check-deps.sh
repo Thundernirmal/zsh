@@ -154,10 +154,7 @@ print_hints() {
   case "$manager" in
     apt)
       printf '  sudo apt update\n'
-      printf '  sudo apt install zsh git curl iproute2 lsd zoxide tree fd-find ripgrep jq libsecret-tools\n'
-      printf '  Debian/Ubuntu expose bat as batcat; install the expected bat command with one of:\n'
-      printf '    nix profile add nixpkgs#bat\n'
-      printf '    brew install bat\n'
+      printf '  sudo apt install zsh git curl iproute2 lsd zoxide bat tree fd-find ripgrep jq libsecret-tools\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     dnf)
@@ -175,7 +172,7 @@ print_hints() {
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
     *)
-      printf '  Install these commands manually: zsh git curl ss lsd zoxide bat tree fd/fdfind rg jq secret-tool\n'
+      printf '  Install these commands manually: zsh git curl ss lsd zoxide bat/batcat tree fd/fdfind rg jq secret-tool\n'
       printf '  Optional for npkg: install Nix from https://nixos.org/download/\n'
       ;;
   esac
@@ -202,7 +199,7 @@ check_cmd ss required
 check_cmd lsd required
 check_cmd zoxide required
 check_fzf
-check_cmd bat optional
+check_any_cmd 'bat/batcat' optional bat batcat
 check_cmd tree optional
 check_any_cmd 'fd/fdfind' optional fd fdfind
 check_cmd rg optional

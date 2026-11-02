@@ -78,7 +78,10 @@ exit 0
             actual = execute(target)
             assert b"--line-range=:200" in actual.stdout
             assert (b"--color=never" if no_color else b"--color=always") in actual.stdout
-            bat.unlink()
+            bat.rename(tools / "batcat")
+            actual = execute(target)
+            assert b"--line-range=:200" in actual.stdout, "batcat should back the preview"
+            (tools / "batcat").unlink()
     print("ok: exported file previews preserve bytes/errors/backends and stop at line 200 without EOF")
 
 

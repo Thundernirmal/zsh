@@ -749,6 +749,9 @@ printf "%s\n" "$@"' >"$bat_stub/bat"
   assert_equals "$(<"$fixture_dir/peek.err")" '' 'peek stays quiet when nothing was cut' || return 1
   output=$(PATH="$bat_stub:$sed_only" peek "$fixture_dir/exact.txt" 2>/dev/null) || return 1
   assert_contains "$output" '--line-range=:200' 'peek limits bat to the same 200 lines' || return 1
+  command mv -- "$bat_stub/bat" "$bat_stub/batcat"
+  output=$(PATH="$bat_stub:$sed_only" peek "$fixture_dir/exact.txt" 2>/dev/null) || return 1
+  assert_contains "$output" '--line-range=:200' 'peek uses batcat when only that name exists' || return 1
 
   print -r -- '#!/bin/sh
 printf "%s\n" "HTTP/1.1 204 No Content"' >"$fakebin/curl"

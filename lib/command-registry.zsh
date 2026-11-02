@@ -68,9 +68,9 @@ _zsh_help_register ls Files 'List directory contents' 'ls [path]' 'ls' 'lsd or G
 _zsh_help_register ll Files 'List all entries with details' 'll [path]' 'll' 'lsd or GNU ls' alias none
 _zsh_help_register la Files 'List entries including hidden files' 'la [path]' 'la' 'lsd or GNU ls' alias none
 _zsh_help_register lt Files 'Show a three-level directory tree' 'lt [path]' 'lt' 'lsd or tree' alias none
-_zsh_help_register cat Files 'Print files with bat highlighting' 'cat <file>' 'cat README.md' bat alias none
+_zsh_help_register cat Files 'Print files with bat highlighting' 'cat <file>' 'cat README.md' 'bat or batcat' alias none
 _zsh_help_register extract Files 'Unpack a supported archive' 'extract [--keep] [--destination <dir>] <archive>' 'extract archive.tar.gz' 'tar; format-specific unpackers when needed' function none
-_zsh_help_register peek Files 'Preview the first 200 lines of a file' 'peek <file>' 'peek README.md' 'bat or sed' function peek
+_zsh_help_register peek Files 'Preview the first 200 lines of a file' 'peek <file>' 'peek README.md' 'bat, batcat, or sed' function peek
 _zsh_help_register dusage Files 'Rank immediate entries by disk usage' 'dusage [path] [count]' 'dusage . 10' 'GNU du and find' function disk
 _zsh_help_register bigfiles Files 'Rank files recursively by size' 'bigfiles [path] [count]' 'bigfiles . 10' 'GNU find and du' function disk
 _zsh_help_register grep Search 'Search text with automatic colour' 'grep <pattern> [file ...]' 'grep TODO README.md' 'grep with --color=auto support' alias none

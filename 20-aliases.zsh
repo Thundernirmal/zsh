@@ -29,8 +29,11 @@ alias ....='cd ../../..'
 alias -- -='cd -'
 
 # File viewing
+# Debian and Ubuntu install bat as batcat.
 if (( $+commands[bat] )); then
   alias cat='bat --style=numbers --paging=never'
+elif (( $+commands[batcat] )); then
+  alias cat='batcat --style=numbers --paging=never'
 fi
 
 if [[ $OSTYPE == linux* ]]; then

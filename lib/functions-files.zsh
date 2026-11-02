@@ -493,7 +493,7 @@ peek() {
   case ${1:-} in
     -h|--help)
       print 'Usage: peek <file>'
-      print 'Preview the first 200 lines of a file with bat when available, otherwise sed.'
+      print 'Preview the first 200 lines of a file with bat or batcat when available, otherwise sed.'
       return 0
       ;;
   esac
@@ -506,6 +506,8 @@ peek() {
   local rc
   if command -v bat >/dev/null 2>&1; then
     bat --style=numbers --paging=never --line-range=:200 -- "$1"
+  elif command -v batcat >/dev/null 2>&1; then
+    batcat --style=numbers --paging=never --line-range=:200 -- "$1"
   else
     command sed -n '1,200p;200Q' -- "$1"
   fi

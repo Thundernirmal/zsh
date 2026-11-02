@@ -126,7 +126,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 
 | Command | Effect when present | Fallback or absence behavior |
 |---|---|---|
-| `bat` | Highlighted `cat` alias, `peek`, and file previews | `peek` and fzf previews use `sed` |
+| `bat` / `batcat` | Highlighted `cat` alias, `peek`, and file previews | `peek` and fzf previews use `sed` |
 | `tree` | `lt` and directory previews when `lsd` is absent | Preview uses `ls`; `lt` is unavailable without `lsd` or `tree` |
 | `fd` / `fdfind` | Faster `ff` search | GNU `find` |
 | `rg` | Faster `ft` content search | Recursive `grep` |
@@ -143,7 +143,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 
 Package managers are detected at runtime; they are not setup dependencies. The checker reports the primary optional integrations, while format-specific unpackers and ordinary GNU userland tools are checked only by the workflows that need them.
 
-On Debian and Ubuntu, the distribution may expose `bat` as `batcat`. This repository looks specifically for `bat`, so install a package that provides that command or add a deliberate local wrapper.
+On Debian and Ubuntu, the `bat` package installs the command as `batcat`, and `fd-find` installs `fdfind`. Both names are detected, so no wrapper is needed.
 
 ## Terminal output modes
 
@@ -433,7 +433,7 @@ A recorded blocked fzf integration is a failure even when its binary version is 
 | `ll` | Long listing including hidden entries and readable sizes |
 | `la` | Listing including hidden entries |
 | `lt` | Tree to depth 3; defined only with `lsd` or `tree` |
-| `cat` | `bat --style=numbers --paging=never` when `bat` is present |
+| `cat` | `bat --style=numbers --paging=never` when `bat` or `batcat` is present |
 | `grep` | Adds `--color=auto` on Linux |
 | `diff` | Adds `--color=auto` on Linux |
 
@@ -525,7 +525,7 @@ Finder presentation is compiled separately from the trusted integration cache. C
 | Ctrl+R | Select a history entry and insert it for editing |
 | Alt+C | Select a directory and change to it |
 
-Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from GNU `sed`. The plain fallback stops after line 200; it does not scan later content or detect read errors beyond that preview prefix. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
+Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat`, `batcat`, or the first 200 lines from GNU `sed`. The plain fallback stops after line 200; it does not scan later content or detect read errors beyond that preview prefix. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
@@ -545,7 +545,7 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 | `mkcd <dir>` | Create a directory and enter it |
 | `ff [options] <pattern> [path]` | Find names case-insensitively |
 | `ft [options] <pattern> [path]` | Search file contents |
-| `peek <file>` | Preview the first 200 lines with `bat` or `sed`; a note on stderr says when the file is longer |
+| `peek <file>` | Preview the first 200 lines with `bat`, `batcat`, or `sed`; a note on stderr says when the file is longer |
 | `headers <url>` | Follow redirects and print HTTP headers |
 | `fanprofile` | Show the current Linux platform or ASUS fan profile |
 | `dusage [path] [count]` | Rank immediate entries by disk usage |

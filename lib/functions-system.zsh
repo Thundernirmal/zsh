@@ -786,13 +786,18 @@ zdoctor() {
       _zdoctor_report fail "required tool missing: fzf (minimum $fzf_minimum)"
     fi
 
-    for module in bat tree rg jq secret-tool gdbus setsid nix; do
+    for module in tree rg jq secret-tool gdbus setsid nix; do
       if command -v $module >/dev/null 2>&1; then
         _zdoctor_report ok "optional tool: $module"
       else
         _zdoctor_report warn "optional tool missing: $module (only its workflows stay unavailable)"
       fi
     done
+    if command -v bat >/dev/null 2>&1 || command -v batcat >/dev/null 2>&1; then
+      _zdoctor_report ok 'optional tool: bat/batcat'
+    else
+      _zdoctor_report warn 'optional tool missing: bat/batcat (peek and previews fall back to sed)'
+    fi
     if command -v fd >/dev/null 2>&1 || command -v fdfind >/dev/null 2>&1; then
       _zdoctor_report ok 'optional tool: fd/fdfind'
     else
