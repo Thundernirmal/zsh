@@ -49,7 +49,8 @@ zsh ./scripts/test-query-launcher.zsh
 zsh ./scripts/test-completions.zsh
 zsh ./scripts/test-help.zsh
 zsh ./scripts/test-doctor.zsh
-# CI also runs the real-fzf PTY suite against each supported fzf release.
+# All three suites need a real fzf. CI's fzf-pty job runs them against each
+# supported fzf release, because the verify job has no fzf and skips them here.
 if (( $+commands[python3] && $+commands[fzf] )); then
   python3 ./scripts/test-ui-pty.py
   python3 ./scripts/test-preview.py
