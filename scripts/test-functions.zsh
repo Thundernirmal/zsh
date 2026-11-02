@@ -2013,6 +2013,23 @@ cat -- "$RANK_RAW"' > "$fakebin/du"
   assert_contains "$output" 'Total: 763GiB' 'rich bigfiles reports the full total from a ranked scan' || return 1
 )
 
+test_dusage_ignores_a_global_scan_limit() (
+  local fixture="$tmp_dir/scan-limit-fixture"
+  local -a records
+  local -A scan_result
+  integer signal_status=0
+
+  command mkdir -p -- "$fixture" || return 1
+  print -r -- one > "$fixture/a"
+  print -r -- two > "$fixture/b"
+
+  # bigfiles sets its own local limit; only a stray global reaches dusage.
+  typeset -g scan_limit=1
+  _zsh_scan_collect dusage "$fixture" "$fixture/a" "$fixture/b"
+  assert_equals "${+scan_result[count]}" 0 'dusage stays out of ranking with a stray global scan_limit' || return 1
+  assert_equals "${#records}" 2 'dusage keeps every record with a stray global scan_limit' || return 1
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -2029,6 +2046,7 @@ main() {
   test_ports_order_and_filter || return 1
   test_ff_keeps_paths_as_typed || return 1
   test_bigfiles_ranks_outside_the_shell || return 1
+  test_dusage_ignores_a_global_scan_limit || return 1
   test_scan_record_oracle || return 1
   test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1

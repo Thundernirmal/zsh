@@ -531,9 +531,9 @@ peek() {
 # records (array), scan_result (association), and signal_status. Partial scans
 # are successful collections with an explicit nonzero result status; setup
 # failures/signals return early. Neither rich nor plain rendering runs here.
-# A caller may also set scan_limit: regular du records are then counted and
-# sorted outside the shell, scan_result gains count and total_kib, and records
-# holds only the rows that limit can show, plus any that tie with the last one.
+# bigfiles also sets scan_limit: regular du records are then counted and sorted
+# outside the shell, scan_result gains count and total_kib, and records holds
+# only the rows that limit can show, plus any that tie with the last one.
 _zsh_scan_collect() {
   emulate -L zsh
   setopt localtraps
@@ -568,7 +568,7 @@ _zsh_scan_collect() {
     fi
     # Odd tabs, a missing size, or a missing final NUL keep the in-shell path
     # below, whose read rules define those records.
-    if (( ${+scan_limit} )) && [[ -s $raw_output_file ]] &&
+    if [[ $mode == bigfiles ]] && (( ${+scan_limit} )) && [[ -s $raw_output_file ]] &&
         zmodload -F zsh/system b:sysread 2>/dev/null &&
         [[ $(command tail -c 1 -- "$raw_output_file" | LC_ALL=C command tr -d '\0' | command wc -c) == 0 ]]; then
       LC_ALL=C command grep -qazE "^\$|^[^0-9]|^[0-9]+(\$|[^0-9${tab}])|${tab}${tab}|${tab}\$" -- "$raw_output_file"
