@@ -2595,6 +2595,30 @@ esac
   assert_status "$cmd_status" 0 'myip rich mode exits 0 with stubbed curl' || return 1
   assert_contains "$output" '203.0.113.42' 'myip rich mode includes the IP address' || return 1
 
+  write_fake curl 'printf "%s\n" "2001:db8::42"'
+  output=$(myip)
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'myip accepts an IPv6 address' || return 1
+  assert_contains "$output" '2001:db8::42' 'myip prints an IPv6 address' || return 1
+
+  write_fake curl 'printf "<html>Please log in \033[2J</html>\n"'
+  output=$(myip 2>&1)
+  cmd_status=$?
+  assert_status "$cmd_status" 1 'myip rejects a captive portal page' || return 1
+  assert_contains "$output" 'not an IP address' 'myip explains a rejected response' || return 1
+  assert_not_contains "$output" '<html>' 'myip never prints a rejected response' || return 1
+
+  typeset -ga _UPKG_SEARCH_ROWS=()
+  _upkg_search_add_rows npm $'evil-pkg\t1.0.0\e[2J\tHelpful \e]52;c;QUJD\a\e[2Jtitle'
+  [[ ${_UPKG_SEARCH_ROWS[1]} != *$'\e'* && ${_UPKG_SEARCH_ROWS[1]} != *$'\a'* ]] || {
+    print -u2 -- 'not ok: search rows never carry raw control bytes'
+    return 1
+  }
+  print -- 'ok: search rows never carry raw control bytes'
+  assert_contains "${_UPKG_SEARCH_ROWS[1]}" '\e]52;c;QUJD\a\e[2Jtitle' 'search rows show control bytes as visible escapes' || return 1
+  assert_contains "${_UPKG_SEARCH_ROWS[1]}" '1.0.0\e[2J' 'search rows sanitize the version field too' || return 1
+  _UPKG_SEARCH_ROWS=()
+
   command rm -f "$fakebin/paru" "$fakebin/pacman"
   write_fake apt '
 case "$*" in

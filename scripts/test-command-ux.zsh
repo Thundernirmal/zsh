@@ -58,6 +58,7 @@ printf "grep %s\n" "$*" >> "$COMMAND_UX_LOG"
 exit 0' >"$fakebin/grep"
   print -r -- '#!/bin/sh
 printf "curl %s\n" "$*" >> "$COMMAND_UX_LOG"
+case "$*" in *ifconfig.me*) printf "%s\n" "203.0.113.42"; exit 0 ;; esac
 printf "%s\n" "fixture-response"
 exit 0' >"$fakebin/curl"
   command chmod +x -- "$fakebin"/*

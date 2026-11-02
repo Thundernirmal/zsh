@@ -547,6 +547,12 @@ myip() {
     print -u2 -r -- "myip: request failed (curl exit $rc)"
     return $rc
   }
+  # A captive portal can answer 200 with a page, so only print a real address.
+  ip=${ip//$'\r'/}
+  if [[ -z $ip || ${#ip} -gt 45 || $ip == *[^0-9A-Fa-f:.]* || $ip != *[:.]* ]]; then
+    print -u2 -r -- 'myip: the response is not an IP address; a captive portal or proxy may be answering'
+    return 1
+  fi
   if _ui_plain_mode; then
     print -r -- "$ip"
     return 0

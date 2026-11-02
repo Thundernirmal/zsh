@@ -974,7 +974,7 @@ _upkg_brew_name_from_header() {
 _upkg_search_add_rows() {
   emulate -L zsh
 
-  local manager=$1 row
+  local manager=$1 row REPLY
   local name version description
   shift
   local -a rows=( "$@" ) fields
@@ -985,7 +985,10 @@ _upkg_search_add_rows() {
 
   for row in "${rows[@]}"; do
     fields=("${(@ps:\t:)row}")
-    name=${fields[1]:-}; version=${fields[2]:-}; description=${fields[3]:-}
+    # Registries control this text, so control sequences must stay inert.
+    _ui_safe_text_reply "${fields[1]:-}"; name=$REPLY
+    _ui_safe_text_reply "${fields[2]:-}"; version=$REPLY
+    _ui_safe_text_reply "${fields[3]:-}"; description=$REPLY
     _UPKG_SEARCH_ROWS+=("${manager}"$'\t'"${name}"$'\t'"${version}"$'\t'"${description}")
   done
 }
