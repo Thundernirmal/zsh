@@ -5,7 +5,7 @@ _upkg_usage() {
   if ! _ui_plain_mode; then
     _ui_title_line 'Unified Package Updates' 'upkg help' accent '󰏖' '*'
     _ui_section_break
-    _ui_panel_kv 'Usage' 'upkg [command] [args] [--only <list>] [--skip <list>] [--sudo] [--dry-run]' muted text
+    _ui_panel_kv 'Usage' 'upkg [command] [args] [--only <list>] [--skip <list>] [--sudo] [--dry-run] [--parallel]' muted text
     _ui_section_break
     _ui_panel_kv 'outdated / check / list' 'Show outdated packages across detected managers' accent text
     _ui_panel_kv 'search <query>' 'Search package names across detected managers' accent text
@@ -19,6 +19,7 @@ _upkg_usage() {
     _ui_panel_kv '--skip <list>' 'Exclude comma-separated manager IDs' muted text
     _ui_panel_kv '--sudo' 'Authorize privileged upgrade and cleanup backends' muted text
     _ui_panel_kv '--dry-run' 'Inventory updates or preview cleanup without changing packages' muted text
+    _ui_panel_kv '--parallel' 'Run outdated, plan, and search queries at the same time' muted text
     _ui_section_break
     _ui_panel_kv 'Timing' 'Summaries show elapsed time per manager and in total' muted text
     _ui_panel_kv 'Managers' 'apt, dnf, pacman, paru, brew, flatpak, nix, npm' muted text
@@ -28,7 +29,7 @@ _upkg_usage() {
     return 0
   fi
 
-  print 'Usage: upkg [command] [args] [--only <list>] [--skip <list>] [--sudo] [--dry-run]'
+  print 'Usage: upkg [command] [args] [--only <list>] [--skip <list>] [--sudo] [--dry-run] [--parallel]'
   print ''
   print 'Commands:'
   print '  outdated            Show outdated packages across detected managers'
@@ -48,6 +49,7 @@ _upkg_usage() {
   print '  --skip <list>       Comma-separated manager IDs to exclude'
   print '  --sudo              Authorize privileged upgrade and cleanup backends'
   print '  --dry-run           Inventory updates or preview cleanup without changing packages'
+  print '  --parallel          Run outdated, plan, and search queries at the same time'
   print ''
   print 'Supported manager IDs:'
   print '  apt, dnf, pacman, paru, brew, flatpak, nix, npm'
@@ -354,6 +356,22 @@ _upkg_timing_finish() {
   # One duration slot per attempted manager; empty slots are unavailable.
   _UPKG_ELAPSED=( "${(@)_UPKG_TIMING_MARKS[1,${#_UPKG_TIMING_MARKS} / 2]//*/}" )
   (( _UPKG_TIMING_CLOCK )) || return 0
+  if (( _UPKG_TIMING_PARALLEL )); then
+    # Overlapping managers have no shared order, so each pair stands alone.
+    local started ended
+    for (( i = 1; i <= ${#_UPKG_ELAPSED}; i++ )); do
+      started=${_UPKG_TIMING_MARKS[2 * i - 1]}
+      ended=${_UPKG_TIMING_MARKS[2 * i]}
+      [[ $started == <->(|.<->) && $ended == <->(|.<->) ]] || continue
+      (( ended >= started )) || continue
+      (( elapsed = ended - started ))
+      _UPKG_ELAPSED[i]=$elapsed
+    done
+    ended=$EPOCHREALTIME
+    (( elapsed = ended - _UPKG_TIMING_TOTAL_START ))
+    (( elapsed >= 0 )) && _UPKG_TIMING_TOTAL=$elapsed
+    return 0
+  fi
   samples=( "$_UPKG_TIMING_TOTAL_START" "${_UPKG_TIMING_MARKS[@]}" "$EPOCHREALTIME" )
 
   # Quoted (@) keeps an empty sample, which counts as invalid. More than 12
@@ -1312,20 +1330,133 @@ _upkg_append_search_description_reply() {
   done
 }
 
+# Runs in a background subshell. The parent prints each heading when it flushes
+# the captured output, so the worker's own heading is a no-op.
+_upkg_parallel_worker() {
+  local cmd=$1 manager=$2 base=$3 started ended
+
+  _upkg_print_section() { :; }
+  _UPKG_LAST_STATE=''
+  _UPKG_LAST_DETAIL=''
+  started=$EPOCHREALTIME
+  {
+    case $cmd in
+      search) "_upkg_run_search_$manager" "${query_parts[@]}" ;;
+      *) "_upkg_run_outdated_$manager" ;;
+    esac
+  } >"$base.out" 2>"$base.err"
+  ended=$EPOCHREALTIME
+  [[ $cmd == search ]] && print -rl -- "${_UPKG_SEARCH_ROWS[@]}" >"$base.rows"
+  print -rl -- "$_UPKG_LAST_STATE" "${_UPKG_LAST_DETAIL//$'\n'/ }" "$started" "$ended" "$_UPKG_INTERRUPTED_STATUS" >"$base.tmp"
+  command mv -- "$base.tmp" "$base.state"
+}
+
+# Read-only queries can overlap. Each manager runs in a worker that captures its
+# output and result, and the parent prints them in the usual order as soon as
+# every earlier manager is done. Returns 1 before starting anything if it can't
+# run, so the caller falls back to the sequential loop.
+_upkg_run_parallel() {
+  emulate -L zsh
+  setopt localtraps NO_MONITOR NO_NOTIFY
+
+  local cmd=$1 verb=Checking work_dir manager pid state detail started ended worker_status worker_stat
+  shift
+  local -a managers=( "$@" ) job_pids worker_fields
+  local -A job_identities
+  integer interrupted=0 index total=$#
+
+  [[ $cmd == search ]] && verb=Searching
+  zmodload zsh/zselect 2>/dev/null || return 1
+  zmodload zsh/system 2>/dev/null || return 1
+  work_dir=$(command mktemp -d "${TMPDIR:-/tmp}/upkg-parallel.XXXXXX") || return 1
+  _UPKG_TIMING_PARALLEL=1
+
+  {
+    trap 'interrupted=130; _zsh_stop_owned_jobs "${job_pids[@]}"' INT
+    trap 'interrupted=143; _zsh_stop_owned_jobs "${job_pids[@]}"' TERM
+    trap 'interrupted=129; _zsh_stop_owned_jobs "${job_pids[@]}"' HUP
+
+    for (( index = 1; index <= total; index++ )); do
+      (
+        trap - INT TERM HUP
+        _upkg_parallel_worker "$cmd" "${managers[index]}" "$work_dir/$index"
+      ) &
+      job_pids+=( "$!" )
+      if [[ -r /proc/$!/stat ]] && { worker_stat=$(</proc/$!/stat); } 2>/dev/null; then
+        worker_fields=( ${=${worker_stat##*\) }} )
+        job_identities[$!]=${worker_fields[20]-}
+      fi
+    done
+
+    for (( index = 1; index <= total; index++ )); do
+      manager=${managers[index]}
+      pid=${job_pids[index]}
+      [[ $cmd == search ]] || _upkg_print_section "$manager"
+      _upkg_search_progress "$manager" '' "$verb"
+      while [[ ! -e $work_dir/$index.state ]] && _zsh_owned_job_is_running "$pid"; do
+        zselect -t 5 2>/dev/null
+      done
+      _upkg_search_progress_clear
+      wait "$pid" 2>/dev/null
+
+      if [[ -e $work_dir/$index.state ]]; then
+        {
+          IFS= read -r state
+          IFS= read -r detail
+          IFS= read -r started
+          IFS= read -r ended
+          IFS= read -r worker_status
+        } <"$work_dir/$index.state"
+        [[ -s $work_dir/$index.err ]] && command cat -- "$work_dir/$index.err" >&2
+        [[ -s $work_dir/$index.out ]] && command cat -- "$work_dir/$index.out"
+        if [[ -s $work_dir/$index.rows ]]; then
+          _UPKG_SEARCH_ROWS+=( "${(@f)$(<"$work_dir/$index.rows")}" )
+        fi
+        # A manager cancelled by its own query stops the others, as it does in sequence.
+        if (( worker_status && ! interrupted )); then
+          interrupted=$worker_status
+          _zsh_stop_owned_jobs "${job_pids[@]}"
+        fi
+      else
+        started='' ended=''
+        if (( interrupted )); then
+          state=cancelled detail="interrupted (status $interrupted)"
+        else
+          state=failed detail='worker stopped before reporting a result'
+        fi
+      fi
+      _UPKG_TIMING_MARKS+=( "$started" "$ended" )
+      _upkg_record_summary "$manager" "$state" "$detail"
+      case $state in
+        partial|blocked|failed) exit_code=1 ;;
+      esac
+    done
+  } always {
+    _zsh_stop_owned_jobs "${job_pids[@]}"
+    command rm -rf -- "$work_dir"
+  }
+
+  if (( interrupted )); then
+    _UPKG_INTERRUPTED_STATUS=$interrupted
+    exit_code=$interrupted
+  fi
+  return 0
+}
+
 upkg() {
   emulate -L zsh
 
   local raw_cmd='' cmd='outdated' manager
   local only_raw='' skip_raw=''
   local query=''
-  local allow_sudo=0 dry_run=0 filtered=0 exit_code=0
+  local allow_sudo=0 dry_run=0 parallel=0 filtered=0 exit_code=0
   local -a candidate_pool run_order display_order query_parts
   local -A selected_map skipped_map alternate_map display_seen
 
   local _UPKG_THEME_MODE=''
   local -i _UPKG_INTERRUPTED_STATUS=0 _UPKG_TRAPPED_INT=0
   # Invocation-local elapsed state shared with timing helpers by dynamic scope.
-  local -i _UPKG_TIMING_ENABLED=0 _UPKG_TIMING_CLOCK=0
+  local -i _UPKG_TIMING_ENABLED=0 _UPKG_TIMING_CLOCK=0 _UPKG_TIMING_PARALLEL=0
   local _UPKG_TIMING_LABEL='' _UPKG_TIMING_NOTE='' _UPKG_TIMING_TOTAL_START='' _UPKG_TIMING_TOTAL=''
   local -a _UPKG_TIMING_MARKS _UPKG_ELAPSED
 
@@ -1370,6 +1501,9 @@ upkg() {
         ;;
       --dry-run)
         dry_run=1
+        ;;
+      --parallel)
+        parallel=1
         ;;
       --)
         shift
@@ -1621,6 +1755,11 @@ upkg() {
   # An interactive shell aborts the whole function when a foreground child dies
   # from Ctrl-C. A local INT trap keeps control here so cancellation is summarized.
   trap '_UPKG_TRAPPED_INT=1' INT
+
+  # Only read-only commands overlap; every other command ignores --parallel.
+  if (( parallel && ${#run_order} > 1 )) && [[ $cmd == (outdated|plan|search) ]]; then
+    _upkg_run_parallel "$cmd" "${run_order[@]}" && run_order=()
+  fi
 
   for manager in "${run_order[@]}"; do
     _UPKG_TIMING_MARKS+=( "$EPOCHREALTIME" )

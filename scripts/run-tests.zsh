@@ -62,9 +62,10 @@ fi
 if (( $+commands[python3] )); then
   python3 ./scripts/test-upkg-pty.py >/dev/null
   print -- 'ok: upkg timing PTY checks'
+  python3 ./scripts/test-upkg-parallel.py
   python3 ./scripts/test-cgm-pty.py
 else
-  print -- 'skip: upkg timing and cgm PTY checks require python3'
+  print -- 'skip: upkg timing, parallel, and cgm PTY checks require python3'
 fi
 
 if [[ $repo_dir == ${HOME:-}/.config/zsh ]]; then

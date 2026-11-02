@@ -27,6 +27,7 @@ if (( $+functions[compdef] )); then
     '--skip:Exclude comma-separated manager IDs'
     '--sudo:Authorize privileged upgrade and cleanup backends'
     '--dry-run:Inventory updates or preview cleanup without changing packages'
+    '--parallel:Run outdated, plan, and search queries at the same time'
     '--help:Show usage help'
   )
   typeset -ga _ZSH_EXTRACT_EXTENSIONS=(
@@ -106,6 +107,7 @@ if (( $+functions[compdef] )); then
       '--skip=[exclude comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
       '--sudo[authorize privileged upgrade and cleanup backends]' \
       "--dry-run[${_ZSH_UPKG_FLAGS[(r)--dry-run:*]#*:}]" \
+      "--parallel[${_ZSH_UPKG_FLAGS[(r)--parallel:*]#*:}]" \
       '1:upkg command:->command' \
       '*:command argument:->argument' && return 0
 

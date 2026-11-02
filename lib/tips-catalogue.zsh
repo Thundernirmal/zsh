@@ -121,6 +121,7 @@ if (( $+commands[paru] || $+commands[pacman] || $+commands[apt] || $+commands[dn
     "Run upkg clean --dry-run before package cleanup"
     "Use Ctrl+C during upkg to stop remaining managers and cleanup phases"
     "Run upkg plan and compare per-manager elapsed times in the summary"
+    "Use upkg plan --parallel to check every manager at the same time"
   )
 fi
 
