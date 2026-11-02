@@ -288,7 +288,6 @@ Rich output is for people, not parsers. Pipe a command or use its explicit plain
 | `AUTO_PUSHD` | on | Every directory change pushes the previous directory |
 | `PUSHD_IGNORE_DUPS` | on | The directory stack omits duplicates |
 | `PUSHD_SILENT` | on | Stack changes do not print automatically |
-| `EXTENDED_GLOB` | on | Enables Zsh glob qualifiers and exclusions |
 | `GLOB_DOTS` | off | Ordinary globs exclude leading-dot entries |
 | `NUMERIC_GLOB_SORT` | on | `file2` sorts before `file10` |
 | `CORRECT` | off | Command spell-correction prompts are disabled |
@@ -303,13 +302,15 @@ print -rl -- *(D)     # visible and hidden entries
 print -rl -- **/*(D)  # recursive, including hidden entries
 ```
 
-Useful extended-glob examples:
+Useful glob examples:
 
 ```zsh
 print -rl -- **/*.js
 print -rl -- *(.m-1)
 print -rl -- *(Lk+100)
 ```
+
+`EXTENDED_GLOB` is left off so that `HEAD^`, `nixpkgs#bat`, and URLs containing `#` reach commands unchanged instead of failing with `no matches found`. The examples above don't need it. To use the `^`, `~`, and `#` glob operators, run `setopt EXTENDED_GLOB` in `~/.zshrc`; the shared layer doesn't override that choice.
 
 ### Directory stack
 

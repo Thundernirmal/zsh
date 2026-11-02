@@ -389,6 +389,31 @@ printf "%s\n" "$@" > "$GLOB_STUB_LOG"' > "$fakebin/rm"
   print -- 'ok: destructive-command fixture never removes real files'
 }
 
+test_extended_glob_stays_off() {
+  local fixture_dir="$tmp_home/extended-glob-fixture"
+  local output
+
+  command mkdir -p -- "$fixture_dir/tree" || return 1
+  : > "$fixture_dir/tree/a.js"
+
+  output=$(HOME="$tmp_home" EXTENDED_GLOB_FIXTURE="$fixture_dir" zsh -fc '
+    source "$HOME/.config/zsh/init.zsh"
+    cd "$EXTENDED_GLOB_FIXTURE" || exit 1
+    [[ -o extendedglob ]] && print -r -- on || print -r -- off
+    eval "print -r -- nixpkgs#bat HEAD^ https://example.com/page#frag"
+    print -rl -- **/*.js *(/) tree/*(.m-1)
+  ' 2>&1)
+  assert_equals "$output" $'off\nnixpkgs#bat HEAD^ https://example.com/page#frag\ntree/a.js\ntree\ntree/a.js' \
+    'EXTENDED_GLOB stays off while documented globs keep working' || return 1
+
+  output=$(HOME="$tmp_home" zsh -fc '
+    setopt EXTENDED_GLOB
+    source "$HOME/.config/zsh/init.zsh"
+    [[ -o extendedglob ]] && print -r -- on || print -r -- off
+  ' 2>&1)
+  assert_equals "$output" on 'an EXTENDED_GLOB choice made before startup is left alone' || return 1
+}
+
 test_fzf_startup_gate() {
   local expected case_spec version version_status integration_mode found label
   local -a fields blocked_cases integration_cases supported_cases
@@ -1265,6 +1290,7 @@ main() {
   test_zoxide_persistent_startup_cache || return 1
   test_zoxide_rejected_cache_directory || return 1
   test_glob_policy || return 1
+  test_extended_glob_stays_off || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1
   test_fzf_quiet_startup_modes || return 1
