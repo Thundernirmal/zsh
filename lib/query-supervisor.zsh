@@ -76,6 +76,8 @@ if [[ -r /proc/$child_pid/stat ]] &&
   [[ ${fields[2]-} != "$supervisor_pid" ]] || child_identity=${fields[20]-}
 fi
 # Poll rather than blocking in wait: owner death must interrupt active queries.
+# Short queries finish within the fast ticks; long ones then poll at 10 Hz.
+integer poll_ticks=0
 while true; do
   _supervisor_check_owner
   [[ -r /proc/$child_pid/stat ]] || break
@@ -83,7 +85,7 @@ while true; do
   fields=( ${=${stat_text##*\) }} )
   [[ ${fields[1]-} != Z && ${fields[2]-} == "$supervisor_pid" ]] || break
   [[ -z $child_identity || ${fields[20]-} == "$child_identity" ]] || break
-  zselect -t 1
+  zselect -t $(( poll_ticks++ < 30 ? 1 : 10 ))
 done
 wait "$child_pid" 2>/dev/null
 callback_status=$?
