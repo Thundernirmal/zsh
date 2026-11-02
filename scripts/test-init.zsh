@@ -413,11 +413,39 @@ test_batcat_backs_the_cat_alias() {
   command mkdir -p -- "$stub_bin" || return 1
   print -r -- '#!/bin/sh' > "$stub_bin/batcat"
   command chmod +x -- "$stub_bin/batcat"
-  output=$(HOME="$tmp_home" PATH="$stub_bin" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; print -r -- "$aliases[cat]"' 2>&1)
-  assert_equals "$output" 'batcat --style=numbers --paging=never' 'the cat alias uses batcat when only that name exists' || return 1
+  print -r -- '#!/bin/sh
+printf "viewer %s\n" "$*"' > "$stub_bin/batcat"
+  output=$(HOME="$tmp_home" PATH="$stub_bin" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "cat note.txt"' 2>&1)
+  assert_equals "$output" 'viewer --style=numbers --paging=never note.txt' 'the cat alias uses batcat when only that name exists' || return 1
 
   output=$(PATH="$stub_bin:/usr/bin:/bin" /bin/sh "$repo_dir/scripts/check-deps.sh" 2>&1)
   assert_contains "$output" 'ok: bat/batcat' 'the dependency checker accepts batcat' || return 1
+}
+
+test_cat_alias_flags() {
+  local stub_bin="$tmp_home/cat-flags-bin" spec args expected output
+
+  command mkdir -p -- "$stub_bin" || return 1
+  print -r -- '#!/bin/sh
+printf "viewer %s\n" "$*"' > "$stub_bin/bat"
+  print -r -- '#!/bin/sh
+printf "real %s\n" "$*"' > "$stub_bin/cat"
+  command chmod +x -- "$stub_bin/bat" "$stub_bin/cat"
+
+  for spec in \
+    'real:-v note.txt' 'real:-e note.txt' 'real:-E note.txt' 'real:-T note.txt' 'real:-b note.txt' 'real:-t note.txt' \
+    'real:-s note.txt' 'real:-vet note.txt' 'real:-nE note.txt' 'real:--show-ends note.txt' 'real:note.txt -v' \
+    'viewer:note.txt' 'viewer:-n note.txt' 'viewer:-A note.txt' 'viewer:-pp note.txt' 'viewer:-l json note.txt' \
+    'viewer:--show-all note.txt' 'viewer:-- -v'; do
+    args=${spec#*:}
+    if [[ ${spec%%:*} == real ]]; then
+      expected="real $args"
+    else
+      expected="viewer --style=numbers --paging=never $args"
+    fi
+    output=$(HOME="$tmp_home" PATH="$stub_bin" CAT_ARGS="$args" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "cat $CAT_ARGS"' 2>&1)
+    assert_equals "$output" "$expected" "cat $args goes to ${spec%%:*}" || return 1
+  done
 }
 
 test_extended_glob_stays_off() {
@@ -1323,6 +1351,7 @@ main() {
   test_glob_policy || return 1
   test_extended_glob_stays_off || return 1
   test_batcat_backs_the_cat_alias || return 1
+  test_cat_alias_flags || return 1
   test_benchmark_keeps_real_history || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1

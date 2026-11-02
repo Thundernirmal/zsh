@@ -30,10 +30,32 @@ alias -- -='cd -'
 
 # File viewing
 # Debian and Ubuntu install bat as batcat.
-if (( $+commands[bat] )); then
-  alias cat='bat --style=numbers --paging=never'
-elif (( $+commands[batcat] )); then
-  alias cat='batcat --style=numbers --paging=never'
+if (( $+commands[bat] || $+commands[batcat] )); then
+  typeset -g _ZSH_CAT_VIEWER=bat
+  (( $+commands[bat] )) || _ZSH_CAT_VIEWER=batcat
+
+  # bat rejects these GNU cat flags, so they go to the real cat. -n, -A, and -u
+  # mean the same in both, and bat's own options such as -l and -p stay with bat.
+  _zsh_cat() {
+    emulate -L zsh
+
+    local arg
+    for arg in "$@"; do
+      [[ $arg == -- ]] && break
+      case $arg in
+        --show-ends|--show-tabs|--show-nonprinting|--number-nonblank|--squeeze-blank)
+          command cat "$@"
+          return
+          ;;
+      esac
+      if [[ $arg == -* && $arg != --* && $arg != *[^-AbeEnstTuv]* && $arg == *[beEstTv]* ]]; then
+        command cat "$@"
+        return
+      fi
+    done
+    command "$_ZSH_CAT_VIEWER" --style=numbers --paging=never "$@"
+  }
+  alias cat='_zsh_cat'
 fi
 
 if [[ $OSTYPE == linux* ]]; then

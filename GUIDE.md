@@ -433,7 +433,7 @@ A recorded blocked fzf integration is a failure even when its binary version is 
 | `ll` | Long listing including hidden entries and readable sizes |
 | `la` | Listing including hidden entries |
 | `lt` | Tree to depth 3; defined only with `lsd` or `tree` |
-| `cat` | `bat --style=numbers --paging=never` when `bat` or `batcat` is present |
+| `cat` | `bat --style=numbers --paging=never` when `bat` or `batcat` is present; flags only GNU `cat` understands, such as `-v`, `-e`, and `-T`, run the real `cat` |
 | `grep` | Adds `--color=auto` on Linux |
 | `diff` | Adds `--color=auto` on Linux |
 
