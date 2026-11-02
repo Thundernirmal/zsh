@@ -1939,6 +1939,34 @@ FIXTURE' > "$fakebin/ss"
   assert_status "$?" 1 'ports rejects extra arguments' || return 1
 )
 
+test_ff_keeps_paths_as_typed() (
+  local fixture="$tmp_dir/ff-fixture" find_only="$tmp_dir/ff-find-only" output
+
+  command mkdir -p -- "$fixture/sub" "$fixture/-dash" "$find_only" || return 1
+  : > "$fixture/sub/match.txt"
+  : > "$fixture/-dash/other-match.txt"
+  command ln -sf -- "${commands[find]}" "$find_only/find"
+  builtin cd -- "$fixture" || return 1
+
+  output=$(PATH=$find_only ff match) || return 1
+  assert_contains "$output" './sub/match.txt' 'ff fallback prints relative results from the current directory' || return 1
+  assert_not_contains "$output" "$fixture" 'ff fallback omits the absolute prefix for a relative search' || return 1
+  output=$(PATH=$find_only ff match sub) || return 1
+  assert_equals "$output" 'sub/match.txt' 'ff fallback keeps a relative path as typed' || return 1
+  output=$(PATH=$find_only ff match "$fixture/sub") || return 1
+  assert_equals "$output" "$fixture/sub/match.txt" 'ff fallback keeps an absolute path as typed' || return 1
+  output=$(PATH=$find_only ff -- other -dash) || return 1
+  assert_equals "$output" './-dash/other-match.txt' 'ff fallback protects a leading-dash search path' || return 1
+
+  if command -v fd >/dev/null 2>&1 || command -v fdfind >/dev/null 2>&1; then
+    output=$(ff match) || return 1
+    assert_contains "$output" 'sub/match.txt' 'ff finds matches with fd' || return 1
+    assert_not_contains "$output" "$fixture" 'ff omits the absolute prefix with fd' || return 1
+    output=$(ff -- other -dash) || return 1
+    assert_contains "$output" 'other-match.txt' 'ff protects a leading-dash search path with fd' || return 1
+  fi
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1953,6 +1981,7 @@ main() {
   test_usage_signal_cleanup || return 1
   test_scan_count_is_honored || return 1
   test_ports_order_and_filter || return 1
+  test_ff_keeps_paths_as_typed || return 1
   test_scan_record_oracle || return 1
   test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1

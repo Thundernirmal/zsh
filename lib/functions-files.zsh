@@ -367,7 +367,9 @@ ff() {
     print -u2 -r -- "'$search_root' is not a directory"
     return 1
   fi
-  search_root=${search_root:A}
+  # Keep results relative to the path as typed; ./ stops find reading a leading
+  # dash as an option.
+  [[ $search_root == -* ]] && search_root=./$search_root
 
   if command -v fd >/dev/null 2>&1; then
     (( hidden )) && fd_args+=(--hidden)
