@@ -27,9 +27,12 @@ if [[ -z $zsh_binary ]]; then
   exit 2
 fi
 
-typeset benchmark_input
+typeset benchmark_input benchmark_history
 benchmark_input=$(command mktemp "${TMPDIR:-/tmp}/zsh-startup-benchmark.XXXXXX")
-trap 'command rm -f -- "$benchmark_input"' EXIT INT TERM
+benchmark_history=$(command mktemp "${TMPDIR:-/tmp}/zsh-startup-history.XXXXXX")
+trap 'command rm -f -- "$benchmark_input" "$benchmark_history"' EXIT INT TERM
+# Interactive samples would otherwise append their commands to the real history.
+export ZSH_HISTFILE=$benchmark_history
 print -r -- "source ${(q)benchmark_root}/init.zsh" >| "$benchmark_input"
 print -r -- 'exit' >> "$benchmark_input"
 

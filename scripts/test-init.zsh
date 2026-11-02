@@ -389,6 +389,24 @@ printf "%s\n" "$@" > "$GLOB_STUB_LOG"' > "$fakebin/rm"
   print -- 'ok: destructive-command fixture never removes real files'
 }
 
+test_benchmark_keeps_real_history() {
+  local bench_home="$tmp_home/bench-home" bench_repo cmd_status
+
+  bench_repo="$bench_home/.config/zsh"
+  command mkdir -p -- "$bench_repo" || return 1
+  command cp -R -- "$repo_dir"/*.zsh "$repo_dir/lib" "$repo_dir/functions" "$repo_dir/scripts" "$bench_repo/" || return 1
+
+  env -u ZSH_HISTFILE -u XDG_CACHE_HOME HOME="$bench_home" ZSH_BENCHMARK_WARMUPS=0 \
+    "$zsh_bin" "$bench_repo/scripts/benchmark-startup.zsh" 5 >/dev/null 2>&1
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'startup benchmark completes in a private home' || return 1
+  [[ ! -e $bench_home/.zsh_history ]] || {
+    print -u2 -- 'not ok: startup benchmark leaves the real history file alone'
+    return 1
+  }
+  print -- 'ok: startup benchmark leaves the real history file alone'
+}
+
 test_extended_glob_stays_off() {
   local fixture_dir="$tmp_home/extended-glob-fixture"
   local output
@@ -1291,6 +1309,7 @@ main() {
   test_zoxide_rejected_cache_directory || return 1
   test_glob_policy || return 1
   test_extended_glob_stays_off || return 1
+  test_benchmark_keeps_real_history || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1
   test_fzf_quiet_startup_modes || return 1
