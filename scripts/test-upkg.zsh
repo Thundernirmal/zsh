@@ -822,13 +822,6 @@ _upkg_capture_query() {
 }
 scratch=$(mktemp -d) || exit 1
 trap 'rm -rf -- "$scratch"' EXIT
-if [[ ${2-} == sentinel ]]; then
-  # Converted parser loops must not reach the printing wrappers.
-  for wrapper in _upkg_search_trim _upkg_append_search_description _upkg_brew_name_from_header _upkg_brew_version_from_header; do
-    functions[saved$wrapper]=$functions[$wrapper]
-    functions[$wrapper]="print -r -- $wrapper >>${(q)scratch}/wrapper-calls; saved$wrapper \"\$@\""
-  done
-fi
 describe() {
   local label=$1 rc=$2
   print -r -- "== $label rc=$rc"
@@ -906,14 +899,11 @@ fx 'brew search --formula -- fail' 'x' 'Error: boom' 2
 fx 'brew search --formula -- cancel' '' '' 130
 for q in q none fail cancel; do run_case "brew $q" _upkg_run_search_brew $q; done
 
-[[ ! -e $scratch/wrapper-calls ]] || { print -r -- "wrapper called: $(<$scratch/wrapper-calls)"; exit 3; }
-if [[ ${2-} == sentinel ]]; then
-  for wrapper in _upkg_search_trim _upkg_append_search_description _upkg_brew_name_from_header _upkg_brew_version_from_header; do
-    functions[$wrapper]=$functions[saved$wrapper]
-  done
-fi
-
-# Printing wrappers keep their stdout and nonmutating scratch contracts.
+# Test-only printing forms pin the reply helpers against the frozen rows below.
+_upkg_search_trim() { local REPLY; _upkg_search_trim_reply "$1"; print -r -- "$REPLY"; }
+_upkg_brew_name_from_header() { local REPLY; _upkg_brew_name_from_header_reply "$1"; print -r -- "$REPLY"; }
+_upkg_brew_version_from_header() { local REPLY; _upkg_brew_version_from_header_reply "$1"; print -r -- "$REPLY"; }
+_upkg_append_search_description() { local REPLY; _upkg_append_search_description_reply "$1" "$2"; print -r -- "$REPLY"; }
 for fn in _upkg_search_trim _upkg_brew_name_from_header _upkg_brew_version_from_header; do
   for arg in '' $'  a \t b\r\n c  ' '==> pkg (Name): stable 1.0' 'stable, (2.0)' 'no version here'; do
     REPLY=sentinel; reply=(one two)
@@ -1134,7 +1124,7 @@ EOF_ORACLE
 
   parser_actual=$(PATH=$original_path zsh -fc "$parser_body" parser-oracle "$repo_dir" sentinel 2>&1)
   parser_status=$?
-  assert_status "$parser_status" 0 'search parser oracle runs without reaching printing wrappers' || return 1
+  assert_status "$parser_status" 0 'search parser oracle runs' || return 1
   if [[ $parser_actual != "${parser_expected%$'\n'}" ]]; then
     print -u2 -- 'not ok: search parsers match the frozen pre-conversion oracle'
     diff <(print -r -- "${parser_expected%$'\n'}") <(print -r -- "$parser_actual") >&2
@@ -1313,7 +1303,7 @@ done
   rich_check_file="$tmp_prefix/rich-check.zsh"
 
   {
-    print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width _ui_term_width_reply 2>/dev/null || true'
+    print -- 'unset -f _ui_plain_mode _ui_ascii_mode _ui_repeat _ui_color _ui_reset _ui_bold _ui_icon _ui_title_line _ui_section_break _ui_panel_prefix _ui_panel_kv _ui_badge _ui_human_kib _ui_usage_entry_icon _ui_truncate _ui_pad _ui_bar _ui_visible_count _ui_term_width_reply 2>/dev/null || true'
     print -- "source '$repo_dir/60-functions.zsh'"
     print -- '_zsh_functions_load || exit 1'
     print -- '_ui_truncate 10 "My File.txt"'
@@ -1350,11 +1340,13 @@ done
   assert_not_contains "${functions[_npkg_remove_picker]}" '137;180;250' 'Nix remove preview no longer embeds the fixed RGB palette' || return 1
 
   COLUMNS=120
-  output=$(_npkg_fzf_preview_window 45)
+  _zsh_theme_fzf_preview_window
+  output=$REPLY
   assert_contains "$output" 'right,50%,border-left,wrap-word' 'npkg picker uses the shared compact side preview on wide terminals' || return 1
 
   COLUMNS=80
-  output=$(_npkg_fzf_preview_window 60)
+  _zsh_theme_fzf_preview_window
+  output=$REPLY
   assert_contains "$output" 'down,40%,border-top,wrap-word' 'npkg picker uses the shared compact lower preview on narrow terminals' || return 1
 
   output=$(_ui_status_icon 'matches found')

@@ -881,7 +881,6 @@ _upkg_npm_outdated_looks_valid() {
 }
 
 # Reply-returning parser helpers avoid one command substitution per field.
-# Their printing wrappers keep the original stdout and nonmutating contracts.
 _upkg_search_trim_reply() {
   emulate -L zsh
 
@@ -900,15 +899,6 @@ _upkg_search_trim_reply() {
   while [[ $REPLY == *'  '* ]]; do
     REPLY=${REPLY//'  '/' '}
   done
-}
-
-_upkg_search_trim() {
-  emulate -L zsh
-
-  local REPLY
-
-  _upkg_search_trim_reply "$1"
-  print -r -- "$REPLY"
 }
 
 _upkg_brew_version_from_header_reply() {
@@ -939,15 +929,6 @@ _upkg_brew_version_from_header_reply() {
   REPLY='?'
 }
 
-_upkg_brew_version_from_header() {
-  emulate -L zsh
-
-  local REPLY
-
-  _upkg_brew_version_from_header_reply "$1"
-  print -r -- "$REPLY"
-}
-
 _upkg_brew_name_from_header_reply() {
   emulate -L zsh
 
@@ -960,15 +941,6 @@ _upkg_brew_name_from_header_reply() {
   while [[ $REPLY == *$'\n' ]]; do
     REPLY=${REPLY%$'\n'}
   done
-}
-
-_upkg_brew_name_from_header() {
-  emulate -L zsh
-
-  local REPLY
-
-  _upkg_brew_name_from_header_reply "$1"
-  print -r -- "$REPLY"
 }
 
 _upkg_search_add_rows() {
@@ -1338,15 +1310,6 @@ _upkg_append_search_description_reply() {
   while [[ $REPLY == *$'\n' ]]; do
     REPLY=${REPLY%$'\n'}
   done
-}
-
-_upkg_append_search_description() {
-  emulate -L zsh
-
-  local REPLY
-
-  _upkg_append_search_description_reply "$1" "$2"
-  print -r -- "$REPLY"
 }
 
 upkg() {

@@ -57,10 +57,11 @@ def run(script, tty=True):
 REFERENCE = r'''
 _ui_is_rich_terminal() {
   emulate -L zsh
-  local width
+  local width REPLY
   [[ -t 1 && -n ${TERM:-} && $TERM != dumb && -z ${NO_COLOR:-} ]] || return 1
   _ui_locale_is_utf8 || return 1
-  width=$(_ui_term_width)
+  _ui_term_width_reply
+  width=$REPLY
   (( width >= 60 ))
 }
 '''
@@ -158,7 +159,7 @@ mkdir "$HOME/bin"
 print -r -- '#!/bin/sh' 'exit 1' > "$HOME/bin/tput"
 chmod +x "$HOME/bin/tput"
 path=("$HOME/bin")
-[[ $(_ui_term_width) == 80 ]] || exit 18
+_ui_term_width_reply; [[ $REPLY == 80 ]] || exit 18
 _ui_is_rich_terminal || exit 19
 ''')
     output = run(TRUNCATION)

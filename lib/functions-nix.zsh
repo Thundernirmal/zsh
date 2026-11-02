@@ -210,18 +210,6 @@
     fi
   }
 
-  _npkg_fzf_preview_window() {
-    emulate -L zsh
-
-    if (( $+functions[_zsh_theme_fzf_preview_window] )); then
-      _zsh_theme_fzf_preview_window || return 1
-      print -r -- "$REPLY"
-      return
-    fi
-
-    print -r -- 'down,40%,border-top,wrap-word'
-  }
-
   _npkg_pick_installables() {
     emulate -L zsh
 

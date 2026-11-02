@@ -212,9 +212,6 @@ fi
 if ! (( $+functions[_ui_term_width_reply] )); then
   _ui_term_width_reply() { REPLY=80; }
 fi
-if ! (( $+functions[_ui_term_width] )); then
-  _ui_term_width() { print -r -- 80; }
-fi
 if ! (( $+functions[_ui_repeat] )); then
   _ui_repeat() {
     emulate -L zsh
@@ -279,12 +276,6 @@ if ! (( $+functions[_ui_human_kib] )); then
   _ui_human_kib() {
     emulate -L zsh
     print -r -- "$1 KiB"
-  }
-fi
-if ! (( $+functions[_ui_usage_entry_icon] )); then
-  _ui_usage_entry_icon() {
-    emulate -L zsh
-    print -nr -- '*'
   }
 fi
 if ! (( $+functions[_ui_truncate] )); then
