@@ -414,6 +414,12 @@ test_tips_are_concise() {
   _zsh_tip_pool=( "${_zsh_tip_pool[1]}" )
   output=$(tips) || return 1
   assert_equals "$output" "tip: ${_zsh_tip_pool[1]}" 'tips renders a deterministic plain-mode entry' || return 1
+  output=$(tips --help) || return 1
+  assert_contains "$output" 'Usage: tips' 'tips --help prints usage instead of a tip' || return 1
+  assert_not_contains "$output" 'tip:' 'tips --help prints no tip' || return 1
+  output=$(tips extra 2>&1)
+  assert_status "$?" 1 'tips rejects unexpected arguments' || return 1
+  assert_contains "$output" 'Usage: tips' 'tips explains a rejected argument' || return 1
 
   print -- 'ok: tips stay focused, short, and actionable'
 }

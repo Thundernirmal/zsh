@@ -179,6 +179,18 @@ tips() {
   local total=${#_zsh_tip_pool}
   local tip
 
+  case ${1:-} in
+    -h|--help)
+      print 'Usage: tips'
+      print 'Print one short usage tip. Run it again for another.'
+      return 0
+      ;;
+  esac
+  if (( $# > 0 )); then
+    print -u2 -r -- 'Usage: tips'
+    return 1
+  fi
+
   if (( total == 0 )); then
     print 'No tips configured.'
     return 1
