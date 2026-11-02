@@ -192,3 +192,23 @@ assert test "$?" -eq 1
 assert test ! -e "$scratch/sanitizer-captures"
 assert test "$REPLY" = caller-sentinel
 print 'ok: Nix row and diagnostic sanitization avoids capture wrappers and preserves caller scratch state'
+
+typeset attr_cache_path=$scratch/attrs.txt attr_output
+integer attr_status
+_npkg_attr_cache_file() { print -r -- "$attr_cache_path"; }
+_npkg_cache_is_stale() { return 0; }
+_npkg_refresh_index() { return 1; }
+print -r -- bat >| "$attr_cache_path"
+attr_output=$(_npkg_attr_index 2> "$scratch/error"); attr_status=$?
+assert test "$attr_status" -eq 0
+assert test "$attr_output" = "$attr_cache_path"
+[[ $(<"$scratch/error") == *'using the existing index'* ]] || exit 1
+command rm -f -- "$attr_cache_path"
+_npkg_attr_index > /dev/null 2>&1
+assert test "$?" -eq 1
+_npkg_refresh_index() { return 130; }
+print -r -- bat >| "$attr_cache_path"
+attr_output=$(_npkg_attr_index 2> /dev/null); attr_status=$?
+assert test "$attr_status" -eq 130
+assert test -z "$attr_output"
+print 'ok: a failed index refresh falls back to the existing index unless cancelled or missing'

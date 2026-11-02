@@ -169,6 +169,7 @@
     emulate -L zsh
 
     local cache_file
+    integer refresh_status
 
     cache_file=$(_npkg_attr_cache_file) || return 1
 
@@ -179,7 +180,14 @@
         print -u2 -- 'Building nixpkgs attribute cache...'
       fi
 
-      _npkg_refresh_index >/dev/null || return 1
+      _npkg_refresh_index >/dev/null
+      refresh_status=$?
+      if (( refresh_status != 0 )); then
+        # An old index beats no picker, for example offline. Ctrl-C still cancels.
+        case $refresh_status in 129|130|143) return "$refresh_status" ;; esac
+        [ -s "$cache_file" ] || return 1
+        print -u2 -- 'Could not refresh the nixpkgs attribute cache; using the existing index.'
+      fi
     fi
 
     print -r -- "$cache_file"
