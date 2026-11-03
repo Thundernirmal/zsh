@@ -541,6 +541,19 @@ exit "$AUDIT_NIX_RC"'
 print 'ok: Nix search requests quiet evaluation while retaining warnings and errors'
 
 (
+  # Real nix search output: match highlighting survives even with stdout on a file.
+  write_fake nix '
+printf "* \033[0;1mlegacyPackages.x86_64-linux.\033[32;1mgnome-screenshot\033[0;1m\033[0m (41.0)\n"
+printf "  GNOME 49 disallowed \033[32;1mgnome-screenshot\033[0m access.\n"'
+  PATH="$scratch:$original_path"
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_nix gnome-screenshot >/dev/null 2>&1 || exit 1
+  assert test "${#_UPKG_SEARCH_ROWS}" -eq 1
+  assert test "${_UPKG_SEARCH_ROWS[1]}" = $'nix\tlegacyPackages.x86_64-linux.gnome-screenshot\t41.0\tGNOME 49 disallowed gnome-screenshot access.'
+) || exit 1
+print 'ok: Nix search rows drop the colour codes nix prints even when piped'
+
+(
   write_fake jq 'exit 0'
   PATH="$scratch:$original_path"
   npkg() {

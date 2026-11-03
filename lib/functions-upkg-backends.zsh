@@ -443,6 +443,10 @@ _upkg_run_search_nix() {
   _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
+  # nix search colours its matches even when stdout is a file, and NO_COLOR does
+  # not stop it. sed handles a broad 2 MB result in about 70 ms; a global Zsh
+  # substitution did not finish in minutes.
+  [[ $output != *$'\e'* ]] || output=$(print -r -- "$output" | LC_ALL=C command sed -E $'s/\e\\[[0-9;]*m//g')
   combined="${output}"$'\n'"${diagnostic}"
   if (( rc != 1 )) || [[ ${(L)combined} != *'no packages matched'* && ${(L)combined} != *'no results for'* ]]; then
     [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
