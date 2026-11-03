@@ -402,7 +402,7 @@ exit "$AUDIT_SEARCH_RC"'
       pacman|paru) AUDIT_SEARCH_BODY=$'extra/sample 1.2.0\n    package description'; expected_row="${audit_manager}"$'\tsample\t1.2.0\tpackage description' ;;
       brew) AUDIT_SEARCH_BODY=sample; expected_row=$'brew\tsample\t1.2.0\tformula' ;;
       flatpak) AUDIT_SEARCH_BODY=$'org.example.Sample\t\tSample App\tpackage description'; expected_row=$'flatpak\torg.example.Sample\t\tSample App - package description' ;;
-      nix) AUDIT_SEARCH_BODY=$'* legacyPackages.test.sample (1.2.0)\n    package description'; expected_row=$'nix\tlegacyPackages.test.sample\t1.2.0\tpackage description' ;;
+      nix) AUDIT_SEARCH_BODY=$'* legacyPackages.test.sample (1.2.0)\n    package description'; expected_row=$'nix\tsample\t1.2.0\tpackage description' ;;
       npm) AUDIT_SEARCH_BODY=$'@example/sample\t\tmaintainer\t2026-09-30\t1.2.0\tkeyword'; expected_row=$'npm\t@example/sample\t1.2.0\t' ;;
     esac
     export AUDIT_SEARCH_BODY npm_config_json=true npm_config_color=true
@@ -549,9 +549,23 @@ printf "  GNOME 49 disallowed \033[32;1mgnome-screenshot\033[0m access.\n"'
   _UPKG_SEARCH_ROWS=()
   _upkg_run_search_nix gnome-screenshot >/dev/null 2>&1 || exit 1
   assert test "${#_UPKG_SEARCH_ROWS}" -eq 1
-  assert test "${_UPKG_SEARCH_ROWS[1]}" = $'nix\tlegacyPackages.x86_64-linux.gnome-screenshot\t41.0\tGNOME 49 disallowed gnome-screenshot access.'
+  assert test "${_UPKG_SEARCH_ROWS[1]}" = $'nix\tgnome-screenshot\t41.0\tGNOME 49 disallowed gnome-screenshot access.'
 ) || exit 1
 print 'ok: Nix search rows drop the colour codes nix prints even when piped'
+
+(
+  write_fake nix '
+printf "* legacyPackages.x86_64-linux.gnomeExtensions.allow-gnome-screenshot (4)\n"
+printf "* legacyPackages.x86_64-linux.python3Packages.foo.bar (1.0)\n"
+printf "* packages.x86_64-linux.other (2.0)\n"'
+  PATH="$scratch:$original_path"
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_nix anything >/dev/null 2>&1 || exit 1
+  assert test "${_UPKG_SEARCH_ROWS[1]}" = $'nix\tgnomeExtensions.allow-gnome-screenshot\t4\t'
+  assert test "${_UPKG_SEARCH_ROWS[2]}" = $'nix\tpython3Packages.foo.bar\t1.0\t'
+  assert test "${_UPKG_SEARCH_ROWS[3]}" = $'nix\tpackages.x86_64-linux.other\t2.0\t'
+) || exit 1
+print 'ok: Nix search names drop only the legacyPackages system prefix'
 
 (
   write_fake jq 'exit 0'

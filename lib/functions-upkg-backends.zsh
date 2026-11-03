@@ -494,6 +494,8 @@ _upkg_run_search_nix() {
       if [ "$name" = "$trimmed" ] || [ "$version" = "$trimmed" ]; then
         continue
       fi
+      # What remains is the name npkg add and nixpkgs# references take.
+      name=${name#legacyPackages.*.}
       rows+=("${name}"$'\t'"${version}"$'\t')
     done
   }

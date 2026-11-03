@@ -1011,7 +1011,7 @@ local-scratch=outer:o1,o2
 == nix q rc=0
 stdout=$''
 stderr=$''
-rows=$'nix\tlegacyPackages.x86_64-linux.ripgrep\t14.1.1\trecursively search directories with wrapped descriptions|nix\tlegacyPackages.x86_64-linux.nodesc\t1.0\t|nix\tlegacyPackages.x86_64-linux.blank\t2.0\t|nix\tlegacyPackages.x86_64-linux.uni\t0.1-pre\tcafé 雪' count=4
+rows=$'nix\tripgrep\t14.1.1\trecursively search directories with wrapped descriptions|nix\tnodesc\t1.0\t|nix\tblank\t2.0\t|nix\tuni\t0.1-pre\tcafé 雪' count=4
 last=$'matches found':$'4 result(s)'
 unset-scratch=0:0
 set-scratch=sentinel:one,two
@@ -1488,7 +1488,8 @@ done
   assert_contains "$output" 'ripgrep-app' 'search shows brew cask name' || return 1
   assert_contains "$output" '1.2.3' 'search shows brew version' || return 1
   assert_contains "$output" 'flatpak' 'search shows flatpak manager label' || return 1
-  assert_contains "$output" 'legacyPackages.x86_64-linux.ripgrep' 'search shows nix attribute path' || return 1
+  assert_contains "$output" 'nix' 'search shows nix manager label' || return 1
+  assert_not_contains "$output" 'legacyPackages' 'search drops the nix attribute prefix' || return 1
   assert_contains "$output" '14.1.1' 'search shows nix available version' || return 1
   assert_contains "$output" 'recursively search directories with wrapped descriptions' 'search preserves spaces in wrapped nix descriptions' || return 1
   assert_contains "$output" 'ripgrep-js' 'search shows npm package name' || return 1
