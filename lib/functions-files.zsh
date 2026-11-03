@@ -662,7 +662,7 @@ dusage() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width REPLY
+  local line kib entry_path label shown visible_count more total_kib=0 bar_width name_width width size_width percent_width REPLY
   local size_text percent_text header_meta footer_text display_target
   local scan_status=0 signal_status=0 incomplete_detail=''
   local -a entries records lines
@@ -777,11 +777,12 @@ dusage() {
     label=${entry_path##*/}
     [ -n "$label" ] || label=$entry_path
     label=$(_ui_safe_text "$label")
-    icon=$(_ui_usage_entry_icon "$entry_path")
     label=$(_ui_safe_truncate "$name_width" "$label")
 
     _ui_panel_prefix
-    print -nr -- "$icon "
+    # Not captured: a command substitution sees a pipe and picks the ASCII glyph.
+    _ui_usage_entry_icon "$entry_path"
+    print -nr -- ' '
     _ui_color text
     _ui_pad left "$name_width" "$label"
     _ui_reset
@@ -833,7 +834,7 @@ bigfiles() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width REPLY
+  local line kib file_path label shown more total_kib=0 bar_width path_width footer_text width size_width REPLY
   local signal_status=0 display_target incomplete_status=0
   local line_count=0 incomplete_detail=''
   local -a records lines
@@ -942,7 +943,6 @@ bigfiles() {
     line=${lines[$idx]}
     kib=${line%%$'\t'*}
     file_path=${line#*$'\t'}
-    icon=$(_ui_usage_entry_icon "$file_path")
 
     if (( width < 80 )); then
       label=${file_path##*/}
@@ -954,7 +954,9 @@ bigfiles() {
     label=$(_ui_safe_truncate "$path_width" "$label")
 
     _ui_panel_prefix
-    print -nr -- "$icon "
+    # Not captured: a command substitution sees a pipe and picks the ASCII glyph.
+    _ui_usage_entry_icon "$file_path"
+    print -nr -- ' '
     _ui_color text
     _ui_pad left "$path_width" "$label"
     _ui_reset

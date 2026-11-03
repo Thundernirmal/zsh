@@ -121,7 +121,26 @@ show
 '''
 
 
+SCAN_ICONS = r'''
+source "$1/lib/functions-common.zsh"
+source "$1/lib/functions-files.zsh"
+COLUMNS=100
+_ZSH_UI_GLYPH_TIER=nerd
+mkdir -p "$HOME/tree/dir"
+print -r -- data > "$HOME/tree/file"
+print -r -- dusage-start
+dusage "$HOME/tree" 5
+print -r -- bigfiles-start
+bigfiles "$HOME/tree" 5
+'''
+
+
 def main():
+    # A captured icon sees a pipe and falls back to ASCII, so check a real terminal.
+    icons = run(SCAN_ICONS).decode()
+    usage, _, big = icons.partition("bigfiles-start")
+    assert "\U000f024b " in usage and "\U000f0214 " in usage, usage
+    assert "\U000f0214 " in big, big
     assert run(OUTPUT_MODES).decode().split() == " ".join([
         "rich",
         "plain (NO_COLOR is set)",
