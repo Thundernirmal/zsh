@@ -537,7 +537,7 @@ peek() {
 _zsh_scan_collect() {
   emulate -L zsh
   setopt localtraps
-  local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file=''
+  local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file='' error_file='' first_error=''
   local chunk carry='' record tab=$'\t'
   local -a parts irregular
   local rank_summary
@@ -552,19 +552,25 @@ _zsh_scan_collect() {
   {
     path_list_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.paths.XXXXXX") || return 1
     raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.raw.XXXXXX") || return 1
+    error_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.errors.XXXXXX") || return 1
     if [[ $mode == dusage ]]; then
       for entry_path in "$@"; do
         print -rn -- "$entry_path"$'\0'
       done >"$path_list_file"
-      command du -sk --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+      command du -sk --null --files0-from="$path_list_file" 2>>"$error_file" >"$raw_output_file"
       du_status=$?
     else
-      command find "$target" -type f -print0 2>/dev/null >"$path_list_file"
+      command find "$target" -type f -print0 2>>"$error_file" >"$path_list_file"
       find_status=$?
       if [[ -s $path_list_file ]]; then
-        command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+        command du -k --null --files0-from="$path_list_file" 2>>"$error_file" >"$raw_output_file"
         du_status=$?
       fi
+    fi
+    if [[ -s $error_file ]]; then
+      IFS= read -r first_error <"$error_file"
+      scan_result[first_error]=$first_error
+      scan_result[error_count]=${$(command wc -l <"$error_file")//[^0-9]/}
     fi
     # Odd tabs, a missing size, or a missing final NUL keep the in-shell path
     # below, whose read rules define those records.
@@ -625,7 +631,7 @@ _zsh_scan_collect() {
       done <"$raw_output_file"
     fi
   } always {
-    command rm -f -- "$path_list_file" "$raw_output_file"
+    command rm -f -- "$path_list_file" "$raw_output_file" "$error_file"
   }
   scan_result[du_status]=$du_status
   scan_result[find_status]=$find_status
@@ -641,6 +647,24 @@ _zsh_scan_collect() {
   scan_result[status]=$result_status
   (( result_status )) && scan_result[state]=partial
   return 0
+}
+
+# Names what a partial scan skipped, from the caller's scan_result. Tool messages
+# can hold file names, so they are sanitized before they reach the terminal.
+_zsh_scan_errors_reply() {
+  emulate -L zsh
+
+  [[ -n ${scan_result[first_error]-} ]] || return 1
+  _ui_safe_text_reply "${scan_result[first_error]}"
+  REPLY="${scan_result[error_count]} error(s); first: $REPLY"
+}
+
+_zsh_scan_print_errors() {
+  emulate -L zsh
+
+  local REPLY
+  _zsh_scan_errors_reply || return 0
+  print -u2 -r -- "Scan errors: $REPLY"
 }
 
 # Disk usage summary for current directory
@@ -701,6 +725,7 @@ dusage() {
   if (( ${#records[@]} == 0 )); then
     if (( scan_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      _zsh_scan_print_errors
       return $scan_status
     fi
     echo "No entries found in '$display_target'"
@@ -722,6 +747,7 @@ dusage() {
     done
     if (( scan_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      _zsh_scan_print_errors
       return $scan_status
     fi
     return 0
@@ -759,6 +785,8 @@ dusage() {
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
   if (( scan_status != 0 )); then
     _ui_panel_kv 'Warning' "Incomplete scan ($incomplete_detail); results are partial" warning text
+    # Not truncated: the middle of the path is usually what explains the error.
+    _zsh_scan_errors_reply && _ui_panel_kv 'Scan errors' "$REPLY" warning text
   fi
   _ui_section_break
 
@@ -870,6 +898,7 @@ bigfiles() {
   if (( ${#records[@]} == 0 && ${scan_result[count]:-0} == 0 )); then
     if (( incomplete_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      _zsh_scan_print_errors
       return $incomplete_status
     fi
 
@@ -903,6 +932,7 @@ bigfiles() {
     done
     if (( incomplete_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      _zsh_scan_print_errors
       return $incomplete_status
     fi
     return 0
@@ -935,6 +965,8 @@ bigfiles() {
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
   if (( incomplete_status != 0 )); then
     _ui_panel_kv 'Warning' "Incomplete scan ($incomplete_detail); results are partial" warning text
+    # Not truncated: the middle of the path is usually what explains the error.
+    _zsh_scan_errors_reply && _ui_panel_kv 'Scan errors' "$REPLY" warning text
   fi
   _ui_section_break
 

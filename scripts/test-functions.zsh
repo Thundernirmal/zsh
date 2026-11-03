@@ -2030,6 +2030,56 @@ test_dusage_ignores_a_global_scan_limit() (
   assert_equals "${#records}" 2 'dusage keeps every record with a stray global scan_limit' || return 1
 )
 
+test_scan_names_its_errors() (
+  local fakebin="$tmp_dir/scan-errors-bin" fixture="$tmp_dir/scan-errors-fixture" scratch="$tmp_dir/scan-errors-tmp"
+  local output stderr_part expected
+  local -a leftovers
+  integer rc
+
+  command mkdir -p -- "$fakebin" "$fixture" "$scratch" || return 1
+  : > "$fixture/entry"
+  print -r -- '#!/bin/sh
+printf "4\t%s/entry\0" "$SCAN_ERRORS_FIXTURE"
+printf "du: cannot read directory locked\033[2J: Permission denied\n" >&2
+printf "du: cannot read directory other: Permission denied\n" >&2
+exit 1' > "$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  PATH="$fakebin:$PATH"
+  export SCAN_ERRORS_FIXTURE=$fixture TMPDIR=$scratch
+  rehash
+  expected='2 error(s); first: du: cannot read directory locked\e[2J: Permission denied'
+
+  functions[_ui_plain_mode]='return 0'
+  output=$(dusage "$fixture" 5 2>"$scratch/stderr"); rc=$?
+  stderr_part=$(<"$scratch/stderr")
+  command rm -f -- "$scratch/stderr"
+  assert_status "$rc" 1 'plain dusage still fails on a partial scan' || return 1
+  assert_contains "$stderr_part" "Scan errors: $expected" 'plain dusage names the first scan error on stderr' || return 1
+  assert_not_contains "$output" 'Scan errors' 'plain dusage keeps scan errors off stdout' || return 1
+  [[ $stderr_part != *$'\e'* ]] || {
+    print -u2 -- 'not ok: scan errors never carry raw control bytes'
+    return 1
+  }
+  print -- 'ok: scan errors never carry raw control bytes'
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  output=$(dusage "$fixture" 5 2>/dev/null); rc=$?
+  assert_status "$rc" 1 'rich dusage still fails on a partial scan' || return 1
+  assert_contains "$output" "Scan errors: $expected" 'rich dusage names the first scan error' || return 1
+
+  output=$(bigfiles "$fixture" 5 2>/dev/null); rc=$?
+  assert_status "$rc" 1 'rich bigfiles still fails on a partial scan' || return 1
+  assert_contains "$output" "Scan errors: $expected" 'rich bigfiles names the first scan error' || return 1
+
+  functions[_ui_term_width_reply]='REPLY=60'
+  output=$(dusage "$fixture" 5 2>/dev/null)
+  assert_contains "$output" "Scan errors: $expected" 'a narrow dashboard keeps the whole scan error' || return 1
+
+  leftovers=( "$scratch"/(dusage|bigfiles).*(N) )
+  assert_equals "${#leftovers[@]}" 0 'scan error capture leaves no temporary files' || return 1
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -2047,6 +2097,7 @@ main() {
   test_ff_keeps_paths_as_typed || return 1
   test_bigfiles_ranks_outside_the_shell || return 1
   test_dusage_ignores_a_global_scan_limit || return 1
+  test_scan_names_its_errors || return 1
   test_scan_record_oracle || return 1
   test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1
