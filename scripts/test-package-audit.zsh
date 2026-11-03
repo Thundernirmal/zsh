@@ -568,6 +568,37 @@ printf "* packages.x86_64-linux.other (2.0)\n"'
 print 'ok: Nix search names drop only the legacyPackages system prefix'
 
 (
+  write_fake nix '
+printf "%b\n" "$AUDIT_NIX_DIAGNOSTIC" >&2
+[ "$AUDIT_NIX_RC" = 0 ] && printf "%s\n" "* legacyPackages.test.sample (1.2.0)"
+exit "$AUDIT_NIX_RC"'
+  PATH="$scratch:$original_path"
+  warnings='evaluation warning: one is deprecated\nevaluation warning: two spans lines\n    and continues here\n'
+
+  export AUDIT_NIX_RC=0 AUDIT_NIX_DIAGNOSTIC="${warnings}warning: native warning"
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_nix sample >/dev/null 2>"$scratch/nix-eval-err" || exit 1
+  assert test "${#_UPKG_SEARCH_ROWS}" -eq 1
+  assert test "$(<"$scratch/nix-eval-err")" = 'warning: native warning'
+
+  export AUDIT_NIX_RC=0 AUDIT_NIX_DIAGNOSTIC="${warnings%\\n}"
+  _upkg_run_search_nix sample >/dev/null 2>"$scratch/nix-eval-err" || exit 1
+  assert test ! -s "$scratch/nix-eval-err"
+
+  export AUDIT_NIX_RC=1 AUDIT_NIX_DIAGNOSTIC="${warnings}error: no results for the given search term(s)!"
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_nix sample >/dev/null 2>"$scratch/nix-eval-err" || exit 1
+  assert test "$_UPKG_LAST_STATE" = 'no matches'
+  assert test ! -s "$scratch/nix-eval-err"
+
+  export AUDIT_NIX_RC=1 AUDIT_NIX_DIAGNOSTIC="${warnings}error: evaluation failed"
+  _upkg_run_search_nix sample >/dev/null 2>"$scratch/nix-eval-err"
+  assert test "$?" -eq 1
+  [[ $(<"$scratch/nix-eval-err") == *'evaluation warning: one'*'error: evaluation failed'* ]] || exit 1
+) || exit 1
+print 'ok: Nix search hides evaluation warnings unless the search fails'
+
+(
   write_fake jq 'exit 0'
   PATH="$scratch:$original_path"
   npkg() {

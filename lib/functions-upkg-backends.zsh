@@ -425,6 +425,27 @@ _upkg_run_search_flatpak() {
   _upkg_finish_search_results flatpak "${rows[@]}"
 }
 
+# Evaluating nixpkgs warns about its own deprecated attributes: dozens of lines
+# nobody searching can act on, printed only when the evaluation is not cached.
+_upkg_nix_drop_evaluation_warnings_reply() {
+  emulate -L zsh
+
+  local line
+  local -a kept
+  integer dropping=0
+
+  for line in "${(@f)1}"; do
+    if [[ $line == 'evaluation warning:'* ]]; then
+      dropping=1
+      continue
+    fi
+    (( dropping )) && [[ $line == [[:space:]]* ]] && continue
+    dropping=0
+    kept+=( "$line" )
+  done
+  REPLY=${(F)kept}
+}
+
 _upkg_run_search_nix() {
   emulate -L zsh
 
@@ -448,6 +469,15 @@ _upkg_run_search_nix() {
   # substitution did not finish in minutes.
   [[ $output != *$'\e'* ]] || output=$(print -r -- "$output" | LC_ALL=C command sed -E $'s/\e\\[[0-9;]*m//g')
   combined="${output}"$'\n'"${diagnostic}"
+  # A real failure keeps every line, since a warning may explain it.
+  if (( rc == 0 )) || [[ $rc == 1 && ( ${(L)combined} == *'no packages matched'* || ${(L)combined} == *'no results for'* ) ]]; then
+    # Parser helpers return in REPLY; keep that scratch out of caller state.
+    () {
+      local REPLY
+      _upkg_nix_drop_evaluation_warnings_reply "$diagnostic"
+      diagnostic=$REPLY
+    }
+  fi
   if (( rc != 1 )) || [[ ${(L)combined} != *'no packages matched'* && ${(L)combined} != *'no results for'* ]]; then
     [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   fi
