@@ -711,7 +711,7 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 | `nix` | `npkg outdated` | `npkg upgrade` |
 | `npm` | `npm outdated -g --depth=0 --json=false --parseable=false --color=false` | `npm update -g` |
 
-DNF `check-update` supports both DNF4 and DNF5 and returns native status `100` for available updates, which the wrapper treats as a successful inventory. It may refresh expired metadata; the upgrade explicitly forces fresh metadata with `--refresh`. Unprivileged checks and privileged upgrades may use different caches.
+DNF `check-update` supports both DNF4 and DNF5 and returns native status `100` for available updates, which the wrapper treats as a successful inventory. Successful DNF queries drop DNF5's `Updating and loading repositories:` progress block from stderr; a failed query or an unfinished block keeps every line. It may refresh expired metadata; the upgrade explicitly forces fresh metadata with `--refresh`. Unprivileged checks and privileged upgrades may use different caches.
 
 APT refresh treats every repository error, including transient fetch errors, as a failure and stops before `full-upgrade`; correct the repository/network issue and rerun the command.
 

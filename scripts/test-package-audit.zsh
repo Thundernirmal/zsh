@@ -599,6 +599,45 @@ exit "$AUDIT_NIX_RC"'
 print 'ok: Nix search hides evaluation warnings unless the search fails'
 
 (
+  write_fake dnf '
+printf "%b\n" "$AUDIT_DNF_ERR" >&2
+case "$*" in
+  *check-update*) ;;
+  *) [ "$AUDIT_DNF_RC" = 0 ] && printf "%s\n" "ripgrep.x86_64 15.2.0-1.fc44 fedora" ;;
+esac
+exit "$AUDIT_DNF_RC"'
+  PATH="$scratch:$original_path"
+  err="$scratch/dnf-progress-err"
+  block='Updating and loading repositories:\n Fedora 44 - x86_64 100%\nRepositories loaded.'
+
+  export AUDIT_DNF_RC=0 AUDIT_DNF_ERR="$block"
+  _UPKG_SEARCH_ROWS=()
+  _upkg_run_search_dnf ripgrep >/dev/null 2>"$err" || exit 1
+  assert test "${#_UPKG_SEARCH_ROWS}" -eq 1
+  assert test ! -s "$err"
+
+  export AUDIT_DNF_ERR="${block}\nmetadata warning"
+  _upkg_run_search_dnf ripgrep >/dev/null 2>"$err" || exit 1
+  assert test "$(<"$err")" = 'metadata warning'
+
+  # A block that never finished may be the clue, so it stays.
+  export AUDIT_DNF_ERR='Updating and loading repositories:\nstill loading'
+  _upkg_run_search_dnf ripgrep >/dev/null 2>"$err" || exit 1
+  [[ $(<"$err") == *'Updating and loading'*'still loading'* ]] || exit 1
+
+  export AUDIT_DNF_RC=100 AUDIT_DNF_ERR="$block"
+  _upkg_run_outdated_dnf >/dev/null 2>"$err" || exit 1
+  assert test "$_UPKG_LAST_STATE" = 'updates available'
+  assert test ! -s "$err"
+
+  export AUDIT_DNF_RC=1 AUDIT_DNF_ERR="${block}\nError: boom"
+  _upkg_run_outdated_dnf >/dev/null 2>"$err"
+  assert test "$?" -eq 1
+  [[ $(<"$err") == *'Updating and loading'*'Error: boom'* ]] || exit 1
+) || exit 1
+print 'ok: DNF progress stays out of successful queries and failures keep every line'
+
+(
   write_fake jq 'exit 0'
   PATH="$scratch:$original_path"
   npkg() {

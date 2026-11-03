@@ -58,6 +58,31 @@ _upkg_run_search_apt() {
   _upkg_finish_search_results apt "${rows[@]}"
 }
 
+# DNF5 reports repository loading on stderr for every query, even from cache.
+# Only a finished block is progress; an unfinished one may explain a problem.
+_upkg_dnf_drop_progress_reply() {
+  emulate -L zsh
+
+  local line
+  local -a kept
+  integer inside=0
+
+  for line in "${(@f)1}"; do
+    if (( inside )); then
+      [[ $line == 'Repositories loaded.' ]] && inside=0
+    elif [[ $line == 'Updating and loading repositories:' ]]; then
+      inside=1
+    else
+      kept+=( "$line" )
+    fi
+  done
+  if (( inside )); then
+    REPLY=$1
+  else
+    REPLY=${(F)kept}
+  fi
+}
+
 _upkg_run_search_dnf() {
   emulate -L zsh
 
@@ -92,7 +117,12 @@ _upkg_run_search_dnf() {
     _upkg_set_last_result 'failed' 'dnf list --available failed'
     return 1
   fi
-  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    _upkg_dnf_drop_progress_reply "$diagnostic"
+    [[ -z $REPLY ]] || print -u2 -r -- "$REPLY"
+  }
 
   for line in ${(f)output}; do
     fields=( ${(z)line} )
@@ -620,7 +650,7 @@ _upkg_run_outdated_apt() {
 _upkg_run_outdated_dnf() {
   emulate -L zsh
 
-  local output diagnostic rc
+  local output diagnostic rc REPLY
 
   _upkg_print_section dnf
 
@@ -628,6 +658,10 @@ _upkg_run_outdated_dnf() {
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
+  if (( rc == 0 || rc == 100 )); then
+    _upkg_dnf_drop_progress_reply "$diagnostic"
+    diagnostic=$REPLY
+  fi
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
