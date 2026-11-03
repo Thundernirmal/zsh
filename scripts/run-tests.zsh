@@ -49,7 +49,8 @@ zsh ./scripts/test-query-launcher.zsh
 zsh ./scripts/test-completions.zsh
 zsh ./scripts/test-help.zsh
 zsh ./scripts/test-doctor.zsh
-# CI also runs the real-fzf PTY suite against each supported fzf release.
+# All three suites need a real fzf. CI's fzf-pty job runs them against each
+# supported fzf release, because the verify job has no fzf and skips them here.
 if (( $+commands[python3] && $+commands[fzf] )); then
   python3 ./scripts/test-ui-pty.py
   python3 ./scripts/test-preview.py
@@ -61,8 +62,10 @@ fi
 if (( $+commands[python3] )); then
   python3 ./scripts/test-upkg-pty.py >/dev/null
   print -- 'ok: upkg timing PTY checks'
+  python3 ./scripts/test-upkg-parallel.py
+  python3 ./scripts/test-cgm-pty.py
 else
-  print -- 'skip: upkg timing PTY checks require python3'
+  print -- 'skip: upkg timing, parallel, and cgm PTY checks require python3'
 fi
 
 if [[ $repo_dir == ${HOME:-}/.config/zsh ]]; then

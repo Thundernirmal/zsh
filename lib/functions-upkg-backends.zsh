@@ -58,6 +58,31 @@ _upkg_run_search_apt() {
   _upkg_finish_search_results apt "${rows[@]}"
 }
 
+# DNF5 reports repository loading on stderr for every query, even from cache.
+# Only a finished block is progress; an unfinished one may explain a problem.
+_upkg_dnf_drop_progress_reply() {
+  emulate -L zsh
+
+  local line
+  local -a kept
+  integer inside=0
+
+  for line in "${(@f)1}"; do
+    if (( inside )); then
+      [[ $line == 'Repositories loaded.' ]] && inside=0
+    elif [[ $line == 'Updating and loading repositories:' ]]; then
+      inside=1
+    else
+      kept+=( "$line" )
+    fi
+  done
+  if (( inside )); then
+    REPLY=$1
+  else
+    REPLY=${(F)kept}
+  fi
+}
+
 _upkg_run_search_dnf() {
   emulate -L zsh
 
@@ -92,7 +117,12 @@ _upkg_run_search_dnf() {
     _upkg_set_last_result 'failed' 'dnf list --available failed'
     return 1
   fi
-  [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
+  # Parser helpers return in REPLY; keep that scratch out of caller state.
+  () {
+    local REPLY
+    _upkg_dnf_drop_progress_reply "$diagnostic"
+    [[ -z $REPLY ]] || print -u2 -r -- "$REPLY"
+  }
 
   for line in ${(f)output}; do
     fields=( ${(z)line} )
@@ -425,6 +455,27 @@ _upkg_run_search_flatpak() {
   _upkg_finish_search_results flatpak "${rows[@]}"
 }
 
+# Evaluating nixpkgs warns about its own deprecated attributes: dozens of lines
+# nobody searching can act on, printed only when the evaluation is not cached.
+_upkg_nix_drop_evaluation_warnings_reply() {
+  emulate -L zsh
+
+  local line
+  local -a kept
+  integer dropping=0
+
+  for line in "${(@f)1}"; do
+    if [[ $line == 'evaluation warning:'* ]]; then
+      dropping=1
+      continue
+    fi
+    (( dropping )) && [[ $line == [[:space:]]* ]] && continue
+    dropping=0
+    kept+=( "$line" )
+  done
+  REPLY=${(F)kept}
+}
+
 _upkg_run_search_nix() {
   emulate -L zsh
 
@@ -443,7 +494,20 @@ _upkg_run_search_nix() {
   _upkg_search_progress_clear
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
+  # nix search colours its matches even when stdout is a file, and NO_COLOR does
+  # not stop it. sed handles a broad 2 MB result in about 70 ms; a global Zsh
+  # substitution did not finish in minutes.
+  [[ $output != *$'\e'* ]] || output=$(print -r -- "$output" | LC_ALL=C command sed -E $'s/\e\\[[0-9;]*m//g')
   combined="${output}"$'\n'"${diagnostic}"
+  # A real failure keeps every line, since a warning may explain it.
+  if (( rc == 0 )) || [[ $rc == 1 && ( ${(L)combined} == *'no packages matched'* || ${(L)combined} == *'no results for'* ) ]]; then
+    # Parser helpers return in REPLY; keep that scratch out of caller state.
+    () {
+      local REPLY
+      _upkg_nix_drop_evaluation_warnings_reply "$diagnostic"
+      diagnostic=$REPLY
+    }
+  fi
   if (( rc != 1 )) || [[ ${(L)combined} != *'no packages matched'* && ${(L)combined} != *'no results for'* ]]; then
     [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   fi
@@ -490,6 +554,8 @@ _upkg_run_search_nix() {
       if [ "$name" = "$trimmed" ] || [ "$version" = "$trimmed" ]; then
         continue
       fi
+      # What remains is the name npkg add and nixpkgs# references take.
+      name=${name#legacyPackages.*.}
       rows+=("${name}"$'\t'"${version}"$'\t')
     done
   }
@@ -553,7 +619,7 @@ _upkg_run_outdated_apt() {
 
   _upkg_print_section apt
 
-  _upkg_capture_query apt list --upgradable
+  _upkg_inventory_query apt apt list --upgradable
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -584,14 +650,18 @@ _upkg_run_outdated_apt() {
 _upkg_run_outdated_dnf() {
   emulate -L zsh
 
-  local output diagnostic rc
+  local output diagnostic rc REPLY
 
   _upkg_print_section dnf
 
-  _upkg_capture_query dnf check-update
+  _upkg_inventory_query dnf dnf check-update
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
+  if (( rc == 0 || rc == 100 )); then
+    _upkg_dnf_drop_progress_reply "$diagnostic"
+    diagnostic=$REPLY
+  fi
   [[ -z $diagnostic ]] || print -u2 -r -- "$diagnostic"
   _upkg_check_interrupt "$rc" || return $?
 
@@ -634,7 +704,7 @@ _upkg_run_outdated_pacman() {
       trap '_upkg_check_interrupt 130; return 130' INT
       trap '_upkg_check_interrupt 143; return 143' TERM
       trap '_upkg_check_interrupt 129; return 129' HUP
-      CHECKUPDATES_DB=$database _upkg_capture_query checkupdates --nocolor
+      CHECKUPDATES_DB=$database _upkg_inventory_query pacman checkupdates --nocolor
       rc=$?
     } always {
       command rm -rf -- "$database"
@@ -645,7 +715,7 @@ _upkg_run_outdated_pacman() {
     fi
   else
     print 'Cached repository inventory: install pacman-contrib for fresh checkupdates checks.'
-    _upkg_capture_query pacman -Qu
+    _upkg_inventory_query pacman pacman -Qu
     rc=$?
   fi
   output=$_UPKG_QUERY_STDOUT
@@ -676,7 +746,7 @@ _upkg_run_outdated_paru() {
   local output diagnostic rc
   _upkg_print_section paru
   print 'Configured Paru update inventory (repository versions use cached metadata):'
-  _upkg_capture_query paru -Qu
+  _upkg_inventory_query paru paru -Qu
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -709,7 +779,7 @@ _upkg_run_outdated_brew() {
 
   _upkg_print_section brew
 
-  _upkg_capture_query brew outdated
+  _upkg_inventory_query brew brew outdated
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -738,7 +808,7 @@ _upkg_run_outdated_flatpak() {
 
   _upkg_print_section flatpak
 
-  _upkg_capture_query flatpak remote-ls --updates --all
+  _upkg_inventory_query flatpak flatpak remote-ls --updates --all
   rc=$?
   output=$_UPKG_QUERY_STDOUT
   diagnostic=$_UPKG_QUERY_STDERR
@@ -781,8 +851,10 @@ _upkg_run_outdated_nix() {
   _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$capture_dir" )
   # Invoke in this process: result globals survive, streams stay independent.
   {
+    _upkg_search_progress nix '' Checking
     npkg outdated >"$capture_dir/stdout" 2>"$capture_dir/stderr"
     rc=$?
+    _upkg_search_progress_clear
     output=$(<"$capture_dir/stdout")
     diagnostic=$(<"$capture_dir/stderr")
   } always {
@@ -826,7 +898,7 @@ _upkg_run_outdated_npm() {
   local stdout_output stderr_output rc
 
   _upkg_print_section npm
-  LC_ALL=C _upkg_capture_query npm outdated -g --depth=0 --json=false --parseable=false --color=false
+  LC_ALL=C _upkg_inventory_query npm npm outdated -g --depth=0 --json=false --parseable=false --color=false
   rc=$?
   stdout_output=$_UPKG_QUERY_STDOUT
   stderr_output=$_UPKG_QUERY_STDERR

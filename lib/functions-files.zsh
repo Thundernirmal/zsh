@@ -290,7 +290,11 @@ mkcd() {
     return 1
   fi
 
-  command mkdir -p -- "$1" && builtin cd -- "$1"
+  # A bare -, -N, or +N would select the directory stack instead of the new
+  # directory, and CDPATH could redirect a relative name.
+  local target=$1
+  [[ $target == /* ]] || target=./$target
+  command mkdir -p -- "$1" && builtin cd -- "$target"
 }
 
 # Print the name-search options without depending on a backend.
@@ -363,7 +367,9 @@ ff() {
     print -u2 -r -- "'$search_root' is not a directory"
     return 1
   fi
-  search_root=${search_root:A}
+  # Keep results relative to the path as typed; ./ stops find reading a leading
+  # dash as an option.
+  [[ $search_root == -* ]] && search_root=./$search_root
 
   if command -v fd >/dev/null 2>&1; then
     (( hidden )) && fd_args+=(--hidden)
@@ -396,7 +402,7 @@ ff() {
 
 # Print the content-search options without depending on a backend.
 _ft_usage() {
-  print 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] <pattern> [path]'
+  print 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]'
   print 'Search text with rg or grep; fixed-string matching is available on both backends.'
   print 'The grep fallback already traverses hidden files and does not read ignore files.'
 }
@@ -406,7 +412,7 @@ ft() {
   emulate -L zsh
 
   local arg pattern='' search_root='.'
-  local -i hidden=0 no_ignore=0 follow=0 fixed_strings=0 options_done=0
+  local -i hidden=0 no_ignore=0 follow=0 fixed_strings=0 ignore_case=0 options_done=0
   local -a operands search_args
 
   while (( $# > 0 )); do
@@ -432,6 +438,10 @@ ft() {
           ;;
         --fixed-strings|-F)
           fixed_strings=1
+          continue
+          ;;
+        --ignore-case|-i)
+          ignore_case=1
           continue
           ;;
         --)
@@ -461,6 +471,7 @@ ft() {
     (( no_ignore )) && search_args+=(--no-ignore)
     (( follow )) && search_args+=(--follow)
     (( fixed_strings )) && search_args+=(--fixed-strings)
+    (( ignore_case )) && search_args+=(--ignore-case)
     search_args+=(--color=auto -- "$pattern" "$search_root")
     command rg "${search_args[@]}"
   else
@@ -477,6 +488,7 @@ ft() {
     else
       search_args+=(-E)
     fi
+    (( ignore_case )) && search_args+=(-i)
     search_args+=(--color=auto -- "$pattern" "$search_root")
     command grep "${search_args[@]}"
   fi
@@ -489,7 +501,7 @@ peek() {
   case ${1:-} in
     -h|--help)
       print 'Usage: peek <file>'
-      print 'Preview a file with bat when available, otherwise cat.'
+      print 'Preview the first 200 lines of a file with bat or batcat when available, otherwise sed.'
       return 0
       ;;
   esac
@@ -499,24 +511,38 @@ peek() {
     return 1
   fi
 
+  local rc
   if command -v bat >/dev/null 2>&1; then
-    bat --style=numbers --paging=never -- "$1"
+    bat --style=numbers --paging=never --line-range=:200 -- "$1"
+  elif command -v batcat >/dev/null 2>&1; then
+    batcat --style=numbers --paging=never --line-range=:200 -- "$1"
   else
-    command cat -- "$1"
+    command sed -n '1,200p;200Q' -- "$1"
   fi
+  rc=$?
+  # Stops reading at line 201, so a huge file costs no more than a short one.
+  if (( rc == 0 )) && [[ -f $1 && -n $(command sed -n '201{s/^/x/p;q}' -- "$1" 2>/dev/null) ]]; then
+    print -u2 -r -- 'peek: showing the first 200 lines; use cat for the whole file'
+  fi
+  return $rc
 }
 
 # Collect disk records before choosing a renderer. The caller owns local
 # records (array), scan_result (association), and signal_status. Partial scans
 # are successful collections with an explicit nonzero result status; setup
 # failures/signals return early. Neither rich nor plain rendering runs here.
+# bigfiles also sets scan_limit: regular du records are then counted and sorted
+# outside the shell, scan_result gains count and total_kib, and records holds
+# only the rows that limit can show, plus any that tie with the last one.
 _zsh_scan_collect() {
   emulate -L zsh
   setopt localtraps
-  local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file=''
+  local mode=$1 target=$2 entry_path kib path_list_file='' raw_output_file='' error_file='' first_error=''
   local chunk carry='' record tab=$'\t'
   local -a parts irregular
-  integer du_status=0 find_status=0 result_status=0
+  local rank_summary
+  local -a rank_fields
+  integer du_status=0 find_status=0 result_status=0 ranked=0
   shift 2
   trap 'signal_status=130; return 130' INT
   trap 'signal_status=143; return 143' TERM
@@ -526,18 +552,43 @@ _zsh_scan_collect() {
   {
     path_list_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.paths.XXXXXX") || return 1
     raw_output_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.raw.XXXXXX") || return 1
+    error_file=$(command mktemp "${TMPDIR:-/tmp}/${mode}.errors.XXXXXX") || return 1
     if [[ $mode == dusage ]]; then
       for entry_path in "$@"; do
         print -rn -- "$entry_path"$'\0'
       done >"$path_list_file"
-      command du -sk --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+      command du -sk --null --files0-from="$path_list_file" 2>>"$error_file" >"$raw_output_file"
       du_status=$?
     else
-      command find "$target" -type f -print0 2>/dev/null >"$path_list_file"
+      command find "$target" -type f -print0 2>>"$error_file" >"$path_list_file"
       find_status=$?
       if [[ -s $path_list_file ]]; then
-        command du -k --null --files0-from="$path_list_file" 2>/dev/null >"$raw_output_file"
+        command du -k --null --files0-from="$path_list_file" 2>>"$error_file" >"$raw_output_file"
         du_status=$?
+      fi
+    fi
+    if [[ -s $error_file ]]; then
+      IFS= read -r first_error <"$error_file"
+      scan_result[first_error]=$first_error
+      scan_result[error_count]=${$(command wc -l <"$error_file")//[^0-9]/}
+    fi
+    # Odd tabs, a missing size, or a missing final NUL keep the in-shell path
+    # below, whose read rules define those records.
+    if [[ $mode == bigfiles ]] && (( ${+scan_limit} )) && [[ -s $raw_output_file ]] &&
+        zmodload -F zsh/system b:sysread 2>/dev/null &&
+        [[ $(command tail -c 1 -- "$raw_output_file" | LC_ALL=C command tr -d '\0' | command wc -c) == 0 ]]; then
+      LC_ALL=C command grep -qazE "^\$|^[^0-9]|^[0-9]+(\$|[^0-9${tab}])|${tab}${tab}|${tab}\$" -- "$raw_output_file"
+      if (( $? == 1 )); then
+        rank_summary=$(LC_ALL=C command cut -z -f1 -- "$raw_output_file" | command tr '\0' '\n' |
+          command awk '{ total += $1 } END { printf "%d %.0f", NR, total }')
+        rank_fields=( ${=rank_summary} )
+        if [[ ${rank_fields[1]-} == <-> && ${rank_fields[2]-} == <-> ]] &&
+            LC_ALL=C command sort -z -t "$tab" -k1,1nr -o "$raw_output_file" -- "$raw_output_file"; then
+          ranked=1
+          scan_result[count]=${rank_fields[1]}
+          scan_result[total_kib]=${rank_fields[2]}
+          (( scan_limit > 0 )) || : >| "$raw_output_file"
+        fi
       fi
     fi
     if zmodload -F zsh/system b:sysread 2>/dev/null; then
@@ -553,6 +604,11 @@ _zsh_scan_collect() {
         irregular=( "${(@M)parts:#${tab}*}" "${(@M)parts:#*${tab}}" "${(@M)parts:#*${tab}${tab}*}" "${(@M)parts:#<->}" )
         if (( ${#irregular} == 0 )); then
           records+=( "${(@M)parts:#<->${tab}*}" )
+          # Sorted input: stop once past the last size the limit can show.
+          if (( ranked && ${#records} >= scan_limit )) &&
+              (( ${records[-1]%%${tab}*} < ${records[scan_limit]%%${tab}*} )); then
+            break
+          fi
           continue
         fi
         for record in "${parts[@]}"; do
@@ -575,7 +631,7 @@ _zsh_scan_collect() {
       done <"$raw_output_file"
     fi
   } always {
-    command rm -f -- "$path_list_file" "$raw_output_file"
+    command rm -f -- "$path_list_file" "$raw_output_file" "$error_file"
   }
   scan_result[du_status]=$du_status
   scan_result[find_status]=$find_status
@@ -591,6 +647,24 @@ _zsh_scan_collect() {
   scan_result[status]=$result_status
   (( result_status )) && scan_result[state]=partial
   return 0
+}
+
+# Names what a partial scan skipped, from the caller's scan_result. Tool messages
+# can hold file names, so they are sanitized before they reach the terminal.
+_zsh_scan_errors_reply() {
+  emulate -L zsh
+
+  [[ -n ${scan_result[first_error]-} ]] || return 1
+  _ui_safe_text_reply "${scan_result[first_error]}"
+  REPLY="${scan_result[error_count]} error(s); first: $REPLY"
+}
+
+_zsh_scan_print_errors() {
+  emulate -L zsh
+
+  local REPLY
+  _zsh_scan_errors_reply || return 0
+  print -u2 -r -- "Scan errors: $REPLY"
 }
 
 # Disk usage summary for current directory
@@ -612,7 +686,7 @@ dusage() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local line kib entry_path label icon shown visible_count more total_kib=0 bar_width name_width width size_width percent_width REPLY
+  local line kib entry_path label shown visible_count more total_kib=0 bar_width name_width width size_width percent_width REPLY
   local size_text percent_text header_meta footer_text display_target
   local scan_status=0 signal_status=0 incomplete_detail=''
   local -a entries records lines
@@ -651,6 +725,7 @@ dusage() {
   if (( ${#records[@]} == 0 )); then
     if (( scan_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      _zsh_scan_print_errors
       return $scan_status
     fi
     echo "No entries found in '$display_target'"
@@ -672,6 +747,7 @@ dusage() {
     done
     if (( scan_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      _zsh_scan_print_errors
       return $scan_status
     fi
     return 0
@@ -685,7 +761,8 @@ dusage() {
     total_kib=$(( total_kib + kib ))
   done
 
-  shown=$(_ui_visible_count "$limit" "${#lines[@]}" 6)
+  shown=$limit
+  (( shown > ${#lines[@]} )) && shown=${#lines[@]}
   more=$(( ${#lines[@]} - shown ))
   visible_count=$shown
   _ui_term_width_reply
@@ -708,6 +785,8 @@ dusage() {
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
   if (( scan_status != 0 )); then
     _ui_panel_kv 'Warning' "Incomplete scan ($incomplete_detail); results are partial" warning text
+    # Not truncated: the middle of the path is usually what explains the error.
+    _zsh_scan_errors_reply && _ui_panel_kv 'Scan errors' "$REPLY" warning text
   fi
   _ui_section_break
 
@@ -726,11 +805,12 @@ dusage() {
     label=${entry_path##*/}
     [ -n "$label" ] || label=$entry_path
     label=$(_ui_safe_text "$label")
-    icon=$(_ui_usage_entry_icon "$entry_path")
     label=$(_ui_safe_truncate "$name_width" "$label")
 
     _ui_panel_prefix
-    print -nr -- "$icon "
+    # Not captured: a command substitution sees a pipe and picks the ASCII glyph.
+    _ui_usage_entry_icon "$entry_path"
+    print -nr -- ' '
     _ui_color text
     _ui_pad left "$name_width" "$label"
     _ui_reset
@@ -782,7 +862,7 @@ bigfiles() {
 
   local target=${1:-.}
   local limit=${2:-20}
-  local line kib file_path label shown more total_kib=0 bar_width path_width footer_text icon width size_width REPLY
+  local line kib file_path label shown more total_kib=0 bar_width path_width footer_text width size_width REPLY
   local signal_status=0 display_target incomplete_status=0
   local line_count=0 incomplete_detail=''
   local -a records lines
@@ -809,14 +889,16 @@ bigfiles() {
   esac
 
   local -A scan_result
+  local scan_limit=$limit
   _zsh_scan_collect bigfiles "$target" || return $?
 
   incomplete_detail=${scan_result[diagnostic]}
   incomplete_status=${scan_result[status]}
 
-  if (( ${#records[@]} == 0 )); then
+  if (( ${#records[@]} == 0 && ${scan_result[count]:-0} == 0 )); then
     if (( incomplete_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      _zsh_scan_print_errors
       return $incomplete_status
     fi
 
@@ -835,7 +917,7 @@ bigfiles() {
   fi
 
   lines=( "${(@On)records}" )
-  line_count=${#lines[@]}
+  line_count=${scan_result[count]:-${#lines[@]}}
 
   if _ui_plain_mode; then
     shown=$limit
@@ -850,17 +932,23 @@ bigfiles() {
     done
     if (( incomplete_status != 0 )); then
       print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      _zsh_scan_print_errors
       return $incomplete_status
     fi
     return 0
   fi
 
-  for line in "${lines[@]}"; do
-    kib=${line%%$'\t'*}
-    total_kib=$(( total_kib + kib ))
-  done
+  if [[ -n ${scan_result[total_kib]-} ]]; then
+    total_kib=${scan_result[total_kib]}
+  else
+    for line in "${lines[@]}"; do
+      kib=${line%%$'\t'*}
+      total_kib=$(( total_kib + kib ))
+    done
+  fi
 
-  shown=$(_ui_visible_count "$limit" "$line_count" 6)
+  shown=$limit
+  (( shown > line_count )) && shown=$line_count
   more=$(( line_count - shown ))
 
   _ui_term_width_reply
@@ -877,6 +965,8 @@ bigfiles() {
   _ui_panel_kv 'Total' "$(_ui_human_kib "$total_kib")" muted text
   if (( incomplete_status != 0 )); then
     _ui_panel_kv 'Warning' "Incomplete scan ($incomplete_detail); results are partial" warning text
+    # Not truncated: the middle of the path is usually what explains the error.
+    _zsh_scan_errors_reply && _ui_panel_kv 'Scan errors' "$REPLY" warning text
   fi
   _ui_section_break
 
@@ -885,7 +975,6 @@ bigfiles() {
     line=${lines[$idx]}
     kib=${line%%$'\t'*}
     file_path=${line#*$'\t'}
-    icon=$(_ui_usage_entry_icon "$file_path")
 
     if (( width < 80 )); then
       label=${file_path##*/}
@@ -897,7 +986,9 @@ bigfiles() {
     label=$(_ui_safe_truncate "$path_width" "$label")
 
     _ui_panel_prefix
-    print -nr -- "$icon "
+    # Not captured: a command substitution sees a pipe and picks the ASCII glyph.
+    _ui_usage_entry_icon "$file_path"
+    print -nr -- ' '
     _ui_color text
     _ui_pad left "$path_width" "$label"
     _ui_reset

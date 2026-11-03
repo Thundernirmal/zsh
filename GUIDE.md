@@ -126,7 +126,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 
 | Command | Effect when present | Fallback or absence behavior |
 |---|---|---|
-| `bat` | Highlighted `cat` alias, `peek`, and file previews | `peek` uses `cat`; fzf previews use `sed` |
+| `bat` / `batcat` | Highlighted `cat` alias, `peek`, and file previews | `peek` and fzf previews use `sed` |
 | `tree` | `lt` and directory previews when `lsd` is absent | Preview uses `ls`; `lt` is unavailable without `lsd` or `tree` |
 | `fd` / `fdfind` | Faster `ff` search | GNU `find` |
 | `rg` | Faster `ft` content search | Recursive `grep` |
@@ -143,7 +143,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 
 Package managers are detected at runtime; they are not setup dependencies. The checker reports the primary optional integrations, while format-specific unpackers and ordinary GNU userland tools are checked only by the workflows that need them.
 
-On Debian and Ubuntu, the distribution may expose `bat` as `batcat`. This repository looks specifically for `bat`, so install a package that provides that command or add a deliberate local wrapper.
+On Debian and Ubuntu, the `bat` package installs the command as `batcat`, and `fd-find` installs `fdfind`. Both names are detected, so no wrapper is needed.
 
 ## Terminal output modes
 
@@ -288,7 +288,6 @@ Rich output is for people, not parsers. Pipe a command or use its explicit plain
 | `AUTO_PUSHD` | on | Every directory change pushes the previous directory |
 | `PUSHD_IGNORE_DUPS` | on | The directory stack omits duplicates |
 | `PUSHD_SILENT` | on | Stack changes do not print automatically |
-| `EXTENDED_GLOB` | on | Enables Zsh glob qualifiers and exclusions |
 | `GLOB_DOTS` | off | Ordinary globs exclude leading-dot entries |
 | `NUMERIC_GLOB_SORT` | on | `file2` sorts before `file10` |
 | `CORRECT` | off | Command spell-correction prompts are disabled |
@@ -303,13 +302,15 @@ print -rl -- *(D)     # visible and hidden entries
 print -rl -- **/*(D)  # recursive, including hidden entries
 ```
 
-Useful extended-glob examples:
+Useful glob examples:
 
 ```zsh
 print -rl -- **/*.js
 print -rl -- *(.m-1)
 print -rl -- *(Lk+100)
 ```
+
+`EXTENDED_GLOB` is left off so that `HEAD^`, `nixpkgs#bat`, and URLs containing `#` reach commands unchanged instead of failing with `no matches found`. The examples above don't need it. To use the `^`, `~`, and `#` glob operators, run `setopt EXTENDED_GLOB` in `~/.zshrc`; the shared layer doesn't override that choice.
 
 ### Directory stack
 
@@ -409,7 +410,7 @@ zdoctor --secrets    # also ping Secret Service over D-Bus (values are never ret
 zdoctor --help
 ```
 
-It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, and integration state for fzf, zoxide, `cgm`, `npkg`, and global aliases. Network endpoints and Secret Service stay untouched unless the matching flag is passed. `--network` uses the same `ZSH_HTTP_CONNECT_TIMEOUT` and `ZSH_HTTP_MAX_TIME` budgets as `myip` and `weather`. `--secrets` sends only a D-Bus `Peer.Ping` through `gdbus`, which cannot unlock, search, or read credentials; it fails when Secret Service does not answer and warns when `gdbus` is missing. The exit status is nonzero while any failure is present; warnings alone keep it zero.
+It covers the fixed install location, unreadable modules, `compinit` readiness, required and optional tool availability and the fzf version (minimum 0.68.0), glyph resolution, integration state for fzf, zoxide, `cgm`, and `npkg`, and the current output mode with the reason when it is plain. Global aliases are off by default, so their state is a note rather than a warning. Network endpoints and Secret Service stay untouched unless the matching flag is passed. `--network` uses the same `ZSH_HTTP_CONNECT_TIMEOUT` and `ZSH_HTTP_MAX_TIME` budgets as `myip` and `weather`. `--secrets` sends only a D-Bus `Peer.Ping` through `gdbus`, which cannot unlock, search, or read credentials; it fails when Secret Service does not answer and warns when `gdbus` is missing. The exit status is nonzero while any failure is present; warnings alone keep it zero.
 
 A recorded blocked fzf integration is a failure even when its binary version is supported; the diagnostic preserves the block reason. Repair that problem and restart the shell. Ready integration passes. An unchecked integration is reported as a note: command-mode shells intentionally skip prompt integration, so run `zdoctor` in a normal interactive shell to check it. Diagnosis never initializes fzf, regenerates integration, edits its cache, or changes widgets.
 
@@ -432,11 +433,9 @@ A recorded blocked fzf integration is a failure even when its binary version is 
 | `ll` | Long listing including hidden entries and readable sizes |
 | `la` | Listing including hidden entries |
 | `lt` | Tree to depth 3; defined only with `lsd` or `tree` |
-| `cat` | `bat --style=numbers --paging=never` when `bat` is present |
-| `grep` | Adds `--color=auto` on Linux |
-| `diff` | Adds `--color=auto` on Linux |
-
-Under the zero-probe startup policy, the built-in `ls`, `ll`, and `la` fallbacks and the `grep` and `diff` aliases add automatic color only on Linux. On macOS and BSD they keep the corresponding plain command behavior rather than running capability probes while the shell starts. `lsd`, when installed, remains the preferred listing backend on every platform where it is available.
+| `cat` | `bat --style=numbers --paging=never` when `bat` or `batcat` is present; flags only GNU `cat` understands, such as `-v`, `-e`, and `-T`, run the real `cat` |
+| `grep` | Adds `--color=auto` |
+| `diff` | Adds `--color=auto` |
 
 ### Git extras
 
@@ -524,7 +523,7 @@ Finder presentation is compiled separately from the trusted integration cache. C
 | Ctrl+R | Select a history entry and insert it for editing |
 | Alt+C | Select a directory and change to it |
 
-Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat` or the first 200 lines from GNU `sed`. The plain fallback stops after line 200; it does not scan later content or detect read errors beyond that preview prefix. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
+Ctrl+T previews directories with `lsd`, `tree`, or `ls`, and files with `bat`, `batcat`, or the first 200 lines from GNU `sed`. The plain fallback stops after line 200; it does not scan later content or detect read errors beyond that preview prefix. Ctrl+R previews the full command for the focused row. Every preview picker uses the same Ctrl+P toggle and Ctrl+/ wrap binding, so printable characters such as `?` stay available for searching.
 
 Generated `**<Tab>` completion uses separate general, path, and directory labels through `FZF_COMPLETION_OPTS`, `FZF_COMPLETION_PATH_OPTS`, and `FZF_COMPLETION_DIR_OPTS`. The shared layer does not add a command-agnostic preview or change completion insertion semantics.
 
@@ -544,12 +543,12 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 | `mkcd <dir>` | Create a directory and enter it |
 | `ff [options] <pattern> [path]` | Find names case-insensitively |
 | `ft [options] <pattern> [path]` | Search file contents |
-| `peek <file>` | Preview with `bat` or `cat` |
+| `peek <file>` | Preview the first 200 lines with `bat`, `batcat`, or `sed`; a note on stderr says when the file is longer |
 | `headers <url>` | Follow redirects and print HTTP headers |
 | `fanprofile` | Show the current Linux platform or ASUS fan profile |
 | `dusage [path] [count]` | Rank immediate entries by disk usage |
 | `bigfiles [path] [count]` | Rank files recursively |
-| `ports` | Show listening sockets and owning processes |
+| `ports [port\|process]` | Show listening sockets and owning processes |
 | `myip` | Show the public IP over HTTPS |
 | `path` | Print PATH entries |
 | `croot` | Change to the current Git repository root |
@@ -564,9 +563,9 @@ Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.tar.lzma`
 
 #### ff and ft
 
-`ff` prefers `fd`, then `fdfind`, then `find`. It matches a case-insensitive substring glob, includes hidden entries, and follows symlinks by default on every backend. `--no-hidden` and `--no-follow` disable those behaviors; `--hidden` and `--follow` make the defaults explicit. `--no-ignore` includes fd-ignored files. The find fallback has no ignore-file filtering and explains that difference when `--no-ignore` is requested.
+`ff` prefers `fd`, then `fdfind`, then `find`. It matches a case-insensitive substring glob, includes hidden entries, and follows symlinks by default on every backend. Results follow the path as typed: a relative or omitted path prints relative results, and an absolute path prints absolute ones. `--no-hidden` and `--no-follow` disable those behaviors; `--hidden` and `--follow` make the defaults explicit. `--no-ignore` includes fd-ignored files. The find fallback has no ignore-file filtering and explains that difference when `--no-ignore` is requested.
 
-`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, and `--fixed-strings` (`-F`) explicitly. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, uses extended regular expressions (`grep -E`) so alternation such as `'foo|bar'` works on both backends, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches. Both helpers preserve backend error messages on stderr and the native exit status, so inaccessible paths or invalid patterns cannot silently look like an empty result.
+`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, `--fixed-strings` (`-F`), and `--ignore-case` (`-i`) explicitly; `ft` is case-sensitive unless you ask otherwise. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, uses extended regular expressions (`grep -E`) so alternation such as `'foo|bar'` works on both backends, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches. Both helpers preserve backend error messages on stderr and the native exit status, so inaccessible paths or invalid patterns cannot silently look like an empty result.
 
 ```zsh
 ff --no-ignore config .
@@ -592,7 +591,7 @@ The command reports state only; it does not change the profile.
 
 #### dusage, bigfiles, and path
 
-`dusage` includes hidden immediate children and defaults to 20 rows. `bigfiles` searches recursively and also defaults to 20. Both preserve readable results when another entry or subtree cannot be measured, but they report `Incomplete scan (<tool> exit <code>); results are partial` on stderr, mark the rich dashboard with a warning and `(incomplete scan)` footer, and return nonzero. A clean scan still returns 0.
+`dusage` includes hidden immediate children and defaults to 20 rows. `bigfiles` searches recursively and also defaults to 20. The count applies the same way in rich and plain output, and rows aren't cut to fit the terminal, so a longer list scrolls. `bigfiles` ranks with `sort` and loads only the rows it can show, so a large tree needs little memory; unusual `du` records fall back to ranking in the shell, with the same result. Both preserve readable results when another entry or subtree cannot be measured, but they report `Incomplete scan (<tool> exit <code>); results are partial` on stderr, mark the rich dashboard with a warning and `(incomplete scan)` footer, and return nonzero. They also name how many errors the tool reported and the first one, so the cause is visible: for example, rootless Podman keeps unreadable layers under `~/.local/share/containers`, and their sizes are missing from the totals. That detail is a `Scan errors` row in the rich dashboard and a stderr line in plain output. A clean scan still returns 0.
 
 `path` preserves empty PATH components. In command lookup, an empty component means the current directory; rich output labels it `.`, while plain output preserves an empty line.
 
@@ -600,7 +599,7 @@ All three commands apply the safe-text contract described in [Terminal output mo
 
 #### ports and myip
 
-`ports` uses `ss -tulnp`. Process details can be limited by system permissions. `myip` queries `https://ifconfig.me/ip`. Both use rich dashboards only in capable terminals.
+`ports` uses `ss -tulnp`. The dashboard lists TCP before UDP, sorted by port, and shows every socket, so a long list scrolls. `ports 8080` matches one port exactly, and `ports nginx` matches process names; no match prints a diagnostic and returns 1. Piped output keeps native `ss` format and applies the same filter. Process details can be limited by system permissions: `-` means the owner is hidden, and the dashboard then points at `sudo ss -tulnp`. `myip` queries `https://ifconfig.me/ip`. Both use rich dashboards only in capable terminals. `myip` only prints a valid IPv4 or IPv6 address, so a captive portal's page or other unexpected response fails with a diagnostic instead of being shown.
 
 #### fkill and fbr
 
@@ -639,6 +638,7 @@ Names must match `[A-Z_][A-Z0-9_]*`. For credential assignment/export, CGM accep
 
 - Values are sent to `secret-tool` through its hidden input path, never as command arguments.
 - No plaintext fallback exists.
+- A name is recorded only after `secret-tool` stores its value, so a failed or interrupted `cgm set` adds nothing to `cgm list`.
 - Sourcing the module does not contact Secret Service, unlock a keyring, or read the catalogue.
 - `cgm list`, completion, status output, and help never retrieve or display values.
 - The name-only catalogue lives under `${XDG_DATA_HOME:-$HOME/.local/share}/cgm/entries/`; directories are created under `umask 077`, remain mode `0700`, and empty markers are `0600`. `XDG_DATA_HOME` is used only when absolute; a relative value falls back to an absolute `$HOME/.local/share`, and the operation fails when neither base is safe.
@@ -690,8 +690,11 @@ All other installed distro backends remain available through `--only <id>`. For 
 | `--skip <ids>` / `--skip=<ids>` | Exclude comma-separated manager IDs |
 | `--sudo` | Authorize privileged distro upgrade or cleanup paths |
 | `--dry-run` | Inventory updates for upgrade, or preview cleanup |
+| `--parallel` | Run `outdated`, `plan`, and `search` queries at the same time; other commands ignore it |
 
 Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and `npm`. `--only` preserves the order supplied by the user. Empty or whitespace-only values and empty IDs between, before, or after commas in `--only` and `--skip` are rejected before any backend runs; an empty variable never expands the operation to every manager.
+
+`--parallel` is off by default because managers then all start at once, so Ctrl-C cancels every running manager instead of leaving later ones unstarted. Results still print in the usual manager order, each as soon as the managers before it finish, and diagnostics stay on stderr. It never applies to upgrades or cleanup, which can prompt.
 
 `plan` and `upgrade --dry-run` run outdated queries. Their output explicitly identifies an update inventory: dependencies, replacements, removals, and conflicts are resolved later by the native upgrade command. Review the native transaction before confirming, especially APT `full-upgrade`, which may remove packages. Inventory and upgrade can also use different metadata snapshots.
 
@@ -708,7 +711,7 @@ Supported IDs are `apt`, `dnf`, `pacman`, `paru`, `brew`, `flatpak`, `nix`, and 
 | `nix` | `npkg outdated` | `npkg upgrade` |
 | `npm` | `npm outdated -g --depth=0 --json=false --parseable=false --color=false` | `npm update -g` |
 
-DNF `check-update` supports both DNF4 and DNF5 and returns native status `100` for available updates, which the wrapper treats as a successful inventory. It may refresh expired metadata; the upgrade explicitly forces fresh metadata with `--refresh`. Unprivileged checks and privileged upgrades may use different caches.
+DNF `check-update` supports both DNF4 and DNF5 and returns native status `100` for available updates, which the wrapper treats as a successful inventory. Successful DNF queries drop DNF5's `Updating and loading repositories:` progress block from stderr; a failed query or an unfinished block keeps every line. It may refresh expired metadata; the upgrade explicitly forces fresh metadata with `--refresh`. Unprivileged checks and privileged upgrades may use different caches.
 
 APT refresh treats every repository error, including transient fetch errors, as a failure and stops before `full-upgrade`; correct the repository/network issue and rerun the command.
 
@@ -732,9 +735,9 @@ upkg search ripgrep --only=nix
 upkg search ripgrep viewer --only=brew,npm
 ```
 
-Results are normalized into one table with manager, package, available version, and a cheap native description when available. Search parsers use stdout records only; native warnings and errors stay on stderr and never become package rows or descriptions. Flatpak empty tab-separated fields keep their position. npm search recognizes publication dates and versions across layouts with omitted descriptions/authors or empty keywords. Arch search disables color, and npm search explicitly selects uncolored parseable output regardless of inherited JSON settings. DNF search keeps the native no-match diagnostic enabled (no `-q`) and runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. Nix's native no-results error is likewise not repeated, while its other warnings stay on stderr. A no-match result is summarized once. Search summaries count attempted managers, including failures and cancellations, and retain earlier results when interrupted. Managers not started after cancellation are not counted. Backend failures name the affected managers, and other managers continue.
+Results are normalized into one table with manager, package, available version, and a cheap native description when available. Package names, versions, and descriptions pass through the same safe-text rule as filesystem labels, so control sequences in registry text print as visible escapes instead of reaching the terminal. Search parsers use stdout records only; native warnings and errors stay on stderr and never become package rows or descriptions. Flatpak empty tab-separated fields keep their position. npm search recognizes publication dates and versions across layouts with omitted descriptions/authors or empty keywords. Arch search disables color, and npm search explicitly selects uncolored parseable output regardless of inherited JSON settings. DNF search keeps the native no-match diagnostic enabled (no `-q`) and runs in the C locale with color disabled, separates diagnostics from package data, validates `name.arch` rows, and accepts the native DNF4 and DNF5 no-match results. Nix's native no-results error is likewise not repeated, while its other warnings stay on stderr. A no-match result is summarized once. Search summaries count attempted managers, including failures and cancellations, and retain earlier results when interrupted. Managers not started after cancellation are not counted. Backend failures name the affected managers, and other managers continue.
 
-Nix search uses native `--quiet` to suppress evaluation progress while preserving warnings and errors. See the [Nix logging options](https://nix.dev/manual/nix/2.34/command-ref/new-cli/nix3-search.html#logging-related-options). Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
+Nix names drop the `legacyPackages.<system>.` prefix, so a row shows the name `npkg add` takes. Nix search uses native `--quiet` to suppress evaluation progress while preserving warnings and errors, except `evaluation warning:` lines. Those describe nixpkgs' own deprecated attributes and appear only when the evaluation isn't cached, so a successful or no-match search drops them; a failed search keeps every line. See the [Nix logging options](https://nix.dev/manual/nix/2.34/command-ref/new-cli/nix3-search.html#logging-related-options). Nix search works directly in a fresh shell when `nix` is installed; running `npkg` first is unnecessary.
 
 Homebrew formulae and casks are queried separately; only stdout candidates are sent to metadata lookup, whose diagnostics also stay separate. Broad searches cap follow-up metadata calls at 50 formulae and 50 casks; refine the query when the cap warning appears.
 
@@ -769,7 +772,7 @@ Cancelled cleanup summaries retain completed and failed phase counts, earlier fa
 
 Tab completion describes `--dry-run` as an update inventory or cleanup preview, matching the shared flag reference.
 
-Search progress is cleared when each query finishes, before diagnostics, cancellation returns, or the final summary.
+Search and inventory progress lines appear only in rich output. Each is cleared when its query finishes, before diagnostics, cancellation returns, or the final summary.
 
 Multi-manager runs continue after an ordinary backend failure. Cancellation stops the remaining managers and cleanup phases, preserving status `130` (INT), `143` (TERM), or `129` (HUP). Pressing Ctrl-C while a native upgrade or cleanup command runs still prints the cancelled summary before `upkg` returns `130`:
 
@@ -822,7 +825,7 @@ Total elapsed (upgrade): 1m 47.2s
 
 Plans and cleanup previews time the inventory or preview actually run; they never estimate a future upgrade or cleanup. An upgrade row covers every native step, such as APT refresh plus `full-upgrade`, a cleanup row covers all of that manager's phases, and a search row includes metadata lookups.
 
-A manager's time runs from its dispatch until its backend returns, so it includes its section output, preflight checks, network waits, native confirmation prompts, password entry, and output processing. The total is measured separately from detection through result rendering, just before the summary prints. It is not the sum of the rows, and rounded values may not appear to add up. It excludes argument parsing, the first-use load of the package functions, clock initialization, and the final summary itself, so an external stopwatch reads slightly longer.
+A manager's time runs from its dispatch until its backend returns, so it includes its section output, preflight checks, network waits, native confirmation prompts, password entry, and output processing. The total is measured separately from detection through result rendering, just before the summary prints. It is not the sum of the rows, and rounded values may not appear to add up. With `--parallel` the rows overlap, so the total can be close to the slowest row. It excludes argument parsing, the first-use load of the package functions, clock initialization, and the final summary itself, so an external stopwatch reads slightly longer.
 
 Search keeps its result counts and adds an `Elapsed by manager:` list with each manager's state. Filtered managers show `not run` instead of a duration. Failed, blocked, and partial managers keep their details and show the time until they returned. After Ctrl-C, completed and interrupted managers keep their times, managers that never started are omitted, and the total ends in `so far`.
 
@@ -875,7 +878,7 @@ Native `add`/`install`/`i`, `remove` aliases, `list`/`ls`, `search`/`s`, and `up
 
 `npkg refresh` and `npkg outdated` require `jq`. Interactive add, find, and remove also require a real terminal and supported fzf.
 
-The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. `XDG_CACHE_HOME` is used only when absolute; a relative value falls back to an absolute `$HOME/.cache`. Refreshes build per-call temporary files in the cache directory and publish a complete index atomically, so concurrent or interrupted refreshes do not expose partial data. Building the cache evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns. Tab marks multiple packages, and the footer updates the selected count before Enter confirms the add or remove operation.
+The attribute cache lives under `${XDG_CACHE_HOME:-$HOME/.cache}/npkg/` and refreshes on install or find picker use after 24 hours. `XDG_CACHE_HOME` is used only when absolute; a relative value falls back to an absolute `$HOME/.cache`. Refreshes build per-call temporary files in the cache directory and publish a complete index atomically, so concurrent or interrupted refreshes do not expose partial data. If a refresh fails, for example offline, the picker warns and uses the existing index; it fails only when no index exists yet. Building the cache evaluates nixpkgs and can take time or require network access. Tab completion may read an existing cache but never creates or refreshes it. Picker previews evaluate package metadata to show description, version, and homepage; they move below the list when the terminal is narrower than 100 columns. Tab marks multiple packages, and the footer updates the selected count before Enter confirms the add or remove operation.
 
 ### Outdated semantics
 
@@ -895,7 +898,7 @@ A change is not necessarily an upgrade. It can be a downgrade, rebuild, changed 
 
 A complete report containing current or changed rows returns zero. Any unknown row produces a partial summary and nonzero status; only a complete all-current report may say `Everything is up to date.` A profile with no active elements is a complete zero-count result. Active store-path-only entries or entries without an evaluable flake source/attribute are reported as unknown instead of being silently excluded. Pinned flake references remain pinned: `npkg upgrade` cannot advance their revision, and their evaluated identity can correctly remain current. Reinstall from an unlocked reference only when changing that pin is intentional.
 
-`npkg outdated` runs at most eight evaluation workers, refilling completed slots while keeping displayed results in profile order. If the optional Zsh polling module is unavailable, it drains each batch before starting another. Package mutations remain sequential.
+`npkg outdated` runs at most eight evaluation workers, refilling completed slots while keeping plain results in profile order. The rich dashboard lists changed and unknown rows first and never hides them; only current rows are cut to fit a short terminal, and a `+N current not shown` line counts them. Plain output always shows every row. If the optional Zsh polling module is unavailable, it drains each batch before starting another. Package mutations remain sequential.
 
 For `npkg outdated`, INT, TERM, and HUP stop owned evaluation workers and their descendants, remove temporary files, preserve unrelated background jobs, and return `130`, `143`, and `129` respectively. Captured package queries run in private sessions using `setsid` (util-linux). A trusted supervisor remains alive through group termination and escalation, including children forked during shutdown. It monitors its owner and the original Nix inventory process while queries run and after they finish. Abnormal owner death stops the private group and removes its verified private capture directories; loss of only one Nix worker retains shared batch storage. A missing startup identity fails with status `1` after an approximately three-second handshake budget and shuts down the verified launcher/session. Linux `/proc` verifies the supervisor identity. Failed-startup cleanup uses per-task child lists when readable and falls back to process-stat parent discovery when those optional files are absent, unreadable, empty, malformed, or contain stale identities. Process records and child lists use fixed whitespace independent of the caller’s `IFS`; each child is attributed by parent and start time before cleanup, and subsequent signals require its recorded start identity. Cleanup freezes only the launcher, retaining a proc descriptor for the original task through its identity-checked final termination. Children are never frozen; a child that establishes a private session during shutdown is handled as a group. If access to a child identity is lost, further signals to that child are skipped. Signals sent only to the wrapper are forwarded to its owned session. Shared Nix daemon processes and children that deliberately detach into another session or process group are outside this ownership boundary. The `upkg` Nix bridge consumes the stable internal `current`, `changed`, or `partial` state rather than matching display text.
 
@@ -923,7 +926,7 @@ These are the cross-cutting rules most likely to surprise a new user:
 18. **Inventories have limits.** APT and Paru repository queries use cached metadata; Pacman refreshes a separate database when `checkupdates` is available, and DNF may refresh expired metadata. Native upgrades resolve transactions. `npkg` reports output identity rather than version ordering.
 19. **Partial package results fail.** `upkg` continues other managers but returns nonzero for partial, failed, or blocked selected backends. `npkg` returns nonzero when any row is unknown.
 20. **Rich output is presentation.** Use a pipe, redirect, `NO_COLOR`, or an explicit plain option for stable machine-readable text.
-21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows are Linux-oriented.
+21. **The target platform is GNU/Linux.** `ss`, GNU flags, sysfs profile paths, and several `find`/`du` flows require it. macOS and BSD are not supported.
 22. **Network helpers contact external services.** `weather` requests `wttr.in`, `myip` requests `ifconfig.me`, and `headers` contacts the URL supplied by the user.
 23. **Automation must load the layer explicitly.** Aliases and functions are interactive shell features; scripts should call real binaries or source `init.zsh` inside Zsh.
 24. **Helper failures stay on stderr.** Successful data remains pipeable on stdout; usage errors, missing dependencies, and invalid paths do not contaminate command substitutions.
@@ -965,7 +968,7 @@ Run the repository-owned ordered sequence:
 zsh scripts/run-tests.zsh
 ```
 
-The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. Maintainers can regenerate width intervals with `python3 scripts/generate-width-data.py`; review the recorded Unicode version when doing so. A separate CI job runs `python3 scripts/test-fzf-pty.py` against real fzf 0.68.0 and 0.74.3. It covers shared picker arguments and actual `fbr` with one/two branches across all three layouts at 50/80/99/100/101/110/120 columns, including initial row visibility, filtering, preview toggles, and live resizing. Normal selection changes detached HEAD to the chosen branch; worktree selection changes directory; cancellation preserves the starting state. Unicode/ASCII, `NO_COLOR`, multi-selection, and measured frame sizing at 12/16/24 terminal rows are also checked. Preview-free widget/completion frame sizing is exercised through exported defaults; host keybinding and completion wiring remains part of manual QA. `run-tests.zsh` also runs it whenever `python3` and `fzf` are installed and prints a skip line otherwise; set `FZF_BIN` when running the script directly to test another binary. Each PTY case isolates HOME, cache storage, and host finder options, including `FZF_DEFAULT_OPTS_FILE`; a hostile-options self-check covers both harnesses. These checks use fixture rows and perform no package mutations. `run-tests.zsh` also runs `python3 scripts/test-upkg-pty.py` whenever `python3` is installed; it uses stubbed managers in a real PTY to check that `upkg` elapsed time includes a delayed answer to a native prompt and survives terminal Ctrl-C. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
+The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. Maintainers can regenerate width intervals with `python3 scripts/generate-width-data.py`; review the recorded Unicode version when doing so. A separate CI job runs `python3 scripts/test-fzf-pty.py`, `scripts/test-ui-pty.py`, and `scripts/test-preview.py` against real fzf 0.68.0 and 0.74.3, because the main job has no fzf and skips them. The fzf suite covers shared picker arguments and actual `fbr` with one/two branches across all three layouts at 50/80/99/100/101/110/120 columns, including initial row visibility, filtering, preview toggles, and live resizing. Normal selection changes detached HEAD to the chosen branch; worktree selection changes directory; cancellation preserves the starting state. Unicode/ASCII, `NO_COLOR`, multi-selection, and measured frame sizing at 12/16/24 terminal rows are also checked. Preview-free widget/completion frame sizing is exercised through exported defaults; host keybinding and completion wiring remains part of manual QA. `run-tests.zsh` also runs it whenever `python3` and `fzf` are installed and prints a skip line otherwise; set `FZF_BIN` when running the script directly to test another binary. Each PTY case isolates HOME, cache storage, and host finder options, including `FZF_DEFAULT_OPTS_FILE`; a hostile-options self-check covers both harnesses. These checks use fixture rows and perform no package mutations. `run-tests.zsh` also runs `python3 scripts/test-upkg-pty.py` whenever `python3` is installed; it uses stubbed managers in a real PTY to check that `upkg` elapsed time includes a delayed answer to a native prompt and survives terminal Ctrl-C. It also runs `python3 scripts/test-upkg-parallel.py`, which checks `--parallel` ordering, overlap, search, and Ctrl-C with stubbed managers, and `python3 scripts/test-cgm-pty.py`, which presses Ctrl-C at a stubbed `cgm set` prompt in a real interactive shell and checks that no name is recorded. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
 
 The environment check is optional because it reflects the current machine rather than repository correctness:
 
@@ -973,7 +976,7 @@ The environment check is optional because it reflects the current machine rather
 $HOME/.config/zsh/scripts/check-deps.sh
 ```
 
-Performance measurement is also optional and never a pass/fail gate. `zsh scripts/benchmark-startup.zsh [iterations]` measures warm command and interactive startup and requires the checkout at `$HOME/.config/zsh`. `python3 scripts/benchmark-workloads.py` times synthetic helper workloads: package parsing and search tables (plain, forced-rich, and real PTY), text width/truncation/padding, scan-record collection, Nix completion preparation, and fresh-shell startup from a private install copy. Each sample runs a fresh child with an allowlisted environment and private HOME/XDG directories; it uses no package manager, network, or Secret Service, and validates helper output before accepting timings: exact expected text for parser and width/truncation/padding workloads, and row, record, or candidate checks for the others. Use `--baseline-ref REF` to alternate an archived revision with the working tree on the same host and require identical helper output hashes (startup groups check only the exit status), `--output FILE` to keep raw JSON samples, and `--self-test` to check cleanup after failure, timeout, and interrupt. Compare only paired same-host runs:
+Performance measurement is also optional and never a pass/fail gate. `zsh scripts/benchmark-startup.zsh [iterations]` measures warm command and interactive startup and requires the checkout at `$HOME/.config/zsh`. Its interactive samples use a temporary history file, so they don't touch your real history. `python3 scripts/benchmark-workloads.py` times synthetic helper workloads: package parsing and search tables (plain, forced-rich, and real PTY), text width/truncation/padding, scan-record collection, Nix completion preparation, and fresh-shell startup from a private install copy. Each sample runs a fresh child with an allowlisted environment and private HOME/XDG directories; it uses no package manager, network, or Secret Service, and validates helper output before accepting timings: exact expected text for parser and width/truncation/padding workloads, and row, record, or candidate checks for the others. Use `--baseline-ref REF` to alternate an archived revision with the working tree on the same host and require identical helper output hashes (startup groups check only the exit status), `--output FILE` to keep raw JSON samples, and `--self-test` to check cleanup after failure, timeout, and interrupt. Compare only paired same-host runs:
 
 ```sh
 python3 scripts/benchmark-workloads.py --workload parser --size 1000 --baseline-ref HEAD

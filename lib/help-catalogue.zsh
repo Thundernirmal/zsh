@@ -45,7 +45,7 @@ _zsh_help_is_available() {
       command -v zoxide >/dev/null 2>&1 && _zsh_help_fzf_is_ready_cached
       ;;
     peek)
-      command -v bat >/dev/null 2>&1 || command -v cat >/dev/null 2>&1
+      command -v bat >/dev/null 2>&1 || command -v batcat >/dev/null 2>&1 || command -v sed >/dev/null 2>&1
       ;;
     disk)
       command -v find >/dev/null 2>&1 && command -v du >/dev/null 2>&1
@@ -281,6 +281,10 @@ zhelp() {
         shift
         query_parts+=("$@")
         break
+        ;;
+      -)
+        # The alias for cd -, which completion offers as a command name.
+        query_parts+=("$1")
         ;;
       -*)
         print -u2 -- "Unknown zhelp option: $1"

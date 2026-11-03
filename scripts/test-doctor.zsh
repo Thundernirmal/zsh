@@ -113,7 +113,9 @@ test_healthy_fixture() {
   assert_contains "$output" 'compinit has not run' 'zdoctor explains silent completion loss' || return 1
   assert_contains "$output" 'ok: required tool: fzf 0.74.0 (minimum 0.68.0)' 'zdoctor gates the fzf minimum version' || return 1
   assert_contains "$output" 'ok: optional tool: nix' 'zdoctor separates optional tools from required ones' || return 1
-  assert_contains "$output" 'global aliases are disabled' 'zdoctor reports the global-alias state' || return 1
+  assert_contains "$output" 'note: global aliases are disabled' 'zdoctor reports default-off global aliases as a note' || return 1
+  assert_not_contains "$output" 'warning: global aliases' 'zdoctor does not warn about a default setting' || return 1
+  assert_contains "$output" 'note: output mode: plain (stdout is not a terminal)' 'zdoctor explains plain output' || return 1
   assert_contains "$output" 'network endpoints not probed' 'zdoctor skips network probes by default' || return 1
   assert_contains "$output" 'Secret Service not contacted' 'zdoctor skips secret probes by default' || return 1
   assert_contains "$output" 'zdoctor: healthy' 'zdoctor summarizes a healthy setup' || return 1

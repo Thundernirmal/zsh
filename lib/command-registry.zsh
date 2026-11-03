@@ -68,9 +68,9 @@ _zsh_help_register ls Files 'List directory contents' 'ls [path]' 'ls' 'lsd or G
 _zsh_help_register ll Files 'List all entries with details' 'll [path]' 'll' 'lsd or GNU ls' alias none
 _zsh_help_register la Files 'List entries including hidden files' 'la [path]' 'la' 'lsd or GNU ls' alias none
 _zsh_help_register lt Files 'Show a three-level directory tree' 'lt [path]' 'lt' 'lsd or tree' alias none
-_zsh_help_register cat Files 'Print files with bat highlighting' 'cat <file>' 'cat README.md' bat alias none
+_zsh_help_register cat Files 'Print files with bat highlighting' 'cat <file>' 'cat README.md' 'bat or batcat' alias none
 _zsh_help_register extract Files 'Unpack a supported archive' 'extract [--keep] [--destination <dir>] <archive>' 'extract archive.tar.gz' 'tar; format-specific unpackers when needed' function none
-_zsh_help_register peek Files 'Preview a file with bat or cat' 'peek <file>' 'peek README.md' 'bat or cat' function peek
+_zsh_help_register peek Files 'Preview the first 200 lines of a file' 'peek <file>' 'peek README.md' 'bat, batcat, or sed' function peek
 _zsh_help_register dusage Files 'Rank immediate entries by disk usage' 'dusage [path] [count]' 'dusage . 10' 'GNU du and find' function disk
 _zsh_help_register bigfiles Files 'Rank files recursively by size' 'bigfiles [path] [count]' 'bigfiles . 10' 'GNU find and du' function disk
 _zsh_help_register grep Search 'Search text with automatic colour' 'grep <pattern> [file ...]' 'grep TODO README.md' 'grep with --color=auto support' alias none
@@ -91,7 +91,7 @@ _zsh_help_register weather System 'Show the default HTTPS forecast' 'weather' 'w
 _zsh_help_register fkill System 'Pick processes and send a signal' 'fkill [--all] [signal]' 'fkill 15' 'ps and fzf 0.68.0+' function process-fzf
 _zsh_help_register headers System 'Print response headers after redirects' 'headers <url>' 'headers https://example.com' curl function curl
 _zsh_help_register fanprofile System 'Show the laptop performance profile' 'fanprofile' 'fanprofile' 'Linux ACPI or ASUS WMI profile interface' function fan-profile
-_zsh_help_register ports System 'Show listening sockets and processes' 'ports' 'ports' ss function ss
+_zsh_help_register ports System 'Show listening sockets and processes' 'ports [port|process]' 'ports 8080' ss function ss
 _zsh_help_register myip System 'Show the public IP address' 'myip' 'myip' curl function curl
 _zsh_help_register path System 'List PATH entries' 'path' 'path' none function none
 

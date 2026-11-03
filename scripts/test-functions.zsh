@@ -105,7 +105,7 @@ test_missing_arguments() {
   assert_missing_arg_usage extract 'Usage: extract [--keep] [--destination <dir>] <file>' || return 1
   assert_missing_arg_usage mkcd 'Usage: mkcd <directory>' || return 1
   assert_missing_arg_usage ff 'Usage: ff [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]' || return 1
-  assert_missing_arg_usage ft 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] <pattern> [path]' || return 1
+  assert_missing_arg_usage ft 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]' || return 1
   assert_missing_arg_usage headers 'Usage: headers <url>' || return 1
   assert_missing_arg_usage peek 'Usage: peek <file>' || return 1
 }
@@ -135,6 +135,23 @@ test_local_emulation_and_leading_dash_operands() {
     return 1
   }
   assert_equals "$PWD" "$fixture_dir/-created" 'mkcd accepts a leading-dash directory name' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+
+  builtin cd -- "$fixture_dir" || return 1
+  mkcd - && assert_equals "$PWD" "$fixture_dir/-" 'mkcd enters a directory named - rather than the previous directory' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  builtin cd -- "$fixture_dir" || return 1
+  mkcd +1 && assert_equals "$PWD" "$fixture_dir/+1" 'mkcd enters a directory named +1 rather than a directory stack entry' || {
+    builtin cd -- "$original_dir"
+    return 1
+  }
+  builtin cd -- "$fixture_dir" || return 1
+  command mkdir -p -- "$fixture_dir/elsewhere/sibling"
+  CDPATH="$fixture_dir/elsewhere" mkcd sibling && assert_equals "$PWD" "$fixture_dir/sibling" 'mkcd enters the directory it created even when CDPATH has the same name' || {
     builtin cd -- "$original_dir"
     return 1
   }
@@ -715,6 +732,27 @@ test_small_helper_success_paths() {
   output=$(peek "$fixture_dir/preview.txt") || return 1
   assert_equals "$output" 'needle' 'peek prints a readable file through its fallback' || return 1
 
+  # peek stops at line 200 on both backends and says so only when lines remain.
+  local sed_only="$tmp_dir/peek-sed-only" bat_stub="$tmp_dir/peek-bat-stub"
+  command mkdir -p -- "$sed_only" "$bat_stub"
+  command ln -sf -- "${commands[sed]}" "$sed_only/sed"
+  print -r -- '#!/bin/sh
+printf "%s\n" "$@"' >"$bat_stub/bat"
+  command chmod +x -- "$bat_stub/bat"
+  print -rl -- {1..250} >"$fixture_dir/long.txt"
+  print -rl -- {1..200} >"$fixture_dir/exact.txt"
+  output=$(PATH=$sed_only peek "$fixture_dir/long.txt" 2>"$fixture_dir/peek.err") || return 1
+  assert_equals "${#${(f)output}}" 200 'peek fallback stops at line 200' || return 1
+  assert_contains "$(<"$fixture_dir/peek.err")" 'first 200 lines' 'peek says when a file is longer than the preview' || return 1
+  output=$(PATH=$sed_only peek "$fixture_dir/exact.txt" 2>"$fixture_dir/peek.err") || return 1
+  assert_equals "${#${(f)output}}" 200 'peek fallback shows a file of exactly 200 lines' || return 1
+  assert_equals "$(<"$fixture_dir/peek.err")" '' 'peek stays quiet when nothing was cut' || return 1
+  output=$(PATH="$bat_stub:$sed_only" peek "$fixture_dir/exact.txt" 2>/dev/null) || return 1
+  assert_contains "$output" '--line-range=:200' 'peek limits bat to the same 200 lines' || return 1
+  command mv -- "$bat_stub/bat" "$bat_stub/batcat"
+  output=$(PATH="$bat_stub:$sed_only" peek "$fixture_dir/exact.txt" 2>/dev/null) || return 1
+  assert_contains "$output" '--line-range=:200' 'peek uses batcat when only that name exists' || return 1
+
   print -r -- '#!/bin/sh
 printf "%s\n" "HTTP/1.1 204 No Content"' >"$fakebin/curl"
   command chmod +x -- "$fakebin/curl"
@@ -995,7 +1033,11 @@ test_fbr_remote_collision() {
   assert_equals "$after_ref" "$before_ref" 'fbr keeps the current checkout after refusing a collision' || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" 'does not track local' 'fbr explains the upstream mismatch' || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" "git switch -- topic" 'fbr offers entering the local branch' || { builtin cd -- "$original_dir"; return 1; }
-  assert_contains "$output" "git switch --track -b NEW_BRANCH -- refs/remotes/origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  assert_contains "$output" "git switch --track -c NEW_BRANCH -- refs/remotes/origin/topic" 'fbr offers a differently named tracking branch' || { builtin cd -- "$original_dir"; return 1; }
+  # Run the suggested command for real: git rejected the -b spelling this hint used to print.
+  command git switch -q --track -c hint-check -- refs/remotes/origin/topic; rc=$?
+  assert_status "$rc" 0 'the suggested tracking command works in real git' || { builtin cd -- "$original_dir"; return 1; }
+  command git switch -q - && command git branch -q -D hint-check || { builtin cd -- "$original_dir"; return 1; }
   assert_contains "$output" "git switch --detach -- refs/remotes/origin/topic" 'fbr offers detached inspection' || { builtin cd -- "$original_dir"; return 1; }
 
   upstream=$(command git for-each-ref --format='%(upstream:short)' 'refs/heads/topic' 2>/dev/null) || upstream=''
@@ -1825,6 +1867,219 @@ print -r -- "missed $pos ${size[1]}" >| "$marker"' >| "$watcher"
   done
 }
 
+test_scan_count_is_honored() (
+  local fixture="$tmp_dir/count-fixture" output
+  integer index
+
+  command mkdir -p -- "$fixture" || return 1
+  for (( index = 1; index <= 30; index++ )); do
+    print -r -- data > "$fixture/file$index"
+  done
+
+  # A 12-row terminal must not cut an explicit count of 25.
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  functions[_ui_term_height]='print -r -- 12'
+  output=$(bigfiles "$fixture" 25 2>&1)
+  assert_contains "$output" 'showing 25/30 files' 'bigfiles honors an explicit count on a short terminal' || return 1
+  assert_contains "$output" '+5 not shown' 'bigfiles counts rows beyond the requested count' || return 1
+  output=$(dusage "$fixture" 25 2>&1)
+  assert_contains "$output" 'showing 25/30 entries' 'dusage honors an explicit count on a short terminal' || return 1
+)
+
+test_ports_order_and_filter() (
+  local fakebin="$tmp_dir/ports-bin" output
+
+  command mkdir -p -- "$fakebin" || return 1
+  print -r -- '#!/bin/sh
+cat <<"FIXTURE"
+Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+udp   UNCONN 0      0      127.0.0.1:53       0.0.0.0:*
+udp   UNCONN 0      0      0.0.0.0:5353       0.0.0.0:*         users:(("avahi",pid=11,fd=3))
+tcp   LISTEN 0      128    0.0.0.0:22         0.0.0.0:*
+tcp   LISTEN 0      128    127.0.0.1:8080     0.0.0.0:*         users:(("nginx",pid=22,fd=6))
+tcp   LISTEN 0      128    [::]:443           [::]:*            users:(("Caddy",pid=33,fd=7))
+FIXTURE' > "$fakebin/ss"
+  command chmod +x -- "$fakebin/ss"
+  PATH="$fakebin:$PATH"
+  rehash
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  functions[_ui_term_height]='print -r -- 5'
+  output=$(ports)
+  assert_status "$?" 0 'ports succeeds on a short terminal' || return 1
+  [[ $output == *'] 0.0.0.0'*':   22'*':  443'*': 8080'*'[udp]'*':   53'*': 5353'* ]] || {
+    print -u2 -- 'not ok: ports lists every socket, TCP before UDP, by port'
+    print -u2 -- "output: $output"
+    return 1
+  }
+  print -- 'ok: ports lists every socket, TCP before UDP, by port'
+  assert_contains "$output" 'sudo ss -tulnp' 'ports explains hidden owners' || return 1
+
+  output=$(ports 8080)
+  assert_contains "$output" 'nginx' 'ports filters by exact port' || return 1
+  assert_not_contains "$output" 'Caddy' 'a port filter excludes other sockets' || return 1
+  assert_not_contains "$output" 'sudo ss' 'ports skips the owner hint when every owner is known' || return 1
+  output=$(ports caddy)
+  assert_contains "$output" 'Caddy' 'ports filters by process name, ignoring case' || return 1
+  assert_not_contains "$output" 'nginx' 'a process filter excludes other sockets' || return 1
+  output=$(ports 80 2>&1)
+  assert_status "$?" 1 'ports matches a port exactly and fails when nothing matches' || return 1
+  assert_contains "$output" "no listening sockets match '80'" 'ports names a filter with no match' || return 1
+
+  functions[_ui_plain_mode]='return 0'
+  output=$(ports)
+  assert_contains "$output" 'udp   UNCONN' 'plain ports keeps native output' || return 1
+  output=$(ports nginx)
+  assert_contains "$output" 'Netid State' 'plain filtered ports keeps the header' || return 1
+  assert_contains "$output" 'pid=22' 'plain filtered ports keeps the match' || return 1
+  assert_not_contains "$output" 'Caddy' 'plain filtered ports drops other sockets' || return 1
+  output=$(ports a b 2>&1)
+  assert_status "$?" 1 'ports rejects extra arguments' || return 1
+)
+
+test_ff_keeps_paths_as_typed() (
+  local fixture="$tmp_dir/ff-fixture" find_only="$tmp_dir/ff-find-only" output
+
+  command mkdir -p -- "$fixture/sub" "$fixture/-dash" "$find_only" || return 1
+  : > "$fixture/sub/match.txt"
+  : > "$fixture/-dash/other-match.txt"
+  command ln -sf -- "${commands[find]}" "$find_only/find"
+  builtin cd -- "$fixture" || return 1
+
+  output=$(PATH=$find_only ff match) || return 1
+  assert_contains "$output" './sub/match.txt' 'ff fallback prints relative results from the current directory' || return 1
+  assert_not_contains "$output" "$fixture" 'ff fallback omits the absolute prefix for a relative search' || return 1
+  output=$(PATH=$find_only ff match sub) || return 1
+  assert_equals "$output" 'sub/match.txt' 'ff fallback keeps a relative path as typed' || return 1
+  output=$(PATH=$find_only ff match "$fixture/sub") || return 1
+  assert_equals "$output" "$fixture/sub/match.txt" 'ff fallback keeps an absolute path as typed' || return 1
+  output=$(PATH=$find_only ff -- other -dash) || return 1
+  assert_equals "$output" './-dash/other-match.txt' 'ff fallback protects a leading-dash search path' || return 1
+
+  if command -v fd >/dev/null 2>&1 || command -v fdfind >/dev/null 2>&1; then
+    output=$(ff match) || return 1
+    assert_contains "$output" 'sub/match.txt' 'ff finds matches with fd' || return 1
+    assert_not_contains "$output" "$fixture" 'ff omits the absolute prefix with fd' || return 1
+    output=$(ff -- other -dash) || return 1
+    assert_contains "$output" 'other-match.txt' 'ff protects a leading-dash search path with fd' || return 1
+  fi
+)
+
+test_bigfiles_ranks_outside_the_shell() (
+  local fakebin="$tmp_dir/rank-bin" fixture="$tmp_dir/rank-fixture" raw="$tmp_dir/rank-raw" output
+  local -a records
+  local -A scan_result
+  integer signal_status=0 index total=0
+  local content=''
+
+  command mkdir -p -- "$fakebin" "$fixture" || return 1
+  : > "$fixture/file"
+  for (( index = 1; index <= 40000; index++ )); do
+    content+="$index"$'\t'"/tree/dir/file-$index"$'\0'
+    (( total += index ))
+  done
+  print -rn -- "$content" > "$raw"
+  print -r -- '#!/bin/sh
+cat -- "$RANK_RAW"' > "$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  PATH="$fakebin:$PATH"
+  export RANK_RAW=$raw
+  rehash
+
+  local scan_limit=3
+  _zsh_scan_collect bigfiles "$fixture"
+  assert_equals "${scan_result[count]}" 40000 'ranked scan counts every record' || return 1
+  assert_equals "${scan_result[total_kib]}" "$total" 'ranked scan totals every record' || return 1
+  (( ${#records} < 40000 )) || {
+    print -u2 -- 'not ok: ranked scan loads only part of a large record set'
+    return 1
+  }
+  print -- 'ok: ranked scan loads only part of a large record set'
+  assert_equals "${records[1]%%$'\t'*}" 40000 'ranked scan starts at the largest record' || return 1
+  unset scan_limit
+
+  functions[_ui_plain_mode]='return 0'
+  output=$(bigfiles "$fixture" 2) || return 1
+  assert_equals "$output" $'39MiB    /tree/dir/file-40000\n39MiB    /tree/dir/file-39999' 'bigfiles prints the top rows of a ranked scan' || return 1
+  output=$(bigfiles "$fixture" 0) || return 1
+  assert_equals "$output" '' 'bigfiles with a count of 0 prints no rows' || return 1
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  output=$(bigfiles "$fixture" 2 2>&1)
+  assert_contains "$output" 'showing 2/40000 files' 'rich bigfiles reports the full count from a ranked scan' || return 1
+  assert_contains "$output" 'Total: 763GiB' 'rich bigfiles reports the full total from a ranked scan' || return 1
+)
+
+test_dusage_ignores_a_global_scan_limit() (
+  local fixture="$tmp_dir/scan-limit-fixture"
+  local -a records
+  local -A scan_result
+  integer signal_status=0
+
+  command mkdir -p -- "$fixture" || return 1
+  print -r -- one > "$fixture/a"
+  print -r -- two > "$fixture/b"
+
+  # bigfiles sets its own local limit; only a stray global reaches dusage.
+  typeset -g scan_limit=1
+  _zsh_scan_collect dusage "$fixture" "$fixture/a" "$fixture/b"
+  assert_equals "${+scan_result[count]}" 0 'dusage stays out of ranking with a stray global scan_limit' || return 1
+  assert_equals "${#records}" 2 'dusage keeps every record with a stray global scan_limit' || return 1
+)
+
+test_scan_names_its_errors() (
+  local fakebin="$tmp_dir/scan-errors-bin" fixture="$tmp_dir/scan-errors-fixture" scratch="$tmp_dir/scan-errors-tmp"
+  local output stderr_part expected
+  local -a leftovers
+  integer rc
+
+  command mkdir -p -- "$fakebin" "$fixture" "$scratch" || return 1
+  : > "$fixture/entry"
+  print -r -- '#!/bin/sh
+printf "4\t%s/entry\0" "$SCAN_ERRORS_FIXTURE"
+printf "du: cannot read directory locked\033[2J: Permission denied\n" >&2
+printf "du: cannot read directory other: Permission denied\n" >&2
+exit 1' > "$fakebin/du"
+  command chmod +x -- "$fakebin/du"
+  PATH="$fakebin:$PATH"
+  export SCAN_ERRORS_FIXTURE=$fixture TMPDIR=$scratch
+  rehash
+  expected='2 error(s); first: du: cannot read directory locked\e[2J: Permission denied'
+
+  functions[_ui_plain_mode]='return 0'
+  output=$(dusage "$fixture" 5 2>"$scratch/stderr"); rc=$?
+  stderr_part=$(<"$scratch/stderr")
+  command rm -f -- "$scratch/stderr"
+  assert_status "$rc" 1 'plain dusage still fails on a partial scan' || return 1
+  assert_contains "$stderr_part" "Scan errors: $expected" 'plain dusage names the first scan error on stderr' || return 1
+  assert_not_contains "$output" 'Scan errors' 'plain dusage keeps scan errors off stdout' || return 1
+  [[ $stderr_part != *$'\e'* ]] || {
+    print -u2 -- 'not ok: scan errors never carry raw control bytes'
+    return 1
+  }
+  print -- 'ok: scan errors never carry raw control bytes'
+
+  functions[_ui_plain_mode]='return 1'
+  functions[_ui_term_width_reply]='REPLY=120'
+  output=$(dusage "$fixture" 5 2>/dev/null); rc=$?
+  assert_status "$rc" 1 'rich dusage still fails on a partial scan' || return 1
+  assert_contains "$output" "Scan errors: $expected" 'rich dusage names the first scan error' || return 1
+
+  output=$(bigfiles "$fixture" 5 2>/dev/null); rc=$?
+  assert_status "$rc" 1 'rich bigfiles still fails on a partial scan' || return 1
+  assert_contains "$output" "Scan errors: $expected" 'rich bigfiles names the first scan error' || return 1
+
+  functions[_ui_term_width_reply]='REPLY=60'
+  output=$(dusage "$fixture" 5 2>/dev/null)
+  assert_contains "$output" "Scan errors: $expected" 'a narrow dashboard keeps the whole scan error' || return 1
+
+  leftovers=( "$scratch"/(dusage|bigfiles).*(N) )
+  assert_equals "${#leftovers[@]}" 0 'scan error capture leaves no temporary files' || return 1
+)
+
 main() {
   source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/60-functions.zsh"
@@ -1837,6 +2092,12 @@ main() {
   test_usage_temp_cleanup || return 1
   test_usage_partial_scan || return 1
   test_usage_signal_cleanup || return 1
+  test_scan_count_is_honored || return 1
+  test_ports_order_and_filter || return 1
+  test_ff_keeps_paths_as_typed || return 1
+  test_bigfiles_ranks_outside_the_shell || return 1
+  test_dusage_ignores_a_global_scan_limit || return 1
+  test_scan_names_its_errors || return 1
   test_scan_record_oracle || return 1
   test_scan_ingestion_signal || return 1
   test_dusage_oversized_operand_set || return 1

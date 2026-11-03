@@ -58,6 +58,7 @@ printf "grep %s\n" "$*" >> "$COMMAND_UX_LOG"
 exit 0' >"$fakebin/grep"
   print -r -- '#!/bin/sh
 printf "curl %s\n" "$*" >> "$COMMAND_UX_LOG"
+case "$*" in *ifconfig.me*) printf "%s\n" "203.0.113.42"; exit 0 ;; esac
 printf "%s\n" "fixture-response"
 exit 0' >"$fakebin/curl"
   command chmod +x -- "$fakebin"/*
@@ -98,6 +99,9 @@ test_search_options() {
   ft --hidden --no-ignore --follow --fixed-strings 'a.b' "$tmp_dir" >/dev/null; rc=$?
   assert_status "$rc" 0 'ft accepts explicit rg search controls' || return 1
   assert_file_contains "$log_file" 'rg --hidden --no-ignore --follow --fixed-strings' 'ft passes all controls to rg' || return 1
+  ft -i 'a.b' "$tmp_dir" >/dev/null; rc=$?
+  assert_status "$rc" 0 'ft accepts -i with rg' || return 1
+  assert_file_contains "$log_file" 'rg --ignore-case --color=auto' 'ft passes -i to rg' || return 1
 
   command rm -f -- "$fakebin/rg"
   PATH=$fakebin
@@ -107,6 +111,9 @@ test_search_options() {
   assert_contains "$output" 'grep fallback includes hidden files' 'ft explains hidden fallback behavior' || return 1
   assert_contains "$output" 'grep fallback has no ignore-file filtering' 'ft explains ignore fallback behavior' || return 1
   assert_file_contains "$log_file" 'grep -RnI -F' 'ft maps follow and fixed-string controls to grep' || return 1
+  ft --ignore-case 'a.b' "$tmp_dir" >/dev/null 2>&1; rc=$?
+  assert_status "$rc" 0 'ft accepts --ignore-case with grep' || return 1
+  assert_file_contains "$log_file" 'grep -rnI -E -i --color=auto' 'ft maps --ignore-case to grep -i' || return 1
 
   PATH=$old_path
   unset COMMAND_UX_LOG

@@ -58,9 +58,16 @@ jobs:
             | tar -xz -C "$RUNNER_TEMP/fzf-bin"
           chmod +x "$RUNNER_TEMP/fzf-bin/fzf"
           "$RUNNER_TEMP/fzf-bin/fzf" --version
+          echo "$RUNNER_TEMP/fzf-bin" >> "$GITHUB_PATH"
 
       - name: Run real fzf PTY checks
         env:
           FZF_BIN: ${{ runner.temp }}/fzf-bin/fzf
           FZF_EXPECTED_VERSION: ${{ matrix.fzf-version }}
         run: python3 scripts/test-fzf-pty.py
+
+      # The verify job has no fzf, so run-tests.zsh skips these two suites there.
+      - name: Run rendering and preview checks
+        run: |
+          python3 scripts/test-ui-pty.py
+          python3 scripts/test-preview.py

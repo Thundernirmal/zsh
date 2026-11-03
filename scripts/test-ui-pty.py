@@ -57,10 +57,11 @@ def run(script, tty=True):
 REFERENCE = r'''
 _ui_is_rich_terminal() {
   emulate -L zsh
-  local width
+  local width REPLY
   [[ -t 1 && -n ${TERM:-} && $TERM != dumb && -z ${NO_COLOR:-} ]] || return 1
   _ui_locale_is_utf8 || return 1
-  width=$(_ui_term_width)
+  _ui_term_width_reply
+  width=$REPLY
   (( width >= 60 ))
 }
 '''
@@ -106,7 +107,48 @@ done
 TRUNCATION_SHA256 = "3cc3bf37f8418e5bf14dc14126a1cefbaeebf538e879435db86df5fbdb39a85a"
 
 
+OUTPUT_MODES = r'''
+source "$1/lib/functions-common.zsh"
+source "$1/lib/functions-system.zsh"
+show() { _zdoctor_output_mode; print -r -- "$REPLY"; }
+COLUMNS=120
+show
+NO_COLOR=1 show
+TERM=dumb show
+LC_ALL=C show
+COLUMNS=40
+show
+'''
+
+
+SCAN_ICONS = r'''
+source "$1/lib/functions-common.zsh"
+source "$1/lib/functions-files.zsh"
+COLUMNS=100
+_ZSH_UI_GLYPH_TIER=nerd
+mkdir -p "$HOME/tree/dir"
+print -r -- data > "$HOME/tree/file"
+print -r -- dusage-start
+dusage "$HOME/tree" 5
+print -r -- bigfiles-start
+bigfiles "$HOME/tree" 5
+'''
+
+
 def main():
+    # A captured icon sees a pipe and falls back to ASCII, so check a real terminal.
+    icons = run(SCAN_ICONS).decode()
+    usage, _, big = icons.partition("bigfiles-start")
+    assert "\U000f024b " in usage and "\U000f0214 " in usage, usage
+    assert "\U000f0214 " in big, big
+    assert run(OUTPUT_MODES).decode().split() == " ".join([
+        "rich",
+        "plain (NO_COLOR is set)",
+        "plain (TERM is unset or dumb)",
+        "plain (the locale is not UTF-8)",
+        "plain (the terminal is narrower than 60 columns)",
+    ]).split()
+    assert b"plain (stdout is not a terminal)" in run(OUTPUT_MODES, False)
     for tty in (True, False):
         assert run(MATRIX, tty) == run(REFERENCE + MATRIX, tty)
     run(r'''
@@ -136,7 +178,7 @@ mkdir "$HOME/bin"
 print -r -- '#!/bin/sh' 'exit 1' > "$HOME/bin/tput"
 chmod +x "$HOME/bin/tput"
 path=("$HOME/bin")
-[[ $(_ui_term_width) == 80 ]] || exit 18
+_ui_term_width_reply; [[ $REPLY == 80 ]] || exit 18
 _ui_is_rich_terminal || exit 19
 ''')
     output = run(TRUNCATION)

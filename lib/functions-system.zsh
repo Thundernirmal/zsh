@@ -336,23 +336,24 @@ ports() {
 
   case ${1:-} in
     -h|--help)
-      print 'Usage: ports'
-      print 'Show listening TCP and UDP sockets with owning processes when permitted.'
+      print 'Usage: ports [port|process]'
+      print 'Show listening sockets, TCP first, with owning processes when permitted.'
+      print 'A number matches one port exactly; other text matches process names.'
       return 0
       ;;
   esac
-  if (( $# > 0 )); then
-    print -u2 -r -- 'Usage: ports'
+  if (( $# > 1 )); then
+    print -u2 -r -- 'Usage: ports [port|process]'
     return 1
   fi
 
-  local output header parsed line netid state state_role port address process pid shown more pid_text
+  local filter=${1:-} output header parsed line netid state state_role port address process pid pid_text
   local -a lines rows
   local row_delim=$'\t'
-  integer width addr_width proc_width
+  integer width addr_width proc_width missing_owner=0
   local REPLY
 
-  if _ui_plain_mode; then
+  if [[ -z $filter ]] && _ui_plain_mode; then
     command ss -tulnp
     return $?
   fi
@@ -361,6 +362,32 @@ ports() {
     command ss -tulnp
     return $?
   }
+
+  if [[ -n $filter ]]; then
+    # ENVIRON keeps awk from interpreting escapes in user text.
+    output=$(print -r -- "$output" | PORTS_FILTER=$filter command awk '
+      NR == 1 { print; next }
+      {
+        needle = ENVIRON["PORTS_FILTER"]
+        if (needle ~ /^[0-9]+$/) {
+          port = $5
+          sub(/^.*:/, "", port)
+          if (port == needle) print
+        } else if (match($0, /users:\(\(.*\)\)/)) {
+          if (index(tolower(substr($0, RSTART, RLENGTH)), tolower(needle))) print
+        }
+      }
+    ')
+    if [[ $output != *$'\n'* ]]; then
+      _ui_safe_text_reply "$filter"
+      print -u2 -r -- "ports: no listening sockets match '$REPLY'"
+      return 1
+    fi
+    if _ui_plain_mode; then
+      print -r -- "$output"
+      return 0
+    fi
+  fi
 
   lines=( ${(f)output} )
   for line in "${lines[@]}"; do
@@ -417,7 +444,7 @@ ports() {
 
       print netid "\t" state "\t" address "\t" port "\t" proc "\t" pid
     }
-  ')
+  ' | LC_ALL=C command sort -s -t "$row_delim" -k1,1 -k4,4n)
 
   rows=( ${(f)parsed} )
   (( ${#rows[@]} > 0 )) || {
@@ -425,8 +452,6 @@ ports() {
     return 0
   }
 
-  shown=$(_ui_visible_count 999 "${#rows[@]}" 8)
-  more=$(( ${#rows[@]} - shown ))
   _ui_term_width_reply
   width=$REPLY
 
@@ -437,10 +462,14 @@ ports() {
 
   _ui_title_line 'Listening Ports' 'ss -tulnp' accent '󰒋' '*'
   _ui_panel_kv 'Sockets' "${#rows[@]}" muted text
+  if [[ -n $filter ]]; then
+    _ui_safe_text_reply "$filter"
+    _ui_panel_kv 'Filter' "$REPLY" muted text
+  fi
   _ui_section_break
 
   integer idx
-  for (( idx = 1; idx <= shown; idx++ )); do
+  for (( idx = 1; idx <= ${#rows[@]}; idx++ )); do
     line=${rows[$idx]}
     netid=${line%%${row_delim}*}
     line=${line#*${row_delim}}
@@ -452,6 +481,9 @@ ports() {
     line=${line#*${row_delim}}
     process=${line%%${row_delim}*}
     pid=${line#*${row_delim}}
+    [[ $process == - ]] && missing_owner=1
+    _ui_safe_text_reply "$process"
+    process=$REPLY
     case $state in
       LISTEN|UNCONN) state_role=success ;;
       *) state_role=warning ;;
@@ -481,15 +513,14 @@ ports() {
     print ''
   done
 
-  if (( more > 0 )); then
-    _ui_panel_kv 'More' "+${more} not shown" muted muted
+  if (( missing_owner )); then
+    _ui_section_break
+    print -nr -- '  '
+    _ui_color muted
+    print -r -- 'An owner shown as - needs root to read: sudo ss -tulnp'
+    _ui_reset
   fi
-
-  _ui_section_break
-  print -nr -- '  '
-  _ui_color muted
-  print -r -- 'Raw fallback: ss -tulnp'
-  _ui_reset
+  return 0
 }
 
 # Show the default forecast over HTTPS
@@ -517,6 +548,56 @@ weather() {
     print -u2 -r -- "weather: request failed (curl exit $rc)"
     return $rc
   }
+}
+
+_myip_is_ipv4() {
+  emulate -L zsh
+
+  local part
+  local -a parts=( "${(@s:.:)1}" )
+
+  (( ${#parts} == 4 )) || return 1
+  for part in "${parts[@]}"; do
+    [[ $part == <-> && ${#part} -le 3 && ( $part == 0 || $part != 0* ) ]] || return 1
+    (( part <= 255 )) || return 1
+  done
+}
+
+# RFC 4291 text form: one :: at most, and an optional dotted IPv4 tail. Zone IDs
+# never belong on a public address.
+_myip_is_ipv6() {
+  emulate -L zsh
+
+  local ip=$1 part
+  local -a groups
+  integer count compressed=0
+
+  [[ $ip == *:* ]] || return 1
+  if [[ $ip == *::* ]]; then
+    [[ ${ip#*::} != *::* ]] || return 1
+    compressed=1
+    [[ -z ${ip%%::*} ]] || groups+=( "${(@s/:/)${ip%%::*}}" )
+    [[ -z ${ip#*::} ]] || groups+=( "${(@s/:/)${ip#*::}}" )
+  else
+    groups=( "${(@s/:/)ip}" )
+  fi
+
+  count=${#groups}
+  # A dotted tail stands in for the last two groups.
+  if [[ ${groups[-1]-} == *.* ]]; then
+    _myip_is_ipv4 "${groups[-1]}" || return 1
+    groups[-1]=()
+    (( count++ ))
+  fi
+  for part in "${groups[@]}"; do
+    [[ -n $part && ${#part} -le 4 && $part != *[^0-9A-Fa-f]* ]] || return 1
+  done
+
+  if (( compressed )); then
+    (( count <= 7 ))
+  else
+    (( count == 8 ))
+  fi
 }
 
 # Show public IP address over HTTPS
@@ -547,6 +628,12 @@ myip() {
     print -u2 -r -- "myip: request failed (curl exit $rc)"
     return $rc
   }
+  # A captive portal can answer 200 with a page, so only print a real address.
+  ip=${ip//$'\r'/}
+  if ! _myip_is_ipv4 "$ip" && ! _myip_is_ipv6 "$ip"; then
+    print -u2 -r -- 'myip: the response is not an IP address; a captive portal or proxy may be answering'
+    return 1
+  fi
   if _ui_plain_mode; then
     print -r -- "$ip"
     return 0
@@ -634,6 +721,28 @@ _zdoctor_usage() {
   print 'Network endpoints and Secret Service are probed only with:'
   print '  --network   Check the myip and weather endpoints (curl, ZSH_HTTP_* timeouts)'
   print '  --secrets   Ping Secret Service over D-Bus without retrieving any value'
+}
+
+# Names the first reason output falls back to plain, in the rich-mode check's order.
+_zdoctor_output_mode() {
+  emulate -L zsh
+
+  if [[ ! -t 1 ]]; then
+    REPLY='plain (stdout is not a terminal)'
+  elif [[ -z ${TERM:-} || $TERM == dumb ]]; then
+    REPLY='plain (TERM is unset or dumb)'
+  elif [[ -n ${NO_COLOR:-} ]]; then
+    REPLY='plain (NO_COLOR is set)'
+  elif ! _ui_locale_is_utf8; then
+    REPLY='plain (the locale is not UTF-8)'
+  else
+    _ui_term_width_reply
+    if (( REPLY < 60 )); then
+      REPLY='plain (the terminal is narrower than 60 columns)'
+    else
+      REPLY=rich
+    fi
+  fi
 }
 
 # On-demand setup and integration diagnosis. Reads local state only unless
@@ -749,13 +858,18 @@ zdoctor() {
       _zdoctor_report fail "required tool missing: fzf (minimum $fzf_minimum)"
     fi
 
-    for module in bat tree rg jq secret-tool gdbus setsid nix; do
+    for module in tree rg jq secret-tool gdbus setsid nix; do
       if command -v $module >/dev/null 2>&1; then
         _zdoctor_report ok "optional tool: $module"
       else
         _zdoctor_report warn "optional tool missing: $module (only its workflows stay unavailable)"
       fi
     done
+    if command -v bat >/dev/null 2>&1 || command -v batcat >/dev/null 2>&1; then
+      _zdoctor_report ok 'optional tool: bat/batcat'
+    else
+      _zdoctor_report warn 'optional tool missing: bat/batcat (peek and previews fall back to sed)'
+    fi
     if command -v fd >/dev/null 2>&1 || command -v fdfind >/dev/null 2>&1; then
       _zdoctor_report ok 'optional tool: fd/fdfind'
     else
@@ -812,8 +926,10 @@ zdoctor() {
     if (( ${+galiases[G]} )); then
       _zdoctor_report ok 'global aliases are enabled (ZSH_GLOBAL_ALIASES=1)'
     else
-      _zdoctor_report warn "global aliases are disabled; export ZSH_GLOBAL_ALIASES=1 before startup to enable them"
+      print -r -- 'note: global aliases are disabled; export ZSH_GLOBAL_ALIASES=1 before startup to enable them'
     fi
+    _zdoctor_output_mode
+    print -r -- "note: output mode: $REPLY"
 
     if (( check_network )); then
       if ! command -v curl >/dev/null 2>&1; then

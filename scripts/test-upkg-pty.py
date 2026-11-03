@@ -96,7 +96,6 @@ case $mode in
   sentinel)
     # Converted rich cells must not call the capturing printing wrappers.
     _ui_truncate() { print -r -- PRINTING-WRAPPER-CALLED; }
-    _upkg_search_trim() { print -r -- PRINTING-WRAPPER-CALLED; }
     ;;
 esac
 typeset -g _UPKG_THEME_MODE=1
@@ -146,7 +145,8 @@ render c-locale
 """
 
 # Frozen pre-conversion formatter: every rich cell used a captured helper.
-LEGACY_SEARCH_FORMAT = r"""_upkg_format_search_rows() {
+LEGACY_SEARCH_FORMAT = r"""_upkg_search_trim() { local REPLY; _upkg_search_trim_reply "$1"; print -r -- "$REPLY"; }
+_upkg_format_search_rows() {
   emulate -L zsh
 
   local row manager name version description

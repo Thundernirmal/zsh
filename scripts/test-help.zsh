@@ -106,7 +106,7 @@ test_catalogue() {
 
   assert_equals "${_ZSH_HELP_SUMMARY[upkg]}" 'Check, search, upgrade, and clean detected managers' 'upkg help summary is concise and includes cleanup' || return 1
   assert_equals "${_ZSH_HELP_USAGE[weather]}" 'weather' 'weather help does not promise an unsupported location argument' || return 1
-  assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat or cat' 'peek help names its real fallback' || return 1
+  assert_equals "${_ZSH_HELP_DEPS[peek]}" 'bat, batcat, or sed' 'peek help names its real fallback' || return 1
   assert_equals "${_ZSH_HELP_USAGE[ztheme]}" 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme help exposes every public subcommand' || return 1
 
   assert_equals "${_ZSH_COMMAND_CANONICAL[gcount]}" gitcount 'alias metadata points to its canonical command' || return 1
@@ -145,6 +145,10 @@ test_plain_rendering_and_availability() {
 
   _zsh_help_matches '' 1
   assert_contains " ${(j: :)reply} " ' npkg ' '--all results include unavailable commands' || return 1
+
+  output=$(zhelp --plain --all -)
+  assert_status "$?" 0 'zhelp - looks up the - alias' || return 1
+  assert_contains "$output" 'Return to the previous directory' 'zhelp - shows the record that completion offers' || return 1
 
   output=$(zhelp --plain --all package)
   assert_contains "$output" 'Manage Nix profiles; helper commands support --help [needs nix; jq and fzf 0.68.0+ for optional workflows]' '--all lists explain unavailable command requirements inline' || return 1
@@ -353,20 +357,8 @@ test_tip_capabilities() (
       *) [[ $output != *'--only=dnf'* && $output != *'--only dnf'* ]] || return 1 ;;
     esac
     case $manager in
-      npm) [[ $output == *'--only npm'* ]] || return 1 ;;
-      *) [[ $output != *'--only npm'* ]] || return 1 ;;
-    esac
-    case $manager in
-      flatpak) [[ $output == *'--only flatpak'* ]] || return 1 ;;
-      *) [[ $output != *'--only flatpak'* ]] || return 1 ;;
-    esac
-    case $manager in
-      apt) [[ $output == *'APT refresh errors'* ]] || return 1 ;;
-      *) [[ $output != *'APT refresh errors'* ]] || return 1 ;;
-    esac
-    case $manager in
-      paru) [[ $output == *'Devel in paru.conf'* ]] || return 1 ;;
-      *) [[ $output != *'Devel in paru.conf'* ]] || return 1 ;;
+      apt) [[ $output == *'--only=apt'* ]] || return 1 ;;
+      *) [[ $output != *'--only=apt'* ]] || return 1 ;;
     esac
     [[ $output != *'Run checkupdates'* ]] || return 1
   done
@@ -410,6 +402,12 @@ test_tips_are_concise() {
   _zsh_tip_pool=( "${_zsh_tip_pool[1]}" )
   output=$(tips) || return 1
   assert_equals "$output" "tip: ${_zsh_tip_pool[1]}" 'tips renders a deterministic plain-mode entry' || return 1
+  output=$(tips --help) || return 1
+  assert_contains "$output" 'Usage: tips' 'tips --help prints usage instead of a tip' || return 1
+  assert_not_contains "$output" 'tip:' 'tips --help prints no tip' || return 1
+  output=$(tips extra 2>&1)
+  assert_status "$?" 1 'tips rejects unexpected arguments' || return 1
+  assert_contains "$output" 'Usage: tips' 'tips explains a rejected argument' || return 1
 
   print -- 'ok: tips stay focused, short, and actionable'
 }

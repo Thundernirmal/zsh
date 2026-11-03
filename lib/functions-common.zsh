@@ -212,9 +212,6 @@ fi
 if ! (( $+functions[_ui_term_width_reply] )); then
   _ui_term_width_reply() { REPLY=80; }
 fi
-if ! (( $+functions[_ui_term_width] )); then
-  _ui_term_width() { print -r -- 80; }
-fi
 if ! (( $+functions[_ui_repeat] )); then
   _ui_repeat() {
     emulate -L zsh
@@ -279,12 +276,6 @@ if ! (( $+functions[_ui_human_kib] )); then
   _ui_human_kib() {
     emulate -L zsh
     print -r -- "$1 KiB"
-  }
-fi
-if ! (( $+functions[_ui_usage_entry_icon] )); then
-  _ui_usage_entry_icon() {
-    emulate -L zsh
-    print -nr -- '*'
   }
 fi
 if ! (( $+functions[_ui_truncate] )); then
@@ -562,9 +553,11 @@ _zsh_run_owned_query() {
     if [[ -f $control_dir/identity && -s $control_dir/identity ]]; then
       record=( ${=$(<"$control_dir/identity")} )
       owner_pid=${record[1]-}; identity=${record[2]-}
+      # Short queries finish within the fast ticks; long ones then poll at 10 Hz.
+      ticks=0
       while [[ ! -f $control_dir/status || ! -s $control_dir/status ]] && (( ! signal_status )); do
         builtin kill -0 "$launcher_pid" 2>/dev/null || break
-        zselect -t 1
+        zselect -t $(( ticks++ < 30 ? 1 : 10 ))
       done
       [[ ! -f $control_dir/status || ! -s $control_dir/status ]] || command_status=$(<"$control_dir/status")
       [[ $command_status == <-> && $command_status -le 255 ]] || command_status=1

@@ -22,14 +22,6 @@ _ui_term_width_reply() {
   esac
 }
 
-_ui_term_width() {
-  emulate -L zsh
-
-  local REPLY
-  _ui_term_width_reply
-  print -r -- "$REPLY"
-}
-
 _ui_term_height() {
   emulate -L zsh
 

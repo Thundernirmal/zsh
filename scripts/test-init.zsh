@@ -389,6 +389,90 @@ printf "%s\n" "$@" > "$GLOB_STUB_LOG"' > "$fakebin/rm"
   print -- 'ok: destructive-command fixture never removes real files'
 }
 
+test_benchmark_keeps_real_history() {
+  local bench_home="$tmp_home/bench-home" bench_repo cmd_status
+
+  bench_repo="$bench_home/.config/zsh"
+  command mkdir -p -- "$bench_repo" || return 1
+  command cp -R -- "$repo_dir"/*.zsh "$repo_dir/lib" "$repo_dir/functions" "$repo_dir/scripts" "$bench_repo/" || return 1
+
+  env -u ZSH_HISTFILE -u XDG_CACHE_HOME HOME="$bench_home" ZSH_BENCHMARK_WARMUPS=0 \
+    "$zsh_bin" "$bench_repo/scripts/benchmark-startup.zsh" 5 >/dev/null 2>&1
+  cmd_status=$?
+  assert_status "$cmd_status" 0 'startup benchmark completes in a private home' || return 1
+  [[ ! -e $bench_home/.zsh_history ]] || {
+    print -u2 -- 'not ok: startup benchmark leaves the real history file alone'
+    return 1
+  }
+  print -- 'ok: startup benchmark leaves the real history file alone'
+}
+
+test_batcat_backs_the_cat_alias() {
+  local stub_bin="$tmp_home/batcat-bin" output
+
+  command mkdir -p -- "$stub_bin" || return 1
+  print -r -- '#!/bin/sh' > "$stub_bin/batcat"
+  command chmod +x -- "$stub_bin/batcat"
+  print -r -- '#!/bin/sh
+printf "viewer %s\n" "$*"' > "$stub_bin/batcat"
+  output=$(HOME="$tmp_home" PATH="$stub_bin" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "cat note.txt"' 2>&1)
+  assert_equals "$output" 'viewer --style=numbers --paging=never note.txt' 'the cat alias uses batcat when only that name exists' || return 1
+
+  output=$(PATH="$stub_bin:/usr/bin:/bin" /bin/sh "$repo_dir/scripts/check-deps.sh" 2>&1)
+  assert_contains "$output" 'ok: bat/batcat' 'the dependency checker accepts batcat' || return 1
+}
+
+test_cat_alias_flags() {
+  local stub_bin="$tmp_home/cat-flags-bin" spec args expected output
+
+  command mkdir -p -- "$stub_bin" || return 1
+  print -r -- '#!/bin/sh
+printf "viewer %s\n" "$*"' > "$stub_bin/bat"
+  print -r -- '#!/bin/sh
+printf "real %s\n" "$*"' > "$stub_bin/cat"
+  command chmod +x -- "$stub_bin/bat" "$stub_bin/cat"
+
+  for spec in \
+    'real:-v note.txt' 'real:-e note.txt' 'real:-E note.txt' 'real:-T note.txt' 'real:-b note.txt' 'real:-t note.txt' \
+    'real:-s note.txt' 'real:-vet note.txt' 'real:-nE note.txt' 'real:--show-ends note.txt' 'real:note.txt -v' \
+    'viewer:note.txt' 'viewer:-n note.txt' 'viewer:-A note.txt' 'viewer:-pp note.txt' 'viewer:-l json note.txt' \
+    'viewer:--show-all note.txt' 'viewer:-- -v'; do
+    args=${spec#*:}
+    if [[ ${spec%%:*} == real ]]; then
+      expected="real $args"
+    else
+      expected="viewer --style=numbers --paging=never $args"
+    fi
+    output=$(HOME="$tmp_home" PATH="$stub_bin" CAT_ARGS="$args" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "cat $CAT_ARGS"' 2>&1)
+    assert_equals "$output" "$expected" "cat $args goes to ${spec%%:*}" || return 1
+  done
+}
+
+test_extended_glob_stays_off() {
+  local fixture_dir="$tmp_home/extended-glob-fixture"
+  local output
+
+  command mkdir -p -- "$fixture_dir/tree" || return 1
+  : > "$fixture_dir/tree/a.js"
+
+  output=$(HOME="$tmp_home" EXTENDED_GLOB_FIXTURE="$fixture_dir" zsh -fc '
+    source "$HOME/.config/zsh/init.zsh"
+    cd "$EXTENDED_GLOB_FIXTURE" || exit 1
+    [[ -o extendedglob ]] && print -r -- on || print -r -- off
+    eval "print -r -- nixpkgs#bat HEAD^ https://example.com/page#frag"
+    print -rl -- **/*.js *(/) tree/*(.m-1)
+  ' 2>&1)
+  assert_equals "$output" $'off\nnixpkgs#bat HEAD^ https://example.com/page#frag\ntree/a.js\ntree\ntree/a.js' \
+    'EXTENDED_GLOB stays off while documented globs keep working' || return 1
+
+  output=$(HOME="$tmp_home" zsh -fc '
+    setopt EXTENDED_GLOB
+    source "$HOME/.config/zsh/init.zsh"
+    [[ -o extendedglob ]] && print -r -- on || print -r -- off
+  ' 2>&1)
+  assert_equals "$output" on 'an EXTENDED_GLOB choice made before startup is left alone' || return 1
+}
+
 test_fzf_startup_gate() {
   local expected case_spec version version_status integration_mode found label
   local -a fields blocked_cases integration_cases supported_cases
@@ -1265,6 +1349,10 @@ main() {
   test_zoxide_persistent_startup_cache || return 1
   test_zoxide_rejected_cache_directory || return 1
   test_glob_policy || return 1
+  test_extended_glob_stays_off || return 1
+  test_batcat_backs_the_cat_alias || return 1
+  test_cat_alias_flags || return 1
+  test_benchmark_keeps_real_history || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1
   test_fzf_quiet_startup_modes || return 1

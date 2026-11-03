@@ -100,7 +100,7 @@ test_registration() {
     fbr _zsh_no_arguments
     croot _zsh_no_arguments
     path _zsh_no_arguments
-    ports _zsh_no_arguments
+    ports _zsh_ports
     weather _zsh_no_arguments
     myip _zsh_no_arguments
     gitcount _zsh_no_arguments
@@ -162,7 +162,7 @@ test_static_values() {
 
   spec_values "${_ZSH_UPKG_FLAGS[@]}"
   values=( "${reply[@]}" )
-  assert_equals "${(j: :)values}" '--only --skip --sudo --dry-run --help' 'upkg flags match the public interface' || return 1
+  assert_equals "${(j: :)values}" '--only --skip --sudo --dry-run --parallel --help' 'upkg flags match the public interface' || return 1
   assert_unique 'upkg flag values are unique' "${values[@]}" || return 1
   assert_equals "${_ZSH_UPKG_FLAGS[3]}" '--sudo:Authorize privileged upgrade and cleanup backends' 'upkg sudo completion describes cleanup authorization' || return 1
   assert_equals "${_ZSH_UPKG_FLAGS[4]}" '--dry-run:Inventory updates or preview cleanup without changing packages' 'upkg dry-run completion covers cleanup previews' || return 1

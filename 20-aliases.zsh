@@ -7,15 +7,9 @@ if (( $+commands[lsd] )); then
   alias la='lsd -A'
   alias lt='lsd --tree --depth=3 --group-dirs=first'
 else
-  if [[ $OSTYPE == linux* ]]; then
-    alias ls='command ls --color=auto'
-    alias ll='command ls -lah --color=auto'
-    alias la='command ls -A --color=auto'
-  else
-    alias ls='command ls'
-    alias ll='command ls -lah'
-    alias la='command ls -A'
-  fi
+  alias ls='command ls --color=auto'
+  alias ll='command ls -lah --color=auto'
+  alias la='command ls -A --color=auto'
 
   if (( $+commands[tree] )); then
     alias lt='tree -L 3 -a -C'
@@ -29,14 +23,37 @@ alias ....='cd ../../..'
 alias -- -='cd -'
 
 # File viewing
-if (( $+commands[bat] )); then
-  alias cat='bat --style=numbers --paging=never'
+# Debian and Ubuntu install bat as batcat.
+if (( $+commands[bat] || $+commands[batcat] )); then
+  typeset -g _ZSH_CAT_VIEWER=bat
+  (( $+commands[bat] )) || _ZSH_CAT_VIEWER=batcat
+
+  # bat rejects these GNU cat flags, so they go to the real cat. -n, -A, and -u
+  # mean the same in both, and bat's own options such as -l and -p stay with bat.
+  _zsh_cat() {
+    emulate -L zsh
+
+    local arg
+    for arg in "$@"; do
+      [[ $arg == -- ]] && break
+      case $arg in
+        --show-ends|--show-tabs|--show-nonprinting|--number-nonblank|--squeeze-blank)
+          command cat "$@"
+          return
+          ;;
+      esac
+      if [[ $arg == -* && $arg != --* && $arg != *[^-AbeEnstTuv]* && $arg == *[beEstTv]* ]]; then
+        command cat "$@"
+        return
+      fi
+    done
+    command "$_ZSH_CAT_VIEWER" --style=numbers --paging=never "$@"
+  }
+  alias cat='_zsh_cat'
 fi
 
-if [[ $OSTYPE == linux* ]]; then
-  alias grep='grep --color=auto'
-  alias diff='diff --color=auto'
-fi
+alias grep='grep --color=auto'
+alias diff='diff --color=auto'
 
 # Git extras (OMZ git plugin covers basics, these fill gaps)
 alias glog='git log --oneline --graph --decorate -20'

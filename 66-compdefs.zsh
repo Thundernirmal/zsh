@@ -27,6 +27,7 @@ if (( $+functions[compdef] )); then
     '--skip:Exclude comma-separated manager IDs'
     '--sudo:Authorize privileged upgrade and cleanup backends'
     '--dry-run:Inventory updates or preview cleanup without changing packages'
+    '--parallel:Run outdated, plan, and search queries at the same time'
     '--help:Show usage help'
   )
   typeset -ga _ZSH_EXTRACT_EXTENSIONS=(
@@ -106,6 +107,7 @@ if (( $+functions[compdef] )); then
       '--skip=[exclude comma-separated manager IDs]:manager list:_zsh_upkg_managers' \
       '--sudo[authorize privileged upgrade and cleanup backends]' \
       "--dry-run[${_ZSH_UPKG_FLAGS[(r)--dry-run:*]#*:}]" \
+      "--parallel[${_ZSH_UPKG_FLAGS[(r)--parallel:*]#*:}]" \
       '1:upkg command:->command' \
       '*:command argument:->argument' && return 0
 
@@ -344,7 +346,7 @@ if (( $+functions[compdef] )); then
     if [[ ${words[1]} == ff ]]; then
       search_flags+=( '--no-hidden[exclude hidden entries]' '--no-follow[do not follow symlinks]' )
     else
-      search_flags+=( '--fixed-strings[match literal text]' '-F[match literal text]' )
+      search_flags+=( '--fixed-strings[match literal text]' '-F[match literal text]' '--ignore-case[ignore letter case]' '-i[ignore letter case]' )
     fi
     _arguments '(-h --help)'{-h,--help}'[show usage]' "${search_flags[@]}" '1:search pattern:'  '2:search root:_directories' '*: :_message "no additional arguments"'
   }
@@ -359,6 +361,10 @@ if (( $+functions[compdef] )); then
 
   _zsh_fkill() {
     _arguments '(-h --help)'{-h,--help}'[show usage]' '--all[select processes from all users]' '-a[select processes from all users]' '1:signal:_signals' '*: :_message "no additional arguments"'
+  }
+
+  _zsh_ports() {
+    _arguments '1:port number or process name:' '*: :_message "no additional arguments"'
   }
 
   _zsh_headers() {
@@ -446,10 +452,11 @@ if (( $+functions[compdef] )); then
   compdef _zsh_bigfiles bigfiles
   compdef _zsh_fkill fkill
   compdef _zsh_headers headers
+  compdef _zsh_ports ports
   compdef _zsh_zhelp zhelp
   compdef _zsh_zdoctor zdoctor
   compdef _zsh_ztheme ztheme
-  compdef _zsh_no_arguments fbr croot path ports myip weather gitcount fanprofile tips
+  compdef _zsh_no_arguments fbr croot path myip weather gitcount fanprofile tips
 
   if (( $+functions[npkg] )); then
     compdef _zsh_npkg npkg

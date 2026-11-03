@@ -298,7 +298,7 @@ test_set_validation_and_rollback() {
   cgm set ROLLBACK_TOKEN >"$output_file" 2>"$error_file"
   rc=$?
   assert_status "$rc" 9 'set preserves the backend failure status' || return 1
-  assert_not_exists "$XDG_DATA_HOME/cgm/entries/ROLLBACK_TOKEN" 'failed set rolls back a newly-created catalogue marker' || return 1
+  assert_not_exists "$XDG_DATA_HOME/cgm/entries/ROLLBACK_TOKEN" 'failed set records no catalogue marker' || return 1
 
   unset CGM_TEST_FAIL_STORE_NAME
   CGM_TEST_STORE_VALUE=original

@@ -211,7 +211,7 @@ _cgm_catalog_has() {
   [[ -f $marker && ! -L $marker ]]
 }
 
-_cgm_catalog_add() {
+_cgm_catalog_can_add() {
   emulate -L zsh
 
   local entries marker
@@ -224,6 +224,16 @@ _cgm_catalog_add() {
     _cgm_error "credential catalogue entry is not a regular file: $marker"
     return 1
   fi
+}
+
+_cgm_catalog_add() {
+  emulate -L zsh
+
+  local entries marker
+
+  _cgm_catalog_can_add "$1" || return 1
+  entries=$(_cgm_catalog_dir) || return 1
+  marker="$entries/$1"
 
   if [[ ! -e $marker ]]; then
     ( umask 077; setopt noclobber; : > "$marker" ) 2>/dev/null || {
@@ -499,7 +509,7 @@ _cgm_set() {
   emulate -L zsh
 
   local name=${1-}
-  local backend_status created_marker=0
+  local backend_status
 
   (( $# == 1 )) || {
     _cgm_error 'usage: cgm set <name>'
@@ -514,10 +524,11 @@ _cgm_set() {
       _cgm_error 'cancelled.'
       return 1
     fi
-  else
-    created_marker=1
   fi
-  _cgm_catalog_add "$name" || return 1
+  # Check the catalogue before prompting, but record the name only after the
+  # secret is stored: Ctrl-C aborts this function during the prompt, and a name
+  # recorded earlier would remain with no credential behind it.
+  _cgm_catalog_can_add "$name" || return 1
 
   if ! _ui_plain_mode; then
     _ui_title_line 'Store Credential' "$name" accent '󰌆' '*'
@@ -532,7 +543,6 @@ _cgm_set() {
   command secret-tool store --label="cgm: $name" application cgm variable "$name"
   backend_status=$?
   if (( backend_status != 0 )); then
-    (( created_marker )) && _cgm_catalog_remove "$name" >/dev/null 2>&1
     if (( backend_status == 130 )); then
       _cgm_error 'cancelled.'
     else
@@ -540,6 +550,11 @@ _cgm_set() {
     fi
     return "$backend_status"
   fi
+
+  _cgm_catalog_add "$name" || {
+    _cgm_error "saved $name in Linux Secret Service, but its name is not listed yet; run 'cgm env $name' to repair that."
+    return 1
+  }
 
   _cgm_render_saved "$name"
 }
