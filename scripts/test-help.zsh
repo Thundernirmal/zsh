@@ -132,7 +132,59 @@ test_matching() {
   assert_equals "${(j: :)reply}" 'fkill' 'query matching searches usage strings literally' || return 1
 
   _zsh_help_matches '--only=apt,nix' 1
-  assert_equals "${(j: :)reply}" 'upkg' 'query matching searches examples' || return 1
+  assert_equals "${(j: :)reply}" '' 'query matching ignores example text' || return 1
+  _zsh_help_matches '--only <list>' 1
+  assert_contains "${(j: :)reply}" 'upkg-plan' 'query matching still searches usage strings' || return 1
+
+  _zsh_help_matches ip 1
+  assert_equals "${reply[(Ie)upkg]}" 0 'a query no longer matches letters inside example text (ripgrep)' || return 1
+
+  _zsh_help_matches port 1
+  assert_equals "${reply[1]}" ports 'an exact-prefix name ranks before substring matches in summaries' || return 1
+  assert_equals "${(j: :)reply}" ports 'a query inside "supported" or "exported" no longer matches mid-word (only ports)' || return 1
+  assert_equals "${reply[(Ie)extract]}" 0 'extract is absent from the port results' || return 1
+  _zsh_help_matches port 0
+  assert_equals "${reply[(Ie)cgm-status]}${reply[(Ie)npkg]}${reply[(Ie)ztheme]}" 000 'cgm-status, npkg, and ztheme are absent from the port results' || return 1
+  _zsh_help_matches ports 1
+  assert_equals "${reply[1]}" ports 'an exact name ranks first' || return 1
+
+  # Names match anywhere; the other fields match at the start of a word.
+  _zsh_help_matches kill 1
+  assert_equals "${(j: :)reply}" fkill 'a query inside a command name still matches (kill finds fkill)' || return 1
+  _zsh_help_matches ip 1
+  assert_equals "${reply[1]}" myip 'a query inside a command name still matches (ip finds myip)' || return 1
+  assert_equals "${reply[(Ie)upkg]}" 0 'ip does not match inside ripgrep' || return 1
+  _zsh_help_matches package 1
+  assert_contains "${(j: :)reply}" upkg 'a word-start match in the summary still finds upkg (package managers)' || return 1
+  _zsh_help_matches Packages 1
+  assert_contains "${(j: :)reply}" upkg 'a word-start match in the category still finds upkg (Packages)' || return 1
+  _zsh_help_matches undo 1
+  assert_equals "${(j: :)reply}" gun 'undo finds gun by its summary' || return 1
+  _zsh_help_matches disk 1
+  assert_equals "${(j: :)reply}" dusage 'disk finds dusage by its summary' || return 1
+  _zsh_help_matches theme 1
+  assert_equals "${(j: :)reply}" ztheme 'theme finds ztheme' || return 1
+  _zsh_help_matches search 1
+  assert_equals "${(j: :)reply[1,5]}" 'grep ff ft upkg tips' 'search keeps finding the search commands in registry order' || return 1
+  _zsh_help_matches Git 1
+  assert_equals "${(j: :)reply}" 'gitcount croot glog gpr gun gcount fbr' 'Git ranks the name match first, then the Git category' || return 1
+  _zsh_help_matches '[signal]' 1
+  assert_equals "${(j: :)reply}" fkill 'usage text still matches after a non-letter such as a bracket' || return 1
+  _zsh_help_matches nal 1
+  assert_equals "${reply[(Ie)fkill]}" 0 'a query starting inside a word of the usage text does not match' || return 1
+  _zsh_help_register aaa-qzx Meta 'Relevance fixture one' aaa-qzx aaa-qzx none function none
+  _zsh_help_register zzz-fixture Meta 'Mentions qzx only in its summary' zzz-fixture zzz-fixture none function none
+  _zsh_help_register qzx-bbb Meta 'Relevance fixture two' qzx-bbb qzx-bbb none function none
+  _zsh_help_register qzx Meta 'Relevance fixture three' qzx qzx none function none
+  _zsh_help_matches qzx 1
+  assert_equals "${(j: :)reply}" 'qzx qzx-bbb aaa-qzx zzz-fixture' 'results rank exact name, name prefix, name substring, then the rest' || return 1
+  _zsh_help_matches pkg 1
+  assert_equals "${(j: :)reply[1,4]}" 'upkg upkg-plan npkg npkg-remove' 'names containing the query rank before summary-only matches, in registry order' || return 1
+
+  _zsh_help_matches 'cgm env' 1
+  assert_contains "${(j: :)reply}" 'cgm-env' 'multi-word queries still find cgm-env' || return 1
+  _zsh_help_matches 'upkg plan' 1
+  assert_contains "${(j: :)reply}" 'upkg-plan' 'multi-word queries still find upkg-plan' || return 1
 }
 
 test_plain_rendering_and_availability() {
@@ -193,8 +245,48 @@ exit 0' > "$fakebin/secret-tool"
   output=$(zhelp --plain --all upkgg 2>&1)
   rc=$?
   assert_status "$rc" 1 'unknown command or query returns failure' || return 1
-  assert_contains "$output" 'No commands matched: upkgg' 'unknown query prints a concise error' || return 1
+  assert_contains "$output" 'zhelp: no commands matched: upkgg' 'unknown query prints a concise error' || return 1
   assert_contains "$output" 'Close matches: upkg' 'unknown exact-like query suggests close commands' || return 1
+
+  output=$(zhelp --plain --all upgk 2>&1)
+  assert_contains "$output" 'Close matches: upkg' 'a transposed typo suggests the intended command' || return 1
+  output=$(zhelp --plain --all qqqzzz 2>&1)
+  assert_not_contains "$output" 'Close matches' 'an unrelated query suggests nothing' || return 1
+
+  output=$(zhelp --plain --bogus 2>&1)
+  rc=$?
+  assert_status "$rc" 1 'an unknown zhelp option returns failure' || return 1
+  assert_contains "$output" 'zhelp: unknown option: --bogus' 'zhelp option errors name the command' || return 1
+}
+
+test_hidden_matches_and_reasons() {
+  local output rc
+
+  # A command hidden only because it is unavailable must not read as "no match".
+  _zsh_help_register test-hidden-kill Meta 'Hidden killer fixture' 'test-hidden-kill' 'test-hidden-kill' 'a missing tool' function none
+  output=$(zhelp --plain hidden-kill 2>&1)
+  rc=$?
+  assert_status "$rc" 1 'a query matching only unavailable commands still fails' || return 1
+  assert_contains "$output" 'no available commands matched: hidden-kill' 'hidden-only queries are not reported as "no commands matched"' || return 1
+  assert_contains "$output" 'test-hidden-kill' 'hidden-only queries name the unavailable command' || return 1
+  assert_contains "$output" "Run 'zhelp --all hidden-kill'" 'hidden-only queries point at --all' || return 1
+  output=$(zhelp --plain --all hidden-kill 2>&1)
+  assert_contains "$output" 'Hidden killer fixture' '--all finds the hidden command' || return 1
+  output=$(zhelp --plain nomatchatall 2>&1)
+  assert_contains "$output" 'zhelp: no commands matched: nomatchatall' 'queries matching nothing keep the plain no-match message' || return 1
+
+  unalias G 2>/dev/null
+  unalias -g G NE 2>/dev/null
+  output=$(zhelp --plain --all NE)
+  assert_contains "$output" 'Status:  unavailable (opt-in; export ZSH_GLOBAL_ALIASES=1 before startup)' 'a global alias that is not defined reports the opt-in setting' || return 1
+  assert_not_contains "$output" 'needs none' 'a global alias never reports a dependency that does not apply' || return 1
+  output=$(zhelp --plain --all G 2>&1)
+  assert_contains "$output" 'ZSH_GLOBAL_ALIASES=1' 'list rows give the global alias reason' || return 1
+  assert_not_contains "$output" '[needs grep]' 'list rows no longer blame grep for an undefined global alias' || return 1
+  output=$(zhelp --plain NE 2>&1)
+  assert_contains "$output" 'zhelp: command is unavailable: NE (opt-in; export ZSH_GLOBAL_ALIASES=1 before startup)' 'the unavailable message gives the global alias reason' || return 1
+  _zsh_help_unavailable_reason npkg
+  assert_equals "$REPLY" 'needs nix; jq and fzf 0.68.0+ for optional workflows' 'tool-backed commands keep their dependency reason' || return 1
 }
 
 test_action_entries_and_browsing() {
@@ -252,6 +344,7 @@ test_palette_queue_and_cancel() {
   local queued old_path=$PATH rc
 
   assert_contains "${functions[_zsh_help_palette]}" '--accept-nth=5' 'zhelp asks fzf to return only the editable example' || return 1
+  assert_contains "${functions[_zsh_help_palette]}" '--nth=1,2,3,4 ' 'the palette no longer searches the example field' || return 1
   assert_contains "${functions[_zsh_help_palette]}" '_fzf_picker_preview_args Usage' 'zhelp uses the shared responsive preview policy' || return 1
 
   command mkdir -p -- "$fakebin"
@@ -399,34 +492,88 @@ test_tips_are_concise() {
   done
 
   functions[_ui_plain_mode]='return 0'
+  local -a full_pool=( "${_zsh_tip_pool[@]}" )
   _zsh_tip_pool=( "${_zsh_tip_pool[1]}" )
   output=$(tips) || return 1
   assert_equals "$output" "tip: ${_zsh_tip_pool[1]}" 'tips renders a deterministic plain-mode entry' || return 1
   output=$(tips --help) || return 1
   assert_contains "$output" 'Usage: tips' 'tips --help prints usage instead of a tip' || return 1
   assert_not_contains "$output" 'tip:' 'tips --help prints no tip' || return 1
-  output=$(tips extra 2>&1)
-  assert_status "$?" 1 'tips rejects unexpected arguments' || return 1
-  assert_contains "$output" 'Usage: tips' 'tips explains a rejected argument' || return 1
+  output=$(tips --bogus 2>&1)
+  assert_status "$?" 1 'tips rejects unknown options' || return 1
+  assert_contains "$output" 'tips: unknown option: --bogus' 'tips names the rejected option' || return 1
+  assert_contains "$output" 'Usage: tips [--all | <query>]' 'tips explains a rejected option' || return 1
+  output=$(tips --all extra 2>&1)
+  assert_status "$?" 1 'tips --all takes no query' || return 1
+  assert_contains "$output" 'tips: --all takes no query' 'tips --all explains the rejected query' || return 1
+  output=$(tips --help)
+  assert_contains "$output" 'tips --all' 'tips --help documents --all' || return 1
+  assert_contains "$output" 'tips <query>' 'tips --help documents the query form' || return 1
 
+  _zsh_tip_pool=( "${full_pool[@]}" )
   print -- 'ok: tips stay focused, short, and actionable'
+}
+
+test_tips_browsing() {
+  local output rc previous tip i
+  local -a lines pool=( 'Run alpha to do one thing' 'Run Beta to do another' 'Use gamma for a third thing' )
+
+  source "$repo_dir/80-tips.zsh"
+  _zsh_tips_load || return 1
+  functions[_ui_plain_mode]='return 0'
+  _zsh_tip_pool=( "${pool[@]}" )
+
+  output=$(tips --all)
+  lines=( "${(@f)output}" )
+  assert_equals "${#lines}" 3 'tips --all prints every tip, one per line' || return 1
+  assert_equals "${lines[2]}" 'Run Beta to do another' 'tips --all prints the raw tip text' || return 1
+
+  output=$(tips beta)
+  assert_equals "$output" 'Run Beta to do another' 'a query matches case-insensitively' || return 1
+  output=$(tips RUN)
+  assert_equals "${#${(@f)output}}" 2 'a query prints every matching tip' || return 1
+  output=$(tips another thing 2>/dev/null)
+  assert_equals "$output" '' 'a multi-word query is matched as one phrase' || return 1
+  output=$(tips do another)
+  assert_equals "$output" 'Run Beta to do another' 'a multi-word query joins its words with a space' || return 1
+  output=$(tips nosuchtip 2>&1 >/dev/null); rc=$?
+  assert_status "$rc" 1 'a query with no match returns 1' || return 1
+  assert_equals "$output" 'tips: no tips matched: nosuchtip' 'a query with no match explains itself on stderr' || return 1
+  output=$(tips nosuchtip 2>/dev/null)
+  assert_equals "$output" '' 'a query with no match prints nothing on stdout' || return 1
+
+  previous=''
+  for (( i = 0; i < 60; i++ )); do
+    tips >"$tmp_dir/tip-out"
+    tip=$(<"$tmp_dir/tip-out")
+    [[ $tip != "$previous" ]] || { print -u2 -- "not ok: tips repeated: $tip"; return 1; }
+    previous=$tip
+  done
+  print -- 'ok: tips never repeats the previous tip in this shell'
+
+  _zsh_tip_pool=( 'Run only to do the one thing' )
+  tips >"$tmp_dir/tip-out"; tips >>"$tmp_dir/tip-out"
+  assert_equals "$(<"$tmp_dir/tip-out")" $'tip: Run only to do the one thing\ntip: Run only to do the one thing' 'a one-tip pool still answers every call' || return 1
 }
 
 main() {
   source "$repo_dir/25-theme.zsh"
   source "$repo_dir/40-fzf.zsh"
+  source "$repo_dir/55-ui-helpers.zsh"
   source "$repo_dir/65-help.zsh"
   _zsh_help_load || return 1
 
   test_catalogue || return 1
   test_matching || return 1
   test_plain_rendering_and_availability || return 1
+  test_hidden_matches_and_reasons || return 1
   test_action_entries_and_browsing || return 1
   test_palette_queue_and_cancel || return 1
   test_source_has_no_subprocesses || return 1
   test_lazy_catalogue_paths || return 1
   test_tip_capabilities || return 1
   test_tips_are_concise || return 1
+  test_tips_browsing || return 1
 }
 
 main "$@"

@@ -867,9 +867,8 @@ cgm() {
       _cgm_usage
       ;;
     *)
-      _cgm_error "unknown command: $command_name"
-      _cgm_usage >&2
-      return 1
+      _ui_usage_error cgm 'cgm <command> [credential ...]' "unknown command: $command_name" "$command_name" \
+        set list status check env unset delete help
       ;;
   esac
 }

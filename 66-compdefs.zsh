@@ -342,7 +342,7 @@ if (( $+functions[compdef] )); then
 
   _zsh_find_helper() {
     local -a search_flags
-    search_flags=( '--hidden[include hidden entries]' '--no-ignore[include ignored entries]' '--follow[follow symlinks]' )
+    search_flags=( '--pick[choose a result in fzf and open it in the editor]' '--hidden[include hidden entries]' '--no-ignore[include ignored entries]' '--follow[follow symlinks]' )
     if [[ ${words[1]} == ff ]]; then
       search_flags+=( '--no-hidden[exclude hidden entries]' '--no-follow[do not follow symlinks]' )
     else
@@ -443,6 +443,19 @@ if (( $+functions[compdef] )); then
     _message 'no arguments'
   }
 
+  _zsh_fbr() {
+    _arguments \
+      '(-h --help)'{-h,--help}'[show fbr usage]' \
+      '*: :_message "initial picker query"'
+  }
+
+  _zsh_tips() {
+    _arguments \
+      '(-h --help)'{-h,--help}'[show tips usage]' \
+      '--all[list every tip available on this machine]' \
+      '*: :_message "search text"'
+  }
+
   compdef _zsh_upkg upkg
   compdef _zsh_extract extract
   compdef _zsh_peek peek
@@ -456,7 +469,9 @@ if (( $+functions[compdef] )); then
   compdef _zsh_zhelp zhelp
   compdef _zsh_zdoctor zdoctor
   compdef _zsh_ztheme ztheme
-  compdef _zsh_no_arguments fbr croot path myip weather gitcount fanprofile tips
+  compdef _zsh_tips tips
+  compdef _zsh_fbr fbr
+  compdef _zsh_no_arguments croot path myip weather gitcount fanprofile
 
   if (( $+functions[npkg] )); then
     compdef _zsh_npkg npkg

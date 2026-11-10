@@ -93,12 +93,21 @@ _upkg_search_usage() {
 
 source "$_ZSH_FUNCTIONS_MODULE_DIR/lib/upkg-registry.zsh"
 
+typeset -ga _UPKG_COMMAND_NAMES=(
+  outdated check list search upgrade up update plan clean managers help
+)
+
+# Short usage error for upkg: _upkg_usage_error <message> [word candidate...]
+_upkg_usage_error() {
+  _ui_usage_error upkg 'upkg [command] [args] [flags]' "$1" "${2-}" "${@:3}"
+}
+
 _upkg_parse_manager_list() {
   emulate -L zsh
 
   local raw=$1
   local item
-  local -a parsed
+  local -a parsed detected
 
   [ -n "$raw" ] || return 0
 
@@ -106,14 +115,21 @@ _upkg_parse_manager_list() {
     item=${item//[[:space:]]/}
 
     if [ -z "$item" ]; then
-      print -u2 -- "Empty manager id in list: $raw"
+      print -u2 -- "upkg: empty manager id in list: $raw"
       return 1
     fi
 
     if (( ${_ZSH_UPKG_MANAGERS[(Ie)$item]} )); then
       parsed+=("$item")
     else
-      print -u2 -- "Unsupported manager id: $item"
+      print -u2 -- "upkg: unsupported manager id: $item"
+      print -u2 -- "Supported manager IDs: ${(j:, :)_ZSH_UPKG_MANAGERS}"
+      detected=( "${_UPKG_ACTIVE_MANAGERS[@]}" "${_UPKG_ALTERNATE_MANAGERS[@]}" )
+      if (( ${#detected[@]} > 0 )); then
+        print -u2 -- "Detected managers: ${(j:, :)detected}"
+      else
+        print -u2 -- 'Detected managers: none'
+      fi
       return 1
     fi
   done
@@ -194,7 +210,7 @@ _upkg_apply_filters() {
     done
 
     if (( ${#unavailable[@]} > 0 )); then
-      print -u2 -- "Selected managers are not available: ${(j:, :)unavailable}"
+      print -u2 -- "upkg: selected managers are not available: ${(j:, :)unavailable}"
       if (( ${#candidate_pool[@]} > 0 )); then
         print -u2 -- "Detected managers: ${(j:, :)candidate_pool}"
       fi
@@ -1465,8 +1481,7 @@ upkg() {
       --only)
         shift
         if (( $# == 0 )) || [[ -z ${1//[[:space:]]/} ]]; then
-          print -u2 -- 'Missing value for --only'
-          _upkg_usage >&2
+          _upkg_usage_error 'missing value for --only'
           return 1
         fi
         only_raw=$1
@@ -1474,16 +1489,14 @@ upkg() {
       --only=*)
         only_raw=${1#--only=}
         if [[ -z ${only_raw//[[:space:]]/} ]]; then
-          print -u2 -- 'Missing value for --only'
-          _upkg_usage >&2
+          _upkg_usage_error 'missing value for --only'
           return 1
         fi
         ;;
       --skip)
         shift
         if (( $# == 0 )) || [[ -z ${1//[[:space:]]/} ]]; then
-          print -u2 -- 'Missing value for --skip'
-          _upkg_usage >&2
+          _upkg_usage_error 'missing value for --skip'
           return 1
         fi
         skip_raw=$1
@@ -1491,8 +1504,7 @@ upkg() {
       --skip=*)
         skip_raw=${1#--skip=}
         if [[ -z ${skip_raw//[[:space:]]/} ]]; then
-          print -u2 -- 'Missing value for --skip'
-          _upkg_usage >&2
+          _upkg_usage_error 'missing value for --skip'
           return 1
         fi
         ;;
@@ -1514,8 +1526,7 @@ upkg() {
           done
           break
         fi
-        print -u2 -- "Unknown argument: --"
-        _upkg_usage >&2
+        _upkg_usage_error 'unknown option: --'
         return 1
         ;;
       help)
@@ -1533,8 +1544,7 @@ upkg() {
           query_parts+=("$1")
         else
           if [ -n "$raw_cmd" ] && [ "$raw_cmd" != "$1" ]; then
-            print -u2 -- "Unexpected extra command: $1"
-            _upkg_usage >&2
+            _upkg_usage_error "unexpected extra command: $1"
             return 1
           fi
           raw_cmd=$1
@@ -1544,8 +1554,11 @@ upkg() {
         if [ "$raw_cmd" = 'search' ]; then
           query_parts+=("$1")
         else
-          print -u2 -- "Unknown argument: $1"
-          _upkg_usage >&2
+          if [[ $1 == -* ]]; then
+            _upkg_usage_error "unknown option: $1" "$1" --help --only --skip --sudo --dry-run --parallel
+          else
+            _upkg_usage_error "unknown command: $1" "$1" "${_UPKG_COMMAND_NAMES[@]}"
+          fi
           return 1
         fi
         ;;
@@ -1565,6 +1578,7 @@ upkg() {
 
   if [ "$cmd" = 'search' ]; then
     if (( ${#query_parts[@]} == 0 )); then
+      print -u2 -r -- 'upkg: search needs a query'
       _upkg_search_usage >&2
       return 1
     fi
@@ -1579,8 +1593,7 @@ upkg() {
     elif [ "$cmd" = 'clean' ]; then
       :
     else
-      print -u2 -- '--dry-run is only valid with the default outdated check, plan, upgrade, or clean'
-      _upkg_usage >&2
+      _upkg_usage_error '--dry-run is only valid with the default outdated check, plan, upgrade, or clean'
       return 1
     fi
   fi
@@ -1624,7 +1637,7 @@ upkg() {
   _upkg_detect_managers
 
   if (( ${#_UPKG_ACTIVE_MANAGERS[@]} == 0 && ${#_UPKG_ALTERNATE_MANAGERS[@]} == 0 )); then
-    print -u2 -- 'No supported package managers detected.'
+    print -u2 -- 'upkg: no supported package managers detected'
     return 1
   fi
 
@@ -1725,7 +1738,7 @@ upkg() {
   _upkg_apply_filters "$only_raw" "$skip_raw" || return 1
 
   if (( ${#_UPKG_SELECTED_MANAGERS[@]} == 0 )); then
-    print -u2 -- 'No package managers selected after applying filters.'
+    print -u2 -- 'upkg: no package managers selected after applying filters'
     [ -n "$only_raw" ] && print -u2 -- "Only filter: $only_raw"
     [ -n "$skip_raw" ] && print -u2 -- "Skip filter: $skip_raw"
     print -u2 -- "Run: upkg managers${_UPKG_ONLY_FILTER_HINT:+ --only ${_UPKG_ONLY_FILTER_HINT}}${_UPKG_SKIP_FILTER_HINT:+ --skip ${_UPKG_SKIP_FILTER_HINT}}"

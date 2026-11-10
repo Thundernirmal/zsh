@@ -110,7 +110,7 @@ extract() {
   fi
   archive_arg=${operands[1]}
   if [ ! -f "$archive_arg" ]; then
-    print -u2 -r -- "'$archive_arg' is not a valid file"
+    print -u2 -r -- "extract: '$archive_arg' is not a valid file"
     return 1
   fi
   if [[ -n $destination && ! -d $destination ]]; then
@@ -179,12 +179,12 @@ extract() {
       command tar "${tar_args[@]}" --zstd -xf "$archive"
       ;;
     *.zip)
-      command -v unzip >/dev/null 2>&1 || { print -u2 -r -- "unzip is required to extract '$archive_arg'"; return 1; }
+      command -v unzip >/dev/null 2>&1 || { print -u2 -r -- "extract: unzip is required to extract '$archive_arg'"; return 1; }
       [[ -n $destination ]] && unzip_args=(-d "$destination")
       command unzip "${unzip_args[@]}" -- "$archive"
       ;;
     *.rar)
-      command -v unrar >/dev/null 2>&1 || { print -u2 -r -- "unrar is required to extract '$archive_arg'"; return 1; }
+      command -v unrar >/dev/null 2>&1 || { print -u2 -r -- "extract: unrar is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
         command unrar x "$archive" "$destination/"
       else
@@ -196,7 +196,7 @@ extract() {
         [[ -z $sevenzip ]] && break
         command -v $sevenzip >/dev/null 2>&1 && break
       done
-      [[ -n $sevenzip ]] || { print -u2 -r -- "7z, 7zz, or 7za is required to extract '$archive_arg'"; return 1; }
+      [[ -n $sevenzip ]] || { print -u2 -r -- "extract: 7z, 7zz, or 7za is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
         command $sevenzip x "$archive" "-o$destination"
       else
@@ -204,7 +204,7 @@ extract() {
       fi
       ;;
     *.bz2)
-      command -v bunzip2 >/dev/null 2>&1 || { print -u2 -r -- "bunzip2 is required to extract '$archive_arg'"; return 1; }
+      command -v bunzip2 >/dev/null 2>&1 || { print -u2 -r -- "extract: bunzip2 is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
         output="$destination/${archive:t:r}"
         _extract_stream_to "$output" "$archive" bunzip2 || return
@@ -215,7 +215,7 @@ extract() {
       fi
       ;;
     *.gz)
-      command -v gunzip >/dev/null 2>&1 || { print -u2 -r -- "gunzip is required to extract '$archive_arg'"; return 1; }
+      command -v gunzip >/dev/null 2>&1 || { print -u2 -r -- "extract: gunzip is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
         output="$destination/${archive:t:r}"
         _extract_stream_to "$output" "$archive" gunzip || return
@@ -226,7 +226,7 @@ extract() {
       fi
       ;;
     *.xz)
-      command -v unxz >/dev/null 2>&1 || { print -u2 -r -- "unxz is required to extract '$archive_arg'"; return 1; }
+      command -v unxz >/dev/null 2>&1 || { print -u2 -r -- "extract: unxz is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
         output="$destination/${archive:t:r}"
         _extract_stream_to "$output" "$archive" unxz || return
@@ -237,7 +237,7 @@ extract() {
       fi
       ;;
     *.lzma)
-      command -v unlzma >/dev/null 2>&1 || { print -u2 -r -- "unlzma is required to extract '$archive_arg'"; return 1; }
+      command -v unlzma >/dev/null 2>&1 || { print -u2 -r -- "extract: unlzma is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
         output="$destination/${archive:t:r}"
         _extract_stream_to "$output" "$archive" unlzma || return
@@ -249,7 +249,7 @@ extract() {
       ;;
     *.zst)
       # unzstd keeps its input natively, so --keep needs no extra flag.
-      command -v unzstd >/dev/null 2>&1 || { print -u2 -r -- "unzstd is required to extract '$archive_arg'"; return 1; }
+      command -v unzstd >/dev/null 2>&1 || { print -u2 -r -- "extract: unzstd is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination ]]; then
         output="$destination/${archive:t:r}"
         _extract_stream_to "$output" "$archive" unzstd || return
@@ -258,7 +258,7 @@ extract() {
       fi
       ;;
     *.Z)
-      command -v uncompress >/dev/null 2>&1 || { print -u2 -r -- "uncompress is required to extract '$archive_arg'"; return 1; }
+      command -v uncompress >/dev/null 2>&1 || { print -u2 -r -- "extract: uncompress is required to extract '$archive_arg'"; return 1; }
       if [[ -n $destination || $keep_input -eq 1 ]]; then
         output="${destination:-${archive:h}}/${archive:t:r}"
         _extract_stream_to "$output" "$archive" uncompress || return
@@ -267,7 +267,7 @@ extract() {
       fi
       ;;
     *)
-      print -u2 -r -- "'$archive_arg' cannot be extracted via extract()"
+      print -u2 -r -- "extract: cannot extract '$archive_arg'; unsupported archive type"
       return 1
       ;;
   esac
@@ -286,6 +286,7 @@ mkcd() {
   esac
 
   if (( $# != 1 )); then
+    print -u2 -r -- 'mkcd: expected exactly one directory'
     print -u2 -r -- 'Usage: mkcd <directory>'
     return 1
   fi
@@ -299,17 +300,123 @@ mkcd() {
 
 # Print the name-search options without depending on a backend.
 _ff_usage() {
-  print 'Usage: ff [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]'
+  print 'Usage: ff [--pick] [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]'
   print 'Find names case-insensitively; hidden entries and symlink following are enabled by default.'
+  print -r -- 'Returns 1 when nothing matched. --pick chooses a match in fzf and opens it in $VISUAL or $EDITOR.'
   print -r -- '--no-ignore includes entries ignored by fd; find fallback has no ignore-file filtering.'
+}
+
+# Shared by ff --pick and ft --pick. Both need a ready fzf and a terminal.
+_search_pick_require() {
+  emulate -L zsh
+
+  local command_name=$1
+  _zsh_require_fzf || return 1
+  if [ ! -t 0 ] || [ ! -t 1 ]; then
+    print -u2 -r -- "${command_name}: --pick requires an interactive terminal"
+    return 1
+  fi
+}
+
+# Run a --pick backend to completion before any picker opens, so an empty
+# result never shows an empty fzf. Usage: _search_pick_collect <ff|ft>
+# <pattern> <nul-to-tab:0|1> <backend ...>. On success REPLY holds the rows.
+# Nothing matched prints "<command>: no matches for '<pattern>'" and returns 1;
+# a backend that failed without output returns its own status. Stderr from the
+# backend is left alone. The backend ends before fzf starts, so no shell stage
+# is still running when fzf takes over the terminal.
+_search_pick_collect() {
+  emulate -L zsh
+  setopt localoptions pipefail
+
+  local command_name=$1 pattern=$2 convert=$3 rows
+  local -i backend_status
+  shift 3
+
+  if (( convert )); then
+    rows=$("$@" | command tr '\0' '\t')
+  else
+    rows=$("$@")
+  fi
+  backend_status=$?
+
+  if [[ -z $rows ]]; then
+    # fd and find exit 0 for no match; rg and grep exit 1.
+    if (( backend_status == 0 )) || [[ $command_name == ft && $backend_status -eq 1 ]]; then
+      _ui_safe_text_reply "$pattern"
+      print -u2 -r -- "${command_name}: no matches for '$REPLY'"
+      return 1
+    fi
+    return $backend_status
+  fi
+  REPLY=$rows
+}
+
+# Open a picked file in ${VISUAL:-$EDITOR}, at a line for editors known to take
+# +<line>; with no editor configured, print the choice instead.
+_search_pick_open() {
+  emulate -L zsh
+
+  local file=$1 line=${2-} editor=${VISUAL:-${EDITOR-}}
+  local -a words
+
+  if [[ -z $editor ]]; then
+    print -r -- "${file}${line:+:$line}"
+    return 0
+  fi
+  words=( "${(@Q)${(z)editor}}" )
+  # ./ keeps a leading dash from being read as an editor option.
+  [[ $file == -* ]] && file=./$file
+  if [[ -n $line ]]; then
+    case ${words[1]:t} in
+      vi|vim|nvim|view|nano|emacs|emacsclient|micro) words+=("+$line") ;;
+    esac
+  fi
+  command "${words[@]}" "$file"
+}
+
+# Run a search backend, streaming its output as it arrives, and return 1 when
+# it printed nothing (the rg/grep no-match convention). A backend failure keeps
+# its own status. The shell reads only the first line; the rest is copied in
+# blocks with zsh/system, so no external cat is needed and nothing is buffered
+# beyond one block.
+_ff_stream() {
+  emulate -L zsh
+
+  local first='' chunk=''
+  local -i seen=0 backend_status write_failed=0
+  local -i have_sysio=0
+
+  zmodload -F zsh/system b:sysread b:syswrite 2>/dev/null && have_sysio=1
+
+  "$@" | {
+    if IFS= read -r first || [[ -n $first ]]; then
+      seen=1
+      print -r -- "$first" 2>/dev/null || write_failed=1
+      if (( write_failed )); then
+        :
+      elif (( have_sysio )); then
+        while sysread -s 65536 chunk; do
+          syswrite -- "$chunk" 2>/dev/null || { write_failed=1; break; }
+        done
+      else
+        command cat || write_failed=1
+      fi
+    fi
+  }
+  backend_status=${pipestatus[1]}
+  (( write_failed )) && return 1
+  (( backend_status == 0 )) || return $backend_status
+  (( seen )) || return 1
+  return 0
 }
 
 # Find files by name
 ff() {
   emulate -L zsh
 
-  local arg pattern='' search_root='.'
-  local -i hidden=1 no_ignore=0 follow=1 options_done=0
+  local arg pattern='' search_root='.' fd_bin=''
+  local -i hidden=1 no_ignore=0 follow=1 options_done=0 pick=0
   local -a operands fd_args
 
   while (( $# > 0 )); do
@@ -341,6 +448,10 @@ ff() {
           follow=0
           continue
           ;;
+        --pick)
+          pick=1
+          continue
+          ;;
         --)
           options_done=1
           continue
@@ -364,7 +475,7 @@ ff() {
   (( ${#operands[@]} == 2 )) && search_root=${operands[2]}
 
   if [ ! -d "$search_root" ]; then
-    print -u2 -r -- "'$search_root' is not a directory"
+    print -u2 -r -- "ff: '$search_root' is not a directory"
     return 1
   fi
   # Keep results relative to the path as typed; ./ stops find reading a leading
@@ -372,17 +483,28 @@ ff() {
   [[ $search_root == -* ]] && search_root=./$search_root
 
   if command -v fd >/dev/null 2>&1; then
-    (( hidden )) && fd_args+=(--hidden)
-    (( no_ignore )) && fd_args+=(--no-ignore)
-    (( follow )) && fd_args+=(--follow)
-    fd_args+=(--glob --ignore-case -- "*$pattern*" "$search_root")
-    command fd "${fd_args[@]}"
+    fd_bin=fd
   elif command -v fdfind >/dev/null 2>&1; then
+    fd_bin=fdfind
+  fi
+
+  if (( pick )); then
+    _search_pick_require ff || return 1
+  fi
+
+  if [[ -n $fd_bin ]]; then
     (( hidden )) && fd_args+=(--hidden)
     (( no_ignore )) && fd_args+=(--no-ignore)
     (( follow )) && fd_args+=(--follow)
-    fd_args+=(--glob --ignore-case -- "*$pattern*" "$search_root")
-    command fdfind "${fd_args[@]}"
+    fd_args+=(--glob --ignore-case)
+    # fd drops its colour when piped, so ask for it when we own a terminal.
+    (( ! pick )) && [[ -t 1 && -z ${NO_COLOR:-} ]] && fd_args+=(--color=always)
+    fd_args+=(-- "*$pattern*" "$search_root")
+    if (( pick )); then
+      _ff_pick "$pattern" command "$fd_bin" "${fd_args[@]}"
+      return $?
+    fi
+    _ff_stream command "$fd_bin" "${fd_args[@]}"
   else
     local -a find_args
     find_args=()
@@ -396,14 +518,56 @@ ff() {
       # directories and exclude hidden files while retaining the requested root.
       find_args+=( \( -name '.*' ! -path "$search_root" -prune \) -o \( ! -name '.*' -iname "*$pattern*" -print \) )
     fi
-    command find "${find_args[@]}"
+    if (( pick )); then
+      _ff_pick "$pattern" command find "${find_args[@]}"
+      return $?
+    fi
+    _ff_stream command find "${find_args[@]}"
   fi
+}
+
+# ff --pick: choose one match in fzf and open it. Escape opens nothing.
+_ff_pick() {
+  emulate -L zsh
+
+  local pattern=$1 preview selected rows
+  local -i rc
+  local -a fzf_args context_args preview_args
+  shift
+
+  _search_pick_collect ff "$pattern" 0 "$@" || return $?
+  rows=$REPLY
+
+  _fzf_file_preview_command
+  preview=$REPLY
+  _fzf_picker_context_args Files 'Type to filter matches' 'Enter open  Ctrl-P preview  Ctrl-/ wrap  Esc close'
+  context_args=( "${reply[@]}" )
+  _fzf_picker_preview_args File
+  preview_args=( "${reply[@]}" )
+  fzf_args=(
+    "${context_args[@]}"
+    "${preview_args[@]}"
+    --scheme=path
+    --no-multi
+    "--preview=$preview"
+  )
+
+  selected=$(command fzf "${fzf_args[@]}" <<< "$rows")
+  rc=$?
+  case $rc in
+    0) ;;
+    1|130) return 0 ;;
+    *) return $rc ;;
+  esac
+  [[ -n $selected ]] || return 0
+  _search_pick_open "$selected"
 }
 
 # Print the content-search options without depending on a backend.
 _ft_usage() {
-  print 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]'
+  print 'Usage: ft [--pick] [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]'
   print 'Search text with rg or grep; fixed-string matching is available on both backends.'
+  print -r -- '--pick chooses a matching line in fzf and opens its file at that line in $VISUAL or $EDITOR.'
   print 'The grep fallback already traverses hidden files and does not read ignore files.'
 }
 
@@ -412,7 +576,7 @@ ft() {
   emulate -L zsh
 
   local arg pattern='' search_root='.'
-  local -i hidden=0 no_ignore=0 follow=0 fixed_strings=0 ignore_case=0 options_done=0
+  local -i hidden=0 no_ignore=0 follow=0 fixed_strings=0 ignore_case=0 options_done=0 pick=0
   local -a operands search_args
 
   while (( $# > 0 )); do
@@ -444,6 +608,10 @@ ft() {
           ignore_case=1
           continue
           ;;
+        --pick)
+          pick=1
+          continue
+          ;;
         --)
           options_done=1
           continue
@@ -466,12 +634,22 @@ ft() {
   pattern=${operands[1]}
   (( ${#operands[@]} == 2 )) && search_root=${operands[2]}
 
+  if (( pick )); then
+    _search_pick_require ft || return 1
+  fi
+
   if command -v rg >/dev/null 2>&1; then
     (( hidden )) && search_args+=(--hidden)
     (( no_ignore )) && search_args+=(--no-ignore)
     (( follow )) && search_args+=(--follow)
     (( fixed_strings )) && search_args+=(--fixed-strings)
     (( ignore_case )) && search_args+=(--ignore-case)
+    if (( pick )); then
+      # --null ends the file name with NUL, so ":" in names cannot confuse the parse.
+      search_args+=(--null --line-number --with-filename --no-heading --color=never -- "$pattern" "$search_root")
+      _ft_pick "$pattern" command rg "${search_args[@]}"
+      return $?
+    fi
     search_args+=(--color=auto -- "$pattern" "$search_root")
     command rg "${search_args[@]}"
   else
@@ -489,9 +667,63 @@ ft() {
       search_args+=(-E)
     fi
     (( ignore_case )) && search_args+=(-i)
+    if (( pick )); then
+      search_args+=(-HZ --color=never -- "$pattern" "$search_root")
+      _ft_pick "$pattern" command grep "${search_args[@]}"
+      return $?
+    fi
     search_args+=(--color=auto -- "$pattern" "$search_root")
     command grep "${search_args[@]}"
   fi
+}
+
+# ft --pick: choose one matching line in fzf and open its file there. The
+# backend prints "file<NUL>line:text"; tr turns the NUL into a tab, giving rows
+# of "file<TAB>line:text". Both finish (in _search_pick_collect) before fzf
+# starts: a forked shell stage still running when fzf takes over the terminal
+# resets its modes on exit and makes fzf ignore keys.
+_ft_pick() {
+  emulate -L zsh
+
+  local pattern=$1 preview selected file line rest rows color=always
+  local -i rc
+  local -a fzf_args context_args preview_args
+  shift
+
+  _search_pick_collect ft "$pattern" 1 "$@" || return $?
+  rows=$REPLY
+
+  [[ -n ${NO_COLOR:-} ]] && color=never
+  # {1} is the file and {2} is "line:text"; fzf quotes both for the shell.
+  preview='l={2}; l=${l%%:*}; s=$(( l > 6 ? l - 5 : 1 )); e=$(( l + 25 )); if command -v bat >/dev/null 2>&1; then bat --style=numbers --color='$color' --highlight-line "$l" --line-range="$s:$e" -- {1}; elif command -v batcat >/dev/null 2>&1; then batcat --style=numbers --color='$color' --highlight-line "$l" --line-range="$s:$e" -- {1}; else sed -n "${s},${e}p" -- {1}; fi'
+  _fzf_picker_context_args Matches 'Type to filter matches' 'Enter open at line  Ctrl-P preview  Ctrl-/ wrap  Esc close'
+  context_args=( "${reply[@]}" )
+  _fzf_picker_preview_args Context
+  preview_args=( "${reply[@]}" )
+  fzf_args=(
+    "${context_args[@]}"
+    "${preview_args[@]}"
+    --delimiter=$'\t'
+    --tabstop=2
+    --with-nth=1,2
+    --nth=1,2
+    --accept-nth=1,2
+    --no-multi
+    "--preview=$preview"
+  )
+
+  selected=$(command fzf "${fzf_args[@]}" <<< "$rows")
+  rc=$?
+  case $rc in
+    0) ;;
+    1|130) return 0 ;;
+    *) return $rc ;;
+  esac
+  [[ -n $selected ]] || return 0
+  file=${selected%%$'\t'*}
+  rest=${selected#*$'\t'}
+  line=${rest%%:*}
+  _search_pick_open "$file" "$line"
 }
 
 # Preview file (uses bat if available)
@@ -507,6 +739,7 @@ peek() {
   esac
 
   if (( $# != 1 )); then
+    print -u2 -r -- 'peek: expected exactly one file'
     print -u2 -r -- 'Usage: peek <file>'
     return 1
   fi
@@ -664,7 +897,7 @@ _zsh_scan_print_errors() {
 
   local REPLY
   _zsh_scan_errors_reply || return 0
-  print -u2 -r -- "Scan errors: $REPLY"
+  print -u2 -r -- "${1:+$1: }scan errors: $REPLY"
 }
 
 # Disk usage summary for current directory
@@ -680,6 +913,7 @@ dusage() {
       ;;
   esac
   if (( $# > 2 )); then
+    print -u2 -r -- 'dusage: too many arguments'
     print -u2 -r -- 'Usage: dusage [path] [count]'
     return 1
   fi
@@ -700,12 +934,13 @@ dusage() {
   display_target=$(_ui_safe_text "$target")
 
   if [ ! -d "$target" ]; then
-    print -u2 -r -- "'$display_target' is not a directory"
+    print -u2 -r -- "dusage: '$display_target' is not a directory"
     return 1
   fi
 
   case $limit in
     ''|*[!0-9]*)
+      print -u2 -r -- "dusage: count must be a whole number: $limit"
       print -u2 -r -- 'Usage: dusage [path] [count]'
       return 1
       ;;
@@ -724,8 +959,8 @@ dusage() {
 
   if (( ${#records[@]} == 0 )); then
     if (( scan_status != 0 )); then
-      print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
-      _zsh_scan_print_errors
+      print -u2 -r -- "dusage: incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      _zsh_scan_print_errors dusage
       return $scan_status
     fi
     echo "No entries found in '$display_target'"
@@ -746,8 +981,8 @@ dusage() {
       printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_safe_text "$entry_path")"
     done
     if (( scan_status != 0 )); then
-      print -u2 -r -- "Incomplete scan in '$display_target' (du exit $scan_status); results are partial"
-      _zsh_scan_print_errors
+      print -u2 -r -- "dusage: incomplete scan in '$display_target' (du exit $scan_status); results are partial"
+      _zsh_scan_print_errors dusage
       return $scan_status
     fi
     return 0
@@ -834,7 +1069,7 @@ dusage() {
   print -r -- "$footer_text"
   _ui_reset
   if (( scan_status != 0 )); then
-    print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+    print -u2 -r -- "dusage: incomplete scan in '$display_target' ($incomplete_detail); results are partial"
   fi
   break
   done
@@ -856,6 +1091,7 @@ bigfiles() {
       ;;
   esac
   if (( $# > 2 )); then
+    print -u2 -r -- 'bigfiles: too many arguments'
     print -u2 -r -- 'Usage: bigfiles [path] [count]'
     return 1
   fi
@@ -876,13 +1112,14 @@ bigfiles() {
   display_target=$(_ui_safe_text "$target")
 
   if [ ! -e "$target" ]; then
-    print -u2 -r -- "'$display_target' does not exist"
+    print -u2 -r -- "bigfiles: '$display_target' does not exist"
     return 1
   fi
   target=${target:A}
 
   case $limit in
     ''|*[!0-9]*)
+      print -u2 -r -- "bigfiles: count must be a whole number: $limit"
       print -u2 -r -- 'Usage: bigfiles [path] [count]'
       return 1
       ;;
@@ -897,8 +1134,8 @@ bigfiles() {
 
   if (( ${#records[@]} == 0 && ${scan_result[count]:-0} == 0 )); then
     if (( incomplete_status != 0 )); then
-      print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
-      _zsh_scan_print_errors
+      print -u2 -r -- "bigfiles: incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      _zsh_scan_print_errors bigfiles
       return $incomplete_status
     fi
 
@@ -931,8 +1168,8 @@ bigfiles() {
       printf '%-8s %s\n' "$(_ui_human_kib "$kib")" "$(_ui_safe_text "$file_path")"
     done
     if (( incomplete_status != 0 )); then
-      print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
-      _zsh_scan_print_errors
+      print -u2 -r -- "bigfiles: incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+      _zsh_scan_print_errors bigfiles
       return $incomplete_status
     fi
     return 0
@@ -1015,7 +1252,7 @@ bigfiles() {
   print -r -- "$footer_text"
   _ui_reset
   if (( incomplete_status != 0 )); then
-    print -u2 -r -- "Incomplete scan in '$display_target' ($incomplete_detail); results are partial"
+    print -u2 -r -- "bigfiles: incomplete scan in '$display_target' ($incomplete_detail); results are partial"
   fi
   break
   done

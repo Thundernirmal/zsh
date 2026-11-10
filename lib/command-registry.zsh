@@ -75,8 +75,8 @@ _zsh_help_register dusage Files 'Rank immediate entries by disk usage' 'dusage [
 _zsh_help_register bigfiles Files 'Rank files recursively by size' 'bigfiles [path] [count]' 'bigfiles . 10' 'GNU find and du' function disk
 _zsh_help_register grep Search 'Search text with automatic colour' 'grep <pattern> [file ...]' 'grep TODO README.md' 'grep with --color=auto support' alias none
 _zsh_help_register diff Files 'Compare files with automatic colour' 'diff <file-a> <file-b>' 'diff before.txt after.txt' 'diff with --color=auto support' alias none
-_zsh_help_register ff Search 'Find files by name' 'ff [options] <pattern> [path]' 'ff config .' 'fd, fdfind, or find' function file-search
-_zsh_help_register ft Search 'Search file contents' 'ft [options] <pattern> [path]' 'ft TODO .' 'rg or grep' function text-search
+_zsh_help_register ff Search 'Find files by name; --pick opens a match' 'ff [--pick] [options] <pattern> [path]' 'ff config .' 'fd, fdfind, or find; fzf 0.68.0+ for --pick' function file-search
+_zsh_help_register ft Search 'Search file contents; --pick opens a match' 'ft [--pick] [options] <pattern> [path]' 'ft TODO .' 'rg or grep; fzf 0.68.0+ for --pick' function text-search
 
 # Git
 _zsh_help_register glog Git 'Graph the latest 20 commits' 'glog' 'glog' git alias git
@@ -84,7 +84,7 @@ _zsh_help_register gpr Git 'Pull with rebase' 'gpr' 'gpr' git alias git
 _zsh_help_register gun Git 'Undo the latest commit; keep changes staged' 'gun' 'gun' git alias git
 _zsh_help_register gitcount Git 'Count non-merge commits by contributor' 'gitcount' 'gitcount' git function git
 _zsh_help_register gcount Git 'Alias for gitcount' 'gcount' 'gcount' git alias git
-_zsh_help_register fbr Git 'Pick a branch; enter its worktree or check it out' 'fbr' 'fbr' 'git and fzf 0.68.0+' function git-fzf
+_zsh_help_register fbr Git 'Pick a branch; enter its worktree or check it out' 'fbr [query]' 'fbr feat' 'git and fzf 0.68.0+' function git-fzf
 
 # System
 _zsh_help_register weather System 'Show the default HTTPS forecast' 'weather' 'weather' curl function curl
@@ -114,7 +114,7 @@ _zsh_help_register T Meta 'Pipe command output to tail' '<command> T' 'git log -
 _zsh_help_register NE Meta 'Suppress stderr for one command' '<command> NE' 'optional-command NE' none alias none
 _zsh_help_register NUL Meta 'Suppress stdout and stderr for one command' '<command> NUL' 'noisy-command NUL' none alias none
 _zsh_help_register zdoctor Meta 'Diagnose setup and integration status' 'zdoctor [--network] [--secrets]' 'zdoctor' none function none
-_zsh_help_register tips Meta 'Print one short usage tip' 'tips' 'tips' none function none
+_zsh_help_register tips Meta 'Print a random tip, list them all, or search them' 'tips [--all | <query>]' 'tips git' none function none
 _zsh_help_register ztheme Meta 'Inspect or switch shared terminal themes' 'ztheme <list|current|show|use|reset|export> [theme]' 'ztheme use nord' none function none
 _zsh_help_register zhelp Meta 'Find commands and queue an example' 'zhelp [--all] [--plain] [query]' 'zhelp package' 'fzf 0.68.0+ for the optional interactive palette' function none
 

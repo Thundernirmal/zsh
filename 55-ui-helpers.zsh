@@ -703,3 +703,64 @@ _ui_visible_count() {
 
   print -r -- "$requested"
 }
+
+# Closest candidates to a mistyped word, as array `reply`: edit distance of at
+# most 2 (and below the word's length), nearest first, then candidate order.
+# Pure Zsh with no external processes. Usage: _ui_close_matches <word> <candidate...>
+_ui_close_matches() {
+  emulate -L zsh
+
+  local word=${(L)1} candidate target
+  shift
+  local -i lw=${#word} lc i j d cost
+  local -a prev curr bucket0 bucket1 bucket2
+  typeset -ga reply
+  reply=()
+  (( lw >= 2 )) || return 1
+
+  for candidate in "$@"; do
+    target=${(L)candidate}
+    lc=${#target}
+    (( lc - lw > 2 || lw - lc > 2 )) && continue
+    prev=( {0..$lc} )
+    for (( i = 1; i <= lw; i++ )); do
+      curr=( $i )
+      for (( j = 1; j <= lc; j++ )); do
+        [[ ${word[i]} == "${target[j]}" ]] && cost=0 || cost=1
+        d=$(( prev[j] + cost ))
+        (( prev[j+1] + 1 < d )) && d=$(( prev[j+1] + 1 ))
+        (( curr[j] + 1 < d )) && d=$(( curr[j] + 1 ))
+        curr+=( $d )
+      done
+      prev=( "${curr[@]}" )
+    done
+    d=${prev[-1]}
+    (( d < lw )) || continue
+    case $d in
+      0) bucket0+=("$candidate") ;;
+      1) bucket1+=("$candidate") ;;
+      2) bucket2+=("$candidate") ;;
+    esac
+  done
+
+  reply=( "${bucket0[@]}" "${bucket1[@]}" "${bucket2[@]}" )
+  (( ${#reply[@]} > 0 ))
+}
+
+# Short usage error on stderr, status 1: the message, a suggestion when a
+# candidate is close to the mistyped word, the one-line usage, and a pointer to
+# the full help. Usage: _ui_usage_error <command> <usage> <message> [word candidate...]
+_ui_usage_error() {
+  emulate -L zsh
+
+  local command_name=$1 usage=$2 message=$3 word=${4-}
+  shift $(( $# < 4 ? $# : 4 ))
+
+  print -u2 -r -- "${command_name}: ${message}"
+  if [[ -n $word ]] && _ui_close_matches "$word" "$@"; then
+    print -u2 -r -- "Did you mean: ${reply[1]}?"
+  fi
+  print -u2 -r -- "Usage: ${usage}"
+  print -u2 -r -- "Run '${command_name} --help' for the full reference."
+  return 1
+}

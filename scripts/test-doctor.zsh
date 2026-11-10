@@ -86,7 +86,7 @@ test_usage() {
 
   output=$(zdoctor --bogus 2>&1); rc=$?
   assert_status "$rc" 1 'zdoctor rejects unknown options' || return 1
-  assert_contains "$output" 'Unknown zdoctor option' 'zdoctor names the rejected option' || return 1
+  assert_contains "$output" 'zdoctor: unknown option' 'zdoctor names the rejected option' || return 1
 
   output=$(zdoctor surplus 2>&1); rc=$?
   assert_status "$rc" 1 'zdoctor rejects positional arguments' || return 1

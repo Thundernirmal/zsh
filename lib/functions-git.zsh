@@ -12,6 +12,7 @@ croot() {
       ;;
   esac
   if (( $# > 0 )); then
+    print -u2 -r -- "croot: unexpected argument: $1"
     print -u2 -r -- 'Usage: croot'
     return 1
   fi
@@ -19,7 +20,7 @@ croot() {
   local root
 
   root=$(git rev-parse --show-toplevel 2>/dev/null) || {
-    print -u2 -r -- 'Not in a git repo'
+    print -u2 -r -- 'croot: not in a Git repository'
     return 1
   }
 
@@ -38,12 +39,13 @@ function gitcount() {
       ;;
   esac
   if (( $# > 0 )); then
+    print -u2 -r -- "gitcount: unexpected argument: $1"
     print -u2 -r -- 'Usage: gitcount'
     return 1
   fi
 
   git rev-parse --git-dir >/dev/null 2>&1 || {
-    print -u2 -r -- 'Not in a git repo'
+    print -u2 -r -- 'gitcount: not in a Git repository'
     return 1
   }
 
@@ -108,9 +110,9 @@ _fbr_activate() {
       return
     fi
     if [[ -n $upstream ]]; then
-      print -u2 -r -- "Remote '$branch' does not track local '$local_branch' (upstream: '$upstream'). Refusing to switch."
+      print -u2 -r -- "fbr: remote '$branch' does not track local '$local_branch' (upstream: '$upstream'); refusing to switch"
     else
-      print -u2 -r -- "Remote '$branch' does not track local '$local_branch' (no upstream). Refusing to switch."
+      print -u2 -r -- "fbr: remote '$branch' does not track local '$local_branch' (no upstream); refusing to switch"
     fi
     print -u2 -r -- "To enter the local branch: git switch -- ${(q)local_branch}"
     print -u2 -r -- "To track the remote under a new name: git switch --track -c NEW_BRANCH -- ${(q)branch}"
@@ -118,7 +120,7 @@ _fbr_activate() {
     return 1
   fi
 
-  print -u2 -r -- "Branch '$branch' was not found"
+  print -u2 -r -- "fbr: branch '$branch' was not found"
   return 1
 }
 
@@ -156,31 +158,39 @@ _fbr_ref_rows() {
 }
 
 # Fuzzy-pick a Git branch, entering its worktree or checking it out.
+# Optional words seed the picker's query, as zi and zhelp do.
 fbr() {
   emulate -L zsh
 
+  local query=''
+
   case ${1:-} in
     -h|--help)
-      print 'Usage: fbr'
+      print 'Usage: fbr [query]'
       print 'Pick a local or remote branch and enter its worktree or check it out.'
+      print 'Any words after fbr start the picker with that query.'
       return 0
       ;;
+    --)
+      shift
+      ;;
+    -?*)
+      print -u2 -r -- "fbr: unknown option: $1"
+      print -u2 -r -- 'Usage: fbr [query]'
+      return 1
+      ;;
   esac
-
-  if (( $# > 0 )); then
-    print -u2 -r -- 'Usage: fbr'
-    return 1
-  fi
+  query="${(j: :)@}"
 
   _zsh_require_fzf || return 1
 
   if [ ! -t 0 ] || [ ! -t 1 ]; then
-    print -u2 -r -- 'fbr requires an interactive terminal'
+    print -u2 -r -- 'fbr: an interactive terminal is required'
     return 1
   fi
 
   command git rev-parse --git-dir >/dev/null 2>&1 || {
-    print -u2 -r -- 'Not in a git repo'
+    print -u2 -r -- 'fbr: not in a Git repository'
     return 1
   }
 
@@ -217,6 +227,7 @@ fbr() {
     --no-multi
     "--preview=$preview_command"
   )
+  [[ -n $query ]] && fzf_args+=( "--query=$query" )
 
   current_worktree=$(command git rev-parse --show-toplevel 2>/dev/null) || current_worktree=''
   while IFS= read -r -d '' worktree_branch && IFS= read -r -d '' worktree_path; do

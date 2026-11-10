@@ -381,23 +381,34 @@ zhelp --plain file     # stable text for a pipe or log
 zhelp --help
 ```
 
-The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. A plain listing that hides entries says how many are unavailable and points at `zhelp --all`. Exact names show usage, an example, and live availability.
+The default result set hides commands that cannot run in the current shell. `--all` includes them and shows the missing requirement. A plain listing that hides entries says how many are unavailable and points at `zhelp --all`. A query that matches only unavailable commands says so (`no available commands matched`), names them, points at `zhelp --all <query>`, and still returns 1, rather than reporting no match at all. Exact names show usage, an example, and live availability. The unavailable reason is the missing tool, except for the global aliases, which are opt-in and report `export ZSH_GLOBAL_ALIASES=1 before startup`.
+
+Search matches a query anywhere inside a command name (`kill` finds `fkill`, `ip` finds `myip`), but only at the start of a word in the category, summary, and usage text, never the example. A word starts at the beginning of the text or after a character that is not a letter or digit, so `port` finds `ports` but not commands whose text merely contains "supported" or "exported". Results are ranked: an exact name first, then names starting with the query, then names containing it, then the remaining matches in catalogue order. A multi-word query is matched as one phrase, so `zhelp cgm env` finds `cgm-env`. When nothing matches, `Close matches:` lists up to five commands within two edits of the query (so `zhelp upgk` suggests `upkg`) or sharing its first two letters. The palette searches the same fields.
 
 The catalogue also carries action entries for multi-step workflows: `upkg-plan` (inventory updates), `npkg-remove` (remove a Nix package), and `cgm-env` (load credentials) resolve through their parent command, so they disappear together when the parent is unavailable.
 
-In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. A CLI query only seeds the picker's search text; the whole eligible catalogue stays browsable, so clearing the query broadens results instead of trapping the selection in the pre-filtered rows. Piped or redirected search keeps the deterministic substring filter. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
+In the palette, Enter places the selected example in the editable command buffer. It does not evaluate or execute the text. A CLI query only seeds the picker's search text; the whole eligible catalogue stays browsable, so clearing the query broadens results instead of trapping the selection in the pre-filtered rows. Piped or redirected search keeps the deterministic name-substring and word-start filter described above. Ctrl+P toggles the responsive usage preview, Ctrl+/ toggles preview word wrapping, and Escape closes the palette without changing the buffer. When fzf or a suitable terminal is unavailable, `zhelp` uses plain output and does not invoke a blocked fzf binary.
 
 Sourcing `65-help.zsh` registers only a fixed repository-local loader. The catalogue, availability checks, and any subprocesses are deferred until `zhelp` is called; command completion loads catalogue data only when zhelp completion is invoked.
 
 ### tips
 
-`tips` prints one short hint:
+`tips` prints one short hint, and can also list or search every tip available on this machine:
 
 ```text
 tip: Run mkcd <dir> to create and enter a directory
 ```
 
-It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Manager-specific reminders require that manager; the checkupdates reminder also requires Pacman and fakeroot. Credential reminders require the optional `cgm` function. Run it again for another hint.
+| Command | Result |
+| --- | --- |
+| `tips` | One random tip, never the same tip as the previous call in this shell session |
+| `tips --all` | Every available tip, one per line |
+| `tips <query>` | Every available tip containing the query (case-insensitive), one per line |
+| `tips --help` | Usage for the forms above |
+
+A query with no match prints `tips: no tips matched: <query>` on stderr and returns 1. For example, `tips fbr` lists the branch-picker reminders and `tips git` lists the Git ones.
+
+It is on demand and installs no prompt or command-cycle hook. Its fixed repository-local catalogue is loaded on first use, so environment-dependent tips reflect the shell state at that first call. Manager-specific reminders require that manager; the checkupdates reminder also requires Pacman and fakeroot. Credential reminders require the optional `cgm` function.
 
 ### zdoctor
 
@@ -541,8 +552,8 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 |---|---|
 | `extract [--keep] [--destination <dir>] <archive>` | Unpack a supported archive |
 | `mkcd <dir>` | Create a directory and enter it |
-| `ff [options] <pattern> [path]` | Find names case-insensitively |
-| `ft [options] <pattern> [path]` | Search file contents |
+| `ff [--pick] [options] <pattern> [path]` | Find names case-insensitively; `--pick` opens a match |
+| `ft [--pick] [options] <pattern> [path]` | Search file contents; `--pick` opens a match at its line |
 | `peek <file>` | Preview the first 200 lines with `bat`, `batcat`, or `sed`; a note on stderr says when the file is longer |
 | `headers <url>` | Follow redirects and print HTTP headers |
 | `fanprofile` | Show the current Linux platform or ASUS fan profile |
@@ -554,7 +565,7 @@ Picker-specific actions are unchanged: Escape and interruption remain non-destru
 | `croot` | Change to the current Git repository root |
 | `gitcount` | Show non-merge commit counts by contributor |
 | `fkill [--all] [signal]` | Select processes and send a signal |
-| `fbr` | Select a branch; enter its worktree or check it out |
+| `fbr [query]` | Select a branch; enter its worktree or check it out |
 | `zdoctor [--network] [--secrets]` | Diagnose setup and integration status |
 
 #### extract
@@ -565,15 +576,19 @@ Supported suffixes are `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`, `.tar.lzma`
 
 `ff` prefers `fd`, then `fdfind`, then `find`. It matches a case-insensitive substring glob, includes hidden entries, and follows symlinks by default on every backend. Results follow the path as typed: a relative or omitted path prints relative results, and an absolute path prints absolute ones. `--no-hidden` and `--no-follow` disable those behaviors; `--hidden` and `--follow` make the defaults explicit. `--no-ignore` includes fd-ignored files. The find fallback has no ignore-file filtering and explains that difference when `--no-ignore` is requested.
 
-`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, `--fixed-strings` (`-F`), and `--ignore-case` (`-i`) explicitly; `ft` is case-sensitive unless you ask otherwise. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, uses extended regular expressions (`grep -E`) so alternation such as `'foo|bar'` works on both backends, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches. Both helpers preserve backend error messages on stderr and the native exit status, so inaccessible paths or invalid patterns cannot silently look like an empty result.
+`ft` prefers `rg`, whose defaults exclude hidden and ignored files and do not follow symlinks. Use `--hidden`, `--no-ignore`, `--follow`, `--fixed-strings` (`-F`), and `--ignore-case` (`-i`) explicitly; `ft` is case-sensitive unless you ask otherwise. The recursive grep fallback skips binary files, already searches hidden/ignored files, maps `--follow` to `grep -R`, uses extended regular expressions (`grep -E`) so alternation such as `'foo|bar'` works on both backends, and supports fixed strings. It explains redundant hidden/ignore flags. Backend defaults differ; use explicit flags for broad searches. Both helpers preserve backend error messages on stderr and the native exit status, so inaccessible paths or invalid patterns cannot silently look like an empty result. Both return 1 when nothing matched, the `rg`/`grep` convention: `ff` streams the backend's results as they arrive (nothing is buffered), keeps `fd`'s colour on a terminal and under `NO_COLOR` follows it, and keeps a backend failure's own status instead of reporting it as no match.
+
+`--pick` turns either result list into a chooser. It needs a ready fzf and an interactive terminal, and uses the shared picker frame, footer hints, preview, Ctrl+P, and Ctrl+/ bindings. `ff --pick <pattern> [path]` previews the file and opens the chosen one in `${VISUAL:-$EDITOR}`. `ft --pick <pattern> [path]` lists `file`, then `line:text` per match, previews the file around the match, and opens the file at that line: vi, vim, nvim, view, nano, emacs, emacsclient, and micro receive `+<line>` before the file name, and other editors open the file without a line number. `$VISUAL` or `$EDITOR` may carry arguments (`nvim -p`). With neither set, the choice is printed (`path`, or `path:line` for `ft`) and nothing is opened. Escape returns 0 and opens nothing. The search runs to completion before the picker opens, so with no matches fzf never appears: `ff: no matches for '<pattern>'` (or `ft:`) goes to stderr and the status is 1, and a backend that fails without output returns its own status. File names with spaces, colons, or a leading dash work; names containing tabs or newlines are not supported by `--pick`. Without `--pick`, behaviour is unchanged.
 
 ```zsh
 ff --no-ignore config .
+ff --pick config .
 ft --hidden --no-ignore --fixed-strings 'a.b' src
+ft --pick TODO src
 extract --keep -- file.gz
 ```
 
-Text search uses automatic color for clean redirected output. General helpers accept `-h`/`--help` before work; usage errors return 1. Use `--` to end option parsing in `extract`, `ff`, and `ft`.
+Text search uses automatic color for clean redirected output. General helpers accept `-h`/`--help` before work; usage errors return 1. Every error a helper prints starts with the command name in lower case (`croot: not in a Git repository`, `extract: 'x.zip' is not a valid file`). The shared fzf guard is the exception: it reports as `zsh config:` because it serves every picker. `ztheme`, `npkg`, and `cgm` with no arguments print their usage on stdout and return 0; a wrong subcommand returns 1. Use `--` to end option parsing in `extract`, `ff`, and `ft`.
 
 `headers`, `myip`, and `weather` use 5-second connection and 15-second overall timeout budgets. Override them with positive integer `ZSH_HTTP_CONNECT_TIMEOUT` and `ZSH_HTTP_MAX_TIME` settings. Zero is rejected. Curl failures preserve the exit status and add a command-specific diagnostic.
 
@@ -599,7 +614,7 @@ All three commands apply the safe-text contract described in [Terminal output mo
 
 #### ports and myip
 
-`ports` uses `ss -tulnp`. The dashboard lists TCP before UDP, sorted by port, and shows every socket, so a long list scrolls. `ports 8080` matches one port exactly, and `ports nginx` matches process names; no match prints a diagnostic and returns 1. Piped output keeps native `ss` format and applies the same filter. Process details can be limited by system permissions: `-` means the owner is hidden, and the dashboard then points at `sudo ss -tulnp`. `myip` queries `https://ifconfig.me/ip`. Both use rich dashboards only in capable terminals. `myip` only prints a valid IPv4 or IPv6 address, so a captive portal's page or other unexpected response fails with a diagnostic instead of being shown.
+`ports` uses `ss -tulnp`. The dashboard lists TCP before UDP, sorted by port, and shows every socket, so a long list scrolls. `ports 8080` matches one port exactly, and `ports nginx` matches process names; no match prints a diagnostic and returns 1. Piped output keeps the native `ss` columns and applies the same filter, but like the dashboard it lists TCP rows before UDP rows, with the header line first. Process details can be limited by system permissions: `-` means the owner is hidden, and the dashboard then points at `sudo ss -tulnp`. `myip` queries `https://ifconfig.me/ip`. Both use rich dashboards only in capable terminals. `myip` only prints a valid IPv4 or IPv6 address, so a captive portal's page or other unexpected response fails with a diagnostic instead of being shown.
 
 #### fkill and fbr
 
@@ -612,7 +627,7 @@ fkill 9
 fkill --all 15
 ```
 
-`fbr` lists local and remote branches by recent commit and previews the log. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and Unicode nonspacing and format marks as zero. Committed Unicode 16.0 intervals load on first non-ASCII measurement and use pure-Zsh binary search. Emoji grapheme shaping and ambiguous-width characters remain terminal-dependent. Long values are visibly truncated without changing the hidden canonical ref returned by Enter. Branch/tag name collisions and local/remote namespace collisions do not affect selection, preview, upstream comparison, or worktree lookup. Symbolic remote HEAD aliases are omitted; actual branches ending in `/HEAD` remain selectable. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
+`fbr` lists local and remote branches by recent commit and previews the log. `fbr feat` (any words) starts the picker with that query, as `zi [query]` and `zhelp [query]` do; clearing the query shows every branch again. Its branch and relative-date display columns use fixed terminal-cell widths, so subjects begin in one stable column even when branch names differ; wide CJK characters count as two cells and Unicode nonspacing and format marks as zero. Committed Unicode 16.0 intervals load on first non-ASCII measurement and use pure-Zsh binary search. Emoji grapheme shaping and ambiguous-width characters remain terminal-dependent. Long values are visibly truncated without changing the hidden canonical ref returned by Enter. Branch/tag name collisions and local/remote namespace collisions do not affect selection, preview, upstream comparison, or worktree lookup. Symbolic remote HEAD aliases are omitted; actual branches ending in `/HEAD` remain selectable. A local branch registered to another Git worktree has a prominent `[WT]` badge immediately before its branch name and includes the worktree path later in the row; the current checkout is intentionally unmarked. The badge is coloured in capable terminals and remains plain text otherwise. Selecting a marked branch changes the current shell to its worktree path. A remote selection enters that worktree only when the local branch tracks the selected remote. Other selections keep the checkout behavior: a remote branch creates a tracking branch when no local branch with the same short name exists. When a same-named local branch exists but does not track the selected remote, `fbr` refuses to switch and explains the three safe moves: enter the local branch, track the remote under a new name, or inspect the remote detached. The picker footer reads `Enter worktree/checkout` to reflect both outcomes.
 
 ## Credential manager: cgm
 
@@ -681,6 +696,8 @@ All other installed distro backends remain available through `--only <id>`. For 
 | `upkg clean` | Remove unused packages and manager-owned caches |
 | `upkg managers` | Show active managers and alternates |
 | `upkg help` | Show command help |
+
+An unknown command or option prints a short error on stderr and returns 1: the message, a `Did you mean:` line when a command (including aliases such as `up` and `check`) or flag is within two edits of what was typed, one `Usage:` line, and a pointer to `upkg --help`. `npkg`, `cgm`, and `ztheme` do the same for unknown subcommands, and `ztheme` for a wrong argument count (`ztheme --help` prints the full list). `--help`, `help`, and `-h` print the full reference on stdout and return 0. An unsupported `--only`/`--skip` ID names the supported IDs and the managers detected on this machine.
 
 ### Flags
 
@@ -860,7 +877,7 @@ upkg clean --sudo --only=apt
 | `npkg add` | Open the install picker |
 | `npkg find [--] [query ...]` / `pick` / `fzf` | Open a seeded install picker |
 | `npkg search <query>` / `s` | Plain nixpkgs search |
-| `npkg list` / `ls` | List the current profile |
+| `npkg list` / `ls` | List the current profile: one `NAME VERSION ATTRIBUTE` line per package when `jq` is available |
 | `npkg remove <pkg ...>` / `rm` / `uninstall` / `delete` | Remove profile elements |
 | `npkg remove` | Open the removal picker |
 | `npkg outdated` / `check` / `diff` | Compare installed and evaluated outputs |
@@ -872,7 +889,7 @@ Bare install names become `nixpkgs#<name>`. Flake references and paths pass thro
 
 `refresh`, `outdated`/`check`/`diff`, and `find`/`pick`/`fzf` handle `-h` or `--help` before any Nix query, cache access, or picker launch. Help returns zero. Refresh and outdated aliases accept no operands or profile flags; unsupported arguments fail before work. Picker aliases preserve query words, including leading dashes; `--` ends help recognition and is removed from the query, so `npkg find -- --help` searches for the literal word `--help`. A help word before `--` shows usage, even after other query words.
 
-Native `add`/`install`/`i`, `remove` aliases, `list`/`ls`, `search`/`s`, and `upgrade` aliases retain their argument forwarding. Their help flags go to native Nix and can have its normal initialization behavior.
+Bare `npkg list` prints a compact table, one package per line, decoded from `nix profile list --json` by the same code `npkg outdated` uses, so both element shapes Nix has produced are handled. The version is read from the first store path's name, so a package whose store path carries no version shows `-`. With any argument (`npkg list --profile PATH`), without `jq`, or when the profile cannot be decoded, it is the native `nix profile list`. Native `add`/`install`/`i`, `remove` aliases, `list`/`ls` with arguments, `search`/`s`, and `upgrade` aliases retain their argument forwarding. Their help flags go to native Nix and can have its normal initialization behavior.
 
 ### Picker cache and dependencies
 
@@ -968,7 +985,7 @@ Run the repository-owned ordered sequence:
 zsh scripts/run-tests.zsh
 ```
 
-The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. Maintainers can regenerate width intervals with `python3 scripts/generate-width-data.py`; review the recorded Unicode version when doing so. A separate CI job runs `python3 scripts/test-fzf-pty.py`, `scripts/test-ui-pty.py`, and `scripts/test-preview.py` against real fzf 0.68.0 and 0.74.3, because the main job has no fzf and skips them. The fzf suite covers shared picker arguments and actual `fbr` with one/two branches across all three layouts at 50/80/99/100/101/110/120 columns, including initial row visibility, filtering, preview toggles, and live resizing. Normal selection changes detached HEAD to the chosen branch; worktree selection changes directory; cancellation preserves the starting state. Unicode/ASCII, `NO_COLOR`, multi-selection, and measured frame sizing at 12/16/24 terminal rows are also checked. Preview-free widget/completion frame sizing is exercised through exported defaults; host keybinding and completion wiring remains part of manual QA. `run-tests.zsh` also runs it whenever `python3` and `fzf` are installed and prints a skip line otherwise; set `FZF_BIN` when running the script directly to test another binary. Each PTY case isolates HOME, cache storage, and host finder options, including `FZF_DEFAULT_OPTS_FILE`; a hostile-options self-check covers both harnesses. These checks use fixture rows and perform no package mutations. `run-tests.zsh` also runs `python3 scripts/test-upkg-pty.py` whenever `python3` is installed; it uses stubbed managers in a real PTY to check that `upkg` elapsed time includes a delayed answer to a native prompt and survives terminal Ctrl-C. It also runs `python3 scripts/test-upkg-parallel.py`, which checks `--parallel` ordering, overlap, search, and Ctrl-C with stubbed managers, and `python3 scripts/test-cgm-pty.py`, which presses Ctrl-C at a stubbed `cgm set` prompt in a real interactive shell and checks that no name is recorded. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
+The runner owns the syntax checks, regression suites, and fixed-install-path smoke test used by CI. Maintainers can regenerate width intervals with `python3 scripts/generate-width-data.py`; review the recorded Unicode version when doing so. A separate CI job runs `python3 scripts/test-fzf-pty.py`, `scripts/test-ui-pty.py`, and `scripts/test-preview.py` against real fzf 0.68.0 and 0.74.3, because the main job has no fzf and skips them. The fzf suite covers shared picker arguments and actual `fbr` with one/two branches across all three layouts at 50/80/99/100/101/110/120 columns, including initial row visibility, filtering, preview toggles, and live resizing. The same suite checks `fbr <query>` seeding the picker, `ff --pick` and `ft --pick` opening the chosen file (spaces, colons, leading dashes, `+<line>`, Escape, no-editor output, and the empty-result message and status, on the `rg`, `grep`, `fd`, and `find` backends), and `ff` keeping colour and its no-match status on a terminal. Normal selection changes detached HEAD to the chosen branch; worktree selection changes directory; cancellation preserves the starting state. Unicode/ASCII, `NO_COLOR`, multi-selection, and measured frame sizing at 12/16/24 terminal rows are also checked. Preview-free widget/completion frame sizing is exercised through exported defaults; host keybinding and completion wiring remains part of manual QA. `run-tests.zsh` also runs it whenever `python3` and `fzf` are installed and prints a skip line otherwise; set `FZF_BIN` when running the script directly to test another binary. Each PTY case isolates HOME, cache storage, and host finder options, including `FZF_DEFAULT_OPTS_FILE`; a hostile-options self-check covers both harnesses. These checks use fixture rows and perform no package mutations. `run-tests.zsh` also runs `python3 scripts/test-upkg-pty.py` whenever `python3` is installed; it uses stubbed managers in a real PTY to check that `upkg` elapsed time includes a delayed answer to a native prompt and survives terminal Ctrl-C. It also runs `python3 scripts/test-upkg-parallel.py`, which checks `--parallel` ordering, overlap, search, and Ctrl-C with stubbed managers, and `python3 scripts/test-cgm-pty.py`, which presses Ctrl-C at a stubbed `cgm set` prompt in a real interactive shell and checks that no name is recorded. `skills-lock.json` records maintainer skill provenance and is not a runtime dependency or package-manager lockfile.
 
 The environment check is optional because it reflects the current machine rather than repository correctness:
 

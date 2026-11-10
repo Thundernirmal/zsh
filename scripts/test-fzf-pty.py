@@ -558,6 +558,305 @@ def check_host_finder_isolation(zsh_bin: str, fzf_bin: str) -> None:
     print("ok: hostile finder options leave shared and branch outcomes unchanged")
 
 
+PICK_SCRIPT = textwrap.dedent(
+    r"""
+    emulate -L zsh
+    setopt NO_UNSET
+    typeset -g COLUMNS=100 LINES=32
+    typeset -g ZSH_UI_THEME=terminal ZSH_FZF_THEME=terminal
+    typeset -g ZSH_FZF_LAYOUT=compact ZSH_UI_GLYPHS=ascii
+    source "$1/25-theme.zsh" || exit 10
+    source "$1/40-fzf.zsh" || exit 11
+    source "$1/55-ui-helpers.zsh" || exit 12
+    source "$1/60-functions.zsh" || exit 13
+    cd -- "$2" || exit 14
+    print -r -- PTY_READY
+    eval "$3"
+    print -r -- "RESULT_RC=$?"
+    print -r -- PICK_DONE
+    """
+)
+
+
+def run_pick_scenario(
+    zsh_bin: str,
+    fzf_bin: str,
+    fixture: Path,
+    command: str,
+    marker: bytes | None,
+    keys: bytes | None,
+    extra_env: dict[str, str] | None = None,
+    after_ready: bytes = b"PICK_DONE",
+    count_marker: bytes = b"1/1",
+) -> str:
+    """Run a shell command in a real PTY, optionally answering its picker."""
+
+    with tempfile.TemporaryDirectory(prefix="zsh-pick-pty-") as temporary:
+        home = Path(temporary)
+        environment = isolated_finder_environment()
+        environment.update({
+            "HOME": str(home), "XDG_CACHE_HOME": str(home / ".cache"),
+            "PATH": str(Path(fzf_bin).parent) + os.pathsep + environment.get("PATH", ""),
+            "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+        })
+        environment.pop("NO_COLOR", None)
+        environment.pop("VISUAL", None)
+        environment.pop("EDITOR", None)
+        environment.update(extra_env or {})
+        master, slave = pty.openpty()
+        set_window(master, 100, 32)
+        process = subprocess.Popen(
+            [zsh_bin, "-f", "-c", PICK_SCRIPT, "zsh", str(REPO_ROOT), str(fixture), command],
+            stdin=slave, stdout=slave, stderr=slave, env=environment,
+            close_fds=True, start_new_session=True,
+        )
+        os.close(slave)
+        output = bytearray()
+        try:
+            read_until(master, process, output, b"PTY_READY", 5.0)
+            if marker is not None:
+                read_until(master, process, output, marker, 5.0)
+                # Enter on a row the matcher has not counted yet is ignored, so
+                # wait for the match counter as well as the row text.
+                read_until(master, process, output, count_marker, 5.0)
+            if keys is not None:
+                # Let fzf finish drawing (and answer its terminal queries)
+                # before the key, so it cannot arrive mid-redraw.
+                settle = time.monotonic() + 0.4
+                while time.monotonic() < settle:
+                    ready, _, _ = select.select([master], [], [], 0.1)
+                    if ready:
+                        read_available(master, output)
+                os.write(master, keys)
+            read_until(master, process, output, after_ready, 8.0)
+            drain_until_exit(master, process, output, 5.0)
+        finally:
+            kill_process_group(process)
+            os.close(master)
+        return decode(strip_terminal_controls(output)) if marker is not None or keys is not None else decode(output)
+
+
+def pick_fixture(root: Path) -> tuple[Path, Path, Path]:
+    """A search tree plus a fake editor that records its argument vector."""
+
+    fixture = root / "tree"
+    fixture.mkdir()
+    (fixture / "note one.txt").write_text("alpha\nbeta\n")
+    (fixture / "other.md").write_text("nothing here\n")
+    (fixture / "we:ird.txt").write_text("a\nb\nTODO colon name\nd\n")
+    (fixture / "-lead.txt").write_text("x\nTODO dash name\n")
+    log = root / "editor.log"
+    editor = root / "fake-editor"
+    editor.write_text(
+        "#!/bin/sh\n"
+        'for a in "$@"; do printf "ARG<%s>\\n" "$a" >> "$FAKE_EDITOR_LOG"; done\n'
+    )
+    editor.chmod(0o755)
+    return fixture, editor, log
+
+
+def editor_args(log: Path) -> list[str]:
+    if not log.exists():
+        return []
+    return [line[4:-1] for line in log.read_text().splitlines()]
+
+
+def run_pick_checks(zsh_bin: str, fzf_bin: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="zsh-pick-fixture-") as temporary:
+        root = Path(temporary)
+        fixture, editor, log = pick_fixture(root)
+        env = {"FAKE_EDITOR_LOG": str(log), "EDITOR": str(editor)}
+
+        # ff --pick opens the chosen name; spaces survive as one argument.
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff --pick note .", b"note one", b"\r", env)
+        if result_value(rendered, "RESULT_RC") != "0":
+            raise AssertionError(f"ff --pick failed: {rendered}")
+        if editor_args(log) != ["./note one.txt"]:
+            raise AssertionError(f"ff --pick opened the wrong file: {editor_args(log)}")
+        print("ok: ff --pick opens the chosen file with spaces intact")
+
+        # Esc opens nothing and succeeds.
+        log.unlink(missing_ok=True)
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff --pick note .", b"note one", b"\x1b", env)
+        if result_value(rendered, "RESULT_RC") != "0" or editor_args(log):
+            raise AssertionError(f"ff --pick Esc opened something: {rendered} {editor_args(log)}")
+        print("ok: ff --pick Esc returns 0 and opens nothing")
+
+        # Without an editor the path is printed.
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff --pick note .", b"note one", b"\r")
+        if "./note one.txt\n" not in rendered.replace("\r", ""):
+            raise AssertionError(f"ff --pick without an editor did not print the path: {rendered}")
+        print("ok: ff --pick prints the path when no editor is configured")
+
+        # ft --pick opens at the matching line; a colon in the name is safe.
+        log.unlink(missing_ok=True)
+        env_args = {**env, "EDITOR": f"{editor} --wait"}
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "VISUAL= ft --pick 'TODO colon' .", b"we:ird", b"\r", env_args)
+        if result_value(rendered, "RESULT_RC") != "0":
+            raise AssertionError(f"ft --pick failed: {rendered}")
+        # The fake editor is not on the +line allow-list, so no +3 is passed.
+        if editor_args(log) != ["--wait", "./we:ird.txt"]:
+            raise AssertionError(f"ft --pick opened the wrong target: {editor_args(log)}")
+        print("ok: ft --pick opens a file whose name contains a colon, with editor arguments split")
+
+        # A recognised editor receives +<line> before the file.
+        log.unlink(missing_ok=True)
+        vim = root / "vim"
+        vim.write_text(editor.read_text())
+        vim.chmod(0o755)
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ft --pick 'TODO colon' .", b"we:ird", b"\r",
+                                     {**env, "EDITOR": str(vim)})
+        if editor_args(log) != ["+3", "./we:ird.txt"]:
+            raise AssertionError(f"ft --pick did not pass +line: {editor_args(log)}")
+        print("ok: ft --pick passes +<line> to an editor that accepts it")
+
+        # A leading-dash name (from a dash-named search root) is made safe for the editor.
+        log.unlink(missing_ok=True)
+        dash_root = fixture / "-dir"
+        dash_root.mkdir()
+        (dash_root / "hit.txt").write_text("one\nTODO dash\n")
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ft --pick -- 'TODO dash' -dir", b"-dir/hit.txt", b"\r",
+                                     {**env, "EDITOR": str(vim)})
+        if editor_args(log) != ["+2", "./-dir/hit.txt"]:
+            raise AssertionError(f"leading-dash file was not made safe: {editor_args(log)}")
+        print("ok: ft --pick protects a leading-dash file name from the editor")
+
+        # Esc for ft, and no editor prints path:line.
+        log.unlink(missing_ok=True)
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ft --pick 'TODO colon' .", b"we:ird", b"\x1b", env)
+        if result_value(rendered, "RESULT_RC") != "0" or editor_args(log):
+            raise AssertionError(f"ft --pick Esc opened something: {rendered}")
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ft --pick 'TODO colon' .", b"we:ird", b"\r")
+        if "./we:ird.txt:3\n" not in rendered.replace("\r", ""):
+            raise AssertionError(f"ft --pick without an editor did not print path:line: {rendered}")
+        print("ok: ft --pick Esc opens nothing, and with no editor prints path:line")
+
+        # The grep fallback (no rg on PATH) yields the same rows and targets.
+        log.unlink(missing_ok=True)
+        grep_only = root / "grep-bin"
+        grep_only.mkdir()
+        for tool in ("grep", "sed", "id", "tr"):
+            found = shutil.which(tool)
+            if found:
+                (grep_only / tool).symlink_to(found)
+        (grep_only / "fzf").symlink_to(fzf_bin)
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ft --pick 'TODO colon' .", b"we:ird", b"\r",
+                                     {**env, "EDITOR": str(vim), "PATH": str(grep_only)})
+        if editor_args(log) != ["+3", "./we:ird.txt"]:
+            raise AssertionError(f"ft --pick with grep failed: {editor_args(log)}\n{rendered}")
+        print("ok: ft --pick parses grep output the same way as rg output")
+
+        # The find fallback (no fd or fdfind on PATH) drives ff --pick end to end.
+        log.unlink(missing_ok=True)
+        find_only = root / "find-bin"
+        find_only.mkdir()
+        for tool in ("find", "sed", "id"):
+            found = shutil.which(tool)
+            if found:
+                (find_only / tool).symlink_to(found)
+        (find_only / "fzf").symlink_to(fzf_bin)
+        if shutil.which("fd") or shutil.which("fdfind"):
+            assert not (find_only / "fd").exists() and not (find_only / "fdfind").exists()
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff --pick note .", b"note one", b"\r",
+                                     {**env, "PATH": str(find_only)})
+        if result_value(rendered, "RESULT_RC") != "0" or editor_args(log) != ["./note one.txt"]:
+            raise AssertionError(f"ff --pick with find failed: {editor_args(log)}\n{rendered}")
+        log.unlink(missing_ok=True)
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff --pick note .", b"note one", b"\x1b",
+                                     {**env, "PATH": str(find_only)})
+        if result_value(rendered, "RESULT_RC") != "0" or editor_args(log):
+            raise AssertionError(f"ff --pick with find opened something on Esc: {rendered}")
+        print("ok: ff --pick selects and cancels through the find fallback")
+
+        # An empty result never opens fzf: message on stderr, status 1, nothing opened.
+        log.unlink(missing_ok=True)
+        for command, name, path_env in (
+            ("ff --pick zzzznomatch .", "ff", {}),
+            ("ft --pick zzzznomatch .", "ft", {}),
+            ("ft --pick zzzznomatch .", "ft", {"PATH": str(grep_only)}),
+            ("ff --pick zzzznomatch .", "ff", {"PATH": str(find_only)}),
+        ):
+            rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, command, None, None, {**env, **path_env})
+            plain = rendered.replace("\r", "")
+            if result_value(plain, "RESULT_RC") != "1":
+                raise AssertionError(f"{command} no-match status: {rendered!r}")
+            if f"{name}: no matches for 'zzzznomatch'" not in plain:
+                raise AssertionError(f"{command} did not explain the empty result: {rendered!r}")
+            if "Search" in plain or "\x1b[?1000h" in rendered or editor_args(log):
+                raise AssertionError(f"{command} opened the picker or an editor on an empty result: {rendered!r}")
+        print("ok: --pick with no matches prints a message, returns 1, and never opens fzf")
+
+        # A backend that fails without output keeps its own status.
+        failing = root / "failing-bin"
+        failing.mkdir()
+        (failing / "fd").write_text("#!/bin/sh\nexit 3\n")
+        (failing / "fd").chmod(0o755)
+        (failing / "fzf").symlink_to(fzf_bin)
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff --pick note .", None, None,
+                                     {**env, "PATH": str(failing)})
+        if result_value(rendered.replace("\r", ""), "RESULT_RC") != "3" or "Search" in rendered:
+            raise AssertionError(f"ff --pick hid a backend failure: {rendered!r}")
+        print("ok: ff --pick returns a failing backend's own status without opening fzf")
+
+
+def run_fbr_query_checks(zsh_bin: str, fzf_bin: str) -> None:
+    """fbr starts with the given words as its query; Enter takes the filtered row."""
+
+    for seed, expected_head, expected_dir in (("qa-topic", "qa-topic", "worktree"), ("main", "main", "repo")):
+        with tempfile.TemporaryDirectory(prefix="zsh-fbr-seed-") as temporary:
+            root = Path(temporary)
+            repo, worktree = root / "repo", root / "worktree"
+
+            def git(*args: str) -> None:
+                subprocess.run(
+                    ["git", *args], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5,
+                    env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"},
+                )
+
+            git("init", "-b", "main", str(repo))
+            git("-C", str(repo), "-c", "user.name=QA", "-c", "user.email=qa@example.invalid",
+                "commit", "--allow-empty", "-m", "seed commit")
+            git("-C", str(repo), "branch", "qa-topic")
+            git("-C", str(repo), "checkout", "--detach")
+            git("-C", str(repo), "worktree", "add", str(worktree), "qa-topic")
+            command = (
+                f"fbr {seed}; "
+                'print -r -- "RESULT_CWD=$PWD"; '
+                'print -r -- "RESULT_HEAD=$(command git symbolic-ref --short -q HEAD || print detached)"'
+            )
+            # Wait for the seeded query to be drawn, then accept the only row.
+            rendered = run_pick_scenario(zsh_bin, fzf_bin, repo, command, f"> {seed}".encode(), b"\r",
+                                         count_marker=b"1/2")
+            if result_value(rendered, "RESULT_HEAD") != expected_head:
+                raise AssertionError(f"fbr {seed} picked the wrong branch: {rendered}")
+            wanted = worktree if expected_dir == "worktree" else repo
+            if result_value(rendered, "RESULT_CWD") != str(wanted):
+                raise AssertionError(f"fbr {seed} ended in the wrong directory: {rendered}")
+    print("ok: fbr <query> seeds the picker query and Enter takes the filtered row")
+
+
+def run_ff_status_checks(zsh_bin: str, fzf_bin: str) -> None:
+    """ff reports no match with status 1 and keeps fd's colour on a terminal."""
+
+    with tempfile.TemporaryDirectory(prefix="zsh-ff-status-") as temporary:
+        root = Path(temporary)
+        fixture, _, _ = pick_fixture(root)
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff zzzznomatch .", None, None)
+        if result_value(rendered.replace("\r", ""), "RESULT_RC") != "1":
+            raise AssertionError(f"ff reported a no-match with the wrong status: {rendered}")
+        rendered = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff note .", None, None)
+        if result_value(rendered.replace("\r", ""), "RESULT_RC") != "0":
+            raise AssertionError(f"ff with a match did not succeed: {rendered}")
+        if shutil.which("fd"):
+            if "\x1b[" not in rendered:
+                raise AssertionError(f"ff lost fd's colour on a terminal: {rendered!r}")
+        no_color = run_pick_scenario(zsh_bin, fzf_bin, fixture, "ff note .", None, None, {"NO_COLOR": "1"})
+        if "\x1b[" in no_color.split("PTY_READY", 1)[1]:
+            raise AssertionError(f"ff emitted colour under NO_COLOR: {no_color!r}")
+    print("ok: ff returns 1 on no match and keeps colour on a terminal")
+
+
 def fzf_version(fzf_bin: str) -> str:
     completed = subprocess.run(
         [fzf_bin, "--version"],
@@ -629,6 +928,9 @@ def main() -> int:
             run_case(zsh_bin, fzf_bin, case)
             print(f"ok: {case.name} no-preview exported defaults and measured frame")
     check_host_finder_isolation(zsh_bin, fzf_bin)
+    run_fbr_query_checks(zsh_bin, fzf_bin)
+    run_pick_checks(zsh_bin, fzf_bin)
+    run_ff_status_checks(zsh_bin, fzf_bin)
     return 0
 
 

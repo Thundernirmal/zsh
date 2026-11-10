@@ -609,14 +609,14 @@ test_upkg_timing() {
   output=$(run_timed_upkg 'brew npm' "$two" --only apt 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'unavailable selection keeps its early failure' || return 1
-  assert_contains "$output" 'Selected managers are not available: apt' 'unavailable selection keeps its diagnostic' || return 1
+  assert_contains "$output" 'upkg: selected managers are not available: apt' 'unavailable selection keeps its diagnostic' || return 1
   output=$(run_timed_upkg 'brew npm' "$two" --skip brew,npm 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'empty selection keeps its early failure' || return 1
-  assert_contains "$output" 'No package managers selected' 'empty selection keeps its diagnostic' || return 1
+  assert_contains "$output" 'upkg: no package managers selected' 'empty selection keeps its diagnostic' || return 1
   assert_not_contains "$output" 'elapsed' 'empty selection prints no timing' || return 1
   output=$(run_timed_upkg '' "$two" 2>&1)
-  assert_contains "$output" 'No supported package managers detected.' 'no detected managers keeps its early return' || return 1
+  assert_contains "$output" 'upkg: no supported package managers detected' 'no detected managers keeps its early return' || return 1
   assert_not_contains "$output" 'Total elapsed' 'no detected managers prints no total' || return 1
 
   # Failure, blocked, partial, and filtered results keep their details.
@@ -1464,14 +1464,14 @@ done
   output=$(upkg --only=apt 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'unavailable selected manager returns nonzero' || return 1
-  assert_contains "$output" 'Selected managers are not available: apt' 'unavailable manager is named' || return 1
+  assert_contains "$output" 'upkg: selected managers are not available: apt' 'unavailable manager is named' || return 1
   assert_contains "$output" 'Detected managers: paru, brew, flatpak, nix, npm, pacman' 'unavailable manager error lists detected managers' || return 1
   assert_contains "$output" 'Run: upkg managers' 'unavailable manager error suggests managers view' || return 1
 
   output=$(upkg --skip='paru, brew, flatpak, nix, npm' 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'empty filtered selection returns nonzero' || return 1
-  assert_contains "$output" 'No package managers selected after applying filters.' 'empty selection explains filter result' || return 1
+  assert_contains "$output" 'upkg: no package managers selected after applying filters' 'empty selection explains filter result' || return 1
   assert_contains "$output" 'Skip filter: paru, brew, flatpak, nix, npm' 'empty selection includes skip filter' || return 1
   assert_contains "$output" 'Run: upkg managers --skip paru,brew,flatpak,nix,npm' 'empty selection suggests filtered managers view' || return 1
 
@@ -1528,7 +1528,7 @@ done
   output=$(upkg search broad --only=brew 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 0 'broad brew search succeeds with capped info lookup' || return 1
-  assert_contains "$output" 'Homebrew formula search returned 55 matches; showing first 50.' 'broad brew search reports capped formula results' || return 1
+  assert_contains "$output" 'Homebrew formula search returned 55 matches; showing first 50;' 'broad brew search reports capped formula results' || return 1
   assert_contains "$output" 'brew     pkg50' 'broad brew search includes the last capped formula' || return 1
   assert_not_contains "$output" 'brew     pkg51' 'broad brew search omits uncapped formula results' || return 1
 
@@ -1674,13 +1674,14 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 1 'invalid filter fails in forced rich mode' || return 1
   assert_contains "$output" 'Package Dashboard  outdated' 'invalid filter retains the rich command header' || return 1
-  assert_contains "$output" 'Unsupported manager id: unsupported' 'invalid filter retains its error detail' || return 1
+  assert_contains "$output" 'upkg: unsupported manager id: unsupported' 'invalid filter retains its error detail' || return 1
 
   output=$(run_upkg_rich unknown 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'unknown command fails in forced rich mode' || return 1
-  assert_contains "$output" 'Unified Package Updates  upkg help' 'unknown command reaches the rich usage dashboard' || return 1
-  assert_contains "$output" 'Unknown argument: unknown' 'unknown command retains its error detail' || return 1
+  assert_contains "$output" 'upkg: unknown command: unknown' 'unknown command retains its error detail' || return 1
+  assert_contains "$output" "Run 'upkg --help' for the full reference." 'unknown command points to the full help' || return 1
+  assert_not_contains "$output" 'Unified Package Updates' 'unknown command no longer prints the whole dashboard' || return 1
 
   output=$(run_upkg_rich search 2>&1)
   cmd_status=$?
@@ -1691,7 +1692,7 @@ esac
   cmd_status=$?
   assert_status "$cmd_status" 1 'missing managers fails in forced rich mode' || return 1
   assert_contains "$output" 'Package Dashboard  outdated' 'missing managers retains the rich command header' || return 1
-  assert_contains "$output" 'No supported package managers detected.' 'missing managers retains its error detail' || return 1
+  assert_contains "$output" 'upkg: no supported package managers detected' 'missing managers retains its error detail' || return 1
 
   output=$(upkg plan --only=paru)
   cmd_status=$?
@@ -2192,7 +2193,7 @@ esac
   output=$(run_upkg_with_managers 'npm' clean --only=npm 2>&1)
   cmd_status=$?
   assert_status "$cmd_status" 1 'untrusted npm npx cache keys fail cleanup safely' || return 1
-  assert_contains "$output" 'Could not safely parse npm npx cache keys' 'unsafe npm npx cache key is explained' || return 1
+  assert_contains "$output" 'could not safely parse npm npx cache keys' 'unsafe npm npx cache key is explained' || return 1
   assert_contains "$output" 'npm: partial - npx cache listing could not be parsed' 'unsafe npm npx cache key plus successful verification is partial' || return 1
   assert_not_contains "$(<"$clean_log")" 'npm cache npx rm' 'unsafe npm npx cache key invokes no removal' || return 1
   assert_contains "$(<"$clean_log")" 'npm cache verify' 'unsafe npm npx cache key does not suppress verification' || return 1
@@ -2326,7 +2327,7 @@ esac
     command rm -rf "$inspect_tmp"
     return 1
   }
-  assert_contains "$stderr_output" 'Incomplete scan' 'dusage explains partial results on stderr' || {
+  assert_contains "$stderr_output" 'incomplete scan' 'dusage explains partial results on stderr' || {
     command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
     command rm -rf "$inspect_tmp"
     return 1
@@ -2345,7 +2346,7 @@ esac
     command rm -rf "$inspect_tmp"
     return 1
   }
-  assert_contains "$stderr_output" 'Incomplete scan' 'bigfiles explains partial results on stderr' || {
+  assert_contains "$stderr_output" 'incomplete scan' 'bigfiles explains partial results on stderr' || {
     command chmod 700 "$inspect_tmp/blocked-dir" "$inspect_tmp/blocked-tree"
     command rm -rf "$inspect_tmp"
     return 1
@@ -2493,7 +2494,7 @@ esac
     cmd_status=$?
     output=$NPKG_TEST_OUTPUT
     assert_status "$cmd_status" 1 'profile JSON parse failure returns nonzero' || return 1
-    assert_contains "$output" 'Failed to parse Nix profile JSON.' 'profile JSON parse failure is explicit' || return 1
+    assert_contains "$output" 'failed to parse the Nix profile JSON' 'profile JSON parse failure is explicit' || return 1
     assert_not_contains "$output" 'Everything is up to date.' 'profile JSON parse failure never prints success' || return 1
 
     profile_fixture=$(command jq -nc '

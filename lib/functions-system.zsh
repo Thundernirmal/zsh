@@ -3,9 +3,11 @@
 # Keep network calls finite by default while allowing a deliberate per-shell
 # override. Values are integer seconds; zero and malformed values are rejected
 # so an accidental environment typo cannot restore an unbounded request.
+# The optional argument names the calling command in diagnostics.
 _zsh_http_timeout_args() {
   emulate -L zsh
 
+  local caller=${1:-zsh network}
   local connect=${ZSH_HTTP_CONNECT_TIMEOUT:-5}
   local maximum=${ZSH_HTTP_MAX_TIME:-15}
   local value name variable normalized
@@ -21,7 +23,7 @@ _zsh_http_timeout_args() {
     esac
     case $value in
       ''|*[!0-9]*)
-        print -u2 -r -- "zsh network: $variable: invalid timeout '$value' (use positive integer seconds)"
+        print -u2 -r -- "${caller}: $variable: invalid timeout '$value' (use positive integer seconds)"
         return 1
         ;;
     esac
@@ -30,7 +32,7 @@ _zsh_http_timeout_args() {
       normalized=${normalized#0}
     done
     if [[ $normalized == 0 ]]; then
-      print -u2 -r -- "zsh network: $variable: timeout must be positive"
+      print -u2 -r -- "${caller}: $variable: timeout must be positive"
       return 1
     fi
   done
@@ -106,7 +108,7 @@ fkill() {
   _zsh_require_fzf || return 1
 
   if [ ! -t 0 ] || [ ! -t 1 ]; then
-    print -u2 -r -- 'fkill requires an interactive terminal'
+    print -u2 -r -- 'fkill: an interactive terminal is required'
     return 1
   fi
 
@@ -220,12 +222,13 @@ headers() {
   esac
 
   if (( $# != 1 )); then
+    print -u2 -r -- 'headers: expected exactly one URL'
     print -u2 -r -- 'Usage: headers <url>'
     return 1
   fi
 
   local -a timeout_args
-  _zsh_http_timeout_args || return 1
+  _zsh_http_timeout_args headers || return 1
   timeout_args=( "${reply[@]}" )
   command curl -sSIL "${timeout_args[@]}" -- "$1" || {
     local rc=$?
@@ -246,6 +249,7 @@ fanprofile() {
       ;;
   esac
   if (( $# > 0 )); then
+    print -u2 -r -- "fanprofile: unexpected argument: $1"
     print -u2 -r -- 'Usage: fanprofile'
     return 1
   fi
@@ -288,7 +292,7 @@ fanprofile() {
       1) profile="overboost" ;;
       2) profile="silent" ;;
       *)
-        print -u2 -r -- "Unknown ASUS fan profile value: $raw"
+        print -u2 -r -- "fanprofile: unknown ASUS fan profile value: $raw"
         return 1
         ;;
     esac
@@ -317,7 +321,7 @@ fanprofile() {
   fi
 
   if _ui_plain_mode; then
-    print -u2 -r -- 'No supported laptop performance profile interface found'
+    print -u2 -r -- 'fanprofile: no supported laptop performance profile interface found'
   else
     _ui_title_line 'Fan Profile' 'unsupported host' warning '󰈐' '*'
     _ui_panel_kv 'Status' 'No supported laptop performance profile interface found' muted text
@@ -328,6 +332,21 @@ fanprofile() {
     _ui_reset
   fi
   return 1
+}
+
+# Plain ss output from stdin: header first, then TCP rows, then the rest (UDP),
+# each group in ss order.
+_ports_tcp_first() {
+  command -v awk >/dev/null 2>&1 || { command cat; return; }
+  command awk '
+    NR == 1 { print; next }
+    $1 ~ /^tcp/ { tcp[++tcp_count] = $0; next }
+    { other[++other_count] = $0 }
+    END {
+      for (i = 1; i <= tcp_count; i++) print tcp[i]
+      for (i = 1; i <= other_count; i++) print other[i]
+    }
+  '
 }
 
 # Show listening ports and owning processes
@@ -343,6 +362,7 @@ ports() {
       ;;
   esac
   if (( $# > 1 )); then
+    print -u2 -r -- 'ports: too many arguments'
     print -u2 -r -- 'Usage: ports [port|process]'
     return 1
   fi
@@ -354,8 +374,10 @@ ports() {
   local REPLY
 
   if [[ -z $filter ]] && _ui_plain_mode; then
-    command ss -tulnp
-    return $?
+    # Keep native ss columns, but list TCP before UDP as the rich view does.
+    output=$(command ss -tulnp) || return $?
+    print -r -- "$output" | _ports_tcp_first
+    return 0
   fi
 
   output=$(command ss -tulnp 2>/dev/null) || {
@@ -384,7 +406,7 @@ ports() {
       return 1
     fi
     if _ui_plain_mode; then
-      print -r -- "$output"
+      print -r -- "$output" | _ports_tcp_first
       return 0
     fi
   fi
@@ -536,12 +558,13 @@ weather() {
       ;;
   esac
   if (( $# > 0 )); then
+    print -u2 -r -- "weather: unexpected argument: $1"
     print -u2 -r -- 'Usage: weather'
     return 1
   fi
 
   local -a timeout_args
-  _zsh_http_timeout_args || return 1
+  _zsh_http_timeout_args weather || return 1
   timeout_args=( "${reply[@]}" )
   command curl --http1.1 -fsSL "${timeout_args[@]}" -- https://wttr.in || {
     local rc=$?
@@ -613,6 +636,7 @@ myip() {
       ;;
   esac
   if (( $# > 0 )); then
+    print -u2 -r -- "myip: unexpected argument: $1"
     print -u2 -r -- 'Usage: myip'
     return 1
   fi
@@ -620,7 +644,7 @@ myip() {
   local endpoint='https://ifconfig.me/ip'
   local ip
   local -a timeout_args
-  _zsh_http_timeout_args || return 1
+  _zsh_http_timeout_args myip || return 1
   timeout_args=( "${reply[@]}" )
 
   ip=$(command curl -fsSL "${timeout_args[@]}" -- "$endpoint") || {
@@ -665,6 +689,7 @@ path() {
       ;;
   esac
   if (( $# > 0 )); then
+    print -u2 -r -- "path: unexpected argument: $1"
     print -u2 -r -- 'Usage: path'
     return 1
   fi
@@ -762,12 +787,12 @@ zdoctor() {
       -h|--help) _zdoctor_usage; return 0 ;;
       --) ;;
       -*)
-        print -u2 -r -- "Unknown zdoctor option: $arg"
+        print -u2 -r -- "zdoctor: unknown option: $arg"
         _zdoctor_usage >&2
         return 1
         ;;
       *)
-        print -u2 -r -- "Unknown zdoctor argument: $arg"
+        print -u2 -r -- "zdoctor: unexpected argument: $arg"
         _zdoctor_usage >&2
         return 1
         ;;
@@ -934,7 +959,7 @@ zdoctor() {
     if (( check_network )); then
       if ! command -v curl >/dev/null 2>&1; then
         _zdoctor_report fail 'curl is missing so network endpoints cannot be checked'
-      elif ! _zsh_http_timeout_args; then
+      elif ! _zsh_http_timeout_args zdoctor; then
         _zdoctor_report fail 'network timeouts are invalid (fix ZSH_HTTP_CONNECT_TIMEOUT or ZSH_HTTP_MAX_TIME)'
       else
         if command curl -fsS "${reply[@]}" -o /dev/null https://ifconfig.me/ip 2>/dev/null; then

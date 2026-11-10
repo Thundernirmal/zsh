@@ -13,7 +13,7 @@
     print '  install [pkg ...]    Alias for add'
     print '  find [--] [query ...] Fuzzy-pick nixpkgs attributes and add selections'
     print '  search <query>       Run a plain nixpkgs search with descriptions'
-    print '  list                 List packages in the current profile'
+    print '  list                 List packages in the current profile (name, version, attribute)'
     print '  remove [pkg ...]     Remove package(s); with no args opens an fzf picker'
     print '  outdated             Compare installed and evaluated Nix output identities'
     print '  refresh              Rebuild the cached nixpkgs attribute index'
@@ -35,6 +35,7 @@
     print '  - Interactive add/find/remove needs jq and fzf 0.68.0+'
     print '  - refresh/outdated/check/diff accept no operands; -h/--help shows usage'
     print '  - find/pick/fzf recognizes -h/--help before --; after -- they are query text'
+    print '  - list prints one compact line per package when jq is available; with any argument, or without jq, it is nix profile list'
     print '  - Native add/remove/list/search/upgrade arguments pass through as documented'
     print '  - Advanced nix flags can be passed through by calling nix directly'
   }
@@ -128,7 +129,7 @@
     trap 'signal_status=129; break 1000' HUP
 
     if ! command -v jq >/dev/null 2>&1; then
-      print -u2 -r -- 'jq is required for npkg refresh'
+      print -u2 -r -- 'npkg: jq is required for refresh'
       return 1
     fi
 
@@ -175,9 +176,9 @@
 
     if _npkg_cache_is_stale "$cache_file"; then
       if [ -f "$cache_file" ]; then
-        print -u2 -- 'Refreshing nixpkgs attribute cache...'
+        print -u2 -- 'npkg: refreshing the nixpkgs attribute cache...'
       else
-        print -u2 -- 'Building nixpkgs attribute cache...'
+        print -u2 -- 'npkg: building the nixpkgs attribute cache...'
       fi
 
       _npkg_refresh_index >/dev/null
@@ -186,7 +187,7 @@
         # An old index beats no picker, for example offline. Ctrl-C still cancels.
         case $refresh_status in 129|130|143) return "$refresh_status" ;; esac
         [ -s "$cache_file" ] || return 1
-        print -u2 -- 'Could not refresh the nixpkgs attribute cache; using the existing index.'
+        print -u2 -- 'npkg: could not refresh the nixpkgs attribute cache; using the existing index'
       fi
     fi
 
@@ -197,15 +198,15 @@
     local action=$1
 
     if ! command -v jq >/dev/null 2>&1; then
-      print -u2 -r -- "jq is required for interactive npkg ${action}"
-      print -u2 -r -- "Install jq or use non-interactive commands like 'npkg search <query>'"
+      print -u2 -r -- "npkg: jq is required for interactive ${action}"
+      print -u2 -r -- "npkg: install jq or use non-interactive commands like 'npkg search <query>'"
       return 1
     fi
 
     _zsh_require_fzf || return 1
 
     if [ ! -t 0 ] || [ ! -t 1 ]; then
-      print -u2 -r -- "Interactive npkg ${action} requires a terminal"
+      print -u2 -r -- "npkg: interactive ${action} requires a terminal"
       return 1
     fi
   }
@@ -541,79 +542,13 @@
       ' 2>/dev/null
   }
 
-  _npkg_outdated() {
+  # Decode `nix profile list --json` on stdin, whatever shape this Nix version
+  # uses (elements as an object or an array), into one TSV row per active entry:
+  # name, attrPath, originalUrl, lockedUri, storePaths, outputs, valid. With the
+  # "list" mode a version guessed from the first store path name is appended.
+  _npkg_profile_entries() {
     emulate -L zsh
-    local IFS=$' \t\n'
-    setopt pipefail localtraps NO_MONITOR NO_NOTIFY
-
-    _npkg_set_outdated_state partial 0 0 0
-
-    if ! command -v jq >/dev/null 2>&1; then
-      print -u2 -r -- 'jq is required for npkg outdated'
-      return 1
-    fi
-
-    local profile_json profile_error_file profile_capture_dir profile_error entry_data entry_json name attr_path source locked_uri
-    local store_paths_json outputs_json structural_value
-    local REPLY eval_summary
-    local -a entry_fields eval_fields
-    integer field_index
-    local tmp_dir current_record locked_record
-    local installed_version available_version package_state display_state marker role detail error_output
-    local width name_width version_width visible_count more
-    local current_file locked_file pid
-    integer pkg_count=0 changed=0 unknown=0 idx interrupted=0
-    integer max_jobs=8
-    local -a names attrs sources locked_uris installed_path_sets output_specs structurally_valid
-    local -a installed_versions available_versions statuses unknown_details job_pids worker_fields
-    local -A job_identities
-    local worker_stat _ZSH_QUERY_ROOT_PID _ZSH_QUERY_ROOT_IDENTITY
-    local -a inherited_cleanup_dirs
-    if (( ${funcstack[(Ie)_upkg_run_outdated_nix]} )); then
-      inherited_cleanup_dirs=( "${_ZSH_QUERY_ROOT_CLEANUP_DIRS[@]-}" )
-    fi
-    local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=( "${inherited_cleanup_dirs[@]}" )
-    zmodload zsh/system || return 1
-    _ZSH_QUERY_ROOT_PID=$sysparams[pid]
-    worker_stat=$(</proc/$_ZSH_QUERY_ROOT_PID/stat)
-    worker_fields=( ${=${worker_stat##*\) }} )
-    _ZSH_QUERY_ROOT_IDENTITY=${worker_fields[20]}
-
-    profile_capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-profile.XXXXXX") || {
-      print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
-      return 1
-    }
-    _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$profile_capture_dir" )
-    profile_error_file="$profile_capture_dir/stderr"
-    local profile_status
-    {
-      _zsh_run_owned_query _npkg_nix profile list --json >"$profile_capture_dir/stdout" 2>"$profile_error_file"
-      profile_status=$?
-      profile_json=$(<"$profile_capture_dir/stdout")
-      profile_error=$(<"$profile_error_file")
-    } always {
-      command rm -rf -- "$profile_capture_dir"
-    }
-    if (( profile_status != 0 )); then
-      case $profile_status in 129|130|143) return "$profile_status" ;; esac
-      print -u2 -r -- 'Failed to read Nix profile.'
-      if [[ -n $profile_error ]]; then
-        _ui_safe_text_reply "$profile_error"
-        print -u2 -r -- "Diagnostic: $REPLY"
-      fi
-      return 1
-    fi
-
-    print -r -- "$profile_json" | command jq -e '
-      type == "object"
-      and (((.elements | type) == "object") or ((.elements | type) == "array"))
-    ' >/dev/null 2>&1 || {
-      print -u2 -r -- 'Failed to parse Nix profile JSON.'
-      return 1
-    }
-
-    entry_data=$(
-      print -r -- "$profile_json" | command jq -r '
+    command jq -r --arg mode "${1:-}" '
         def text: if type == "string" then . else "" end;
         def manifest_entries:
           if (.elements | type) == "object" then
@@ -673,10 +608,143 @@
         | [ .displayName, .attrPath, .originalUrl, .lockedUri,
             (.storePaths | tojson), (.outputs | tojson),
             (if $valid then "1" else "0" end) ]
+        | if $mode == "list" then
+            . + [ (first(
+                (.[4] | fromjson | if type == "array" and length > 0 then .[0] else "" end)
+                | split("/") | last | sub("^[a-z0-9]{32}-"; "")
+                | match("^.*?-([0-9].*)$").captures[0].string
+                | sub("-(bin|dev|lib|man|doc|info|debug|static)$"; "")
+              ) // "-") ]
+          else . end
         | @tsv | gsub("\u0000"; "\\0")
       '
+  }
+
+  # Compact profile listing: one package per line (name, version, flake
+  # attribute). Anything unexpected falls back to the native listing.
+  _npkg_list() {
+    emulate -L zsh
+    local IFS=$' \t\n'
+
+    local json entries entry REPLY
+    local -a fields names versions attrs
+    integer index name_width=4 version_width=7
+
+    command -v jq >/dev/null 2>&1 || { _npkg_nix profile list; return; }
+    json=$(_npkg_nix profile list --json 2>/dev/null) || { _npkg_nix profile list; return; }
+    print -r -- "$json" | command jq -e '
+      type == "object"
+      and (((.elements | type) == "object") or ((.elements | type) == "array"))
+    ' >/dev/null 2>&1 || { _npkg_nix profile list; return; }
+    entries=$(print -r -- "$json" | _npkg_profile_entries list) || { _npkg_nix profile list; return; }
+
+    while IFS= read -r entry; do
+      [[ -n $entry ]] || continue
+      fields=( "${(@ps:\t:)entry}" )
+      (( ${#fields} == 8 )) || { _npkg_nix profile list; return; }
+      for (( index = 1; index <= 8; index++ )); do
+        _npkg_decode_trimmed "${fields[$index]}" || { _npkg_nix profile list; return; }
+        fields[$index]=$REPLY
+      done
+      _ui_safe_text_reply "${fields[1]}"
+      names+=("$REPLY")
+      _ui_safe_text_reply "${fields[8]}"
+      versions+=("$REPLY")
+      _ui_safe_text_reply "${fields[2]:--}"
+      attrs+=("$REPLY")
+    done <<< "$entries"
+
+    if (( ${#names} == 0 )); then
+      print -r -- 'No packages in the current profile.'
+      return 0
+    fi
+
+    for (( index = 1; index <= ${#names}; index++ )); do
+      (( ${#names[index]} > name_width )) && name_width=${#names[index]}
+      (( ${#versions[index]} > version_width )) && version_width=${#versions[index]}
+    done
+
+    printf '%-*s  %-*s  %s\n' "$name_width" NAME "$version_width" VERSION ATTRIBUTE
+    for (( index = 1; index <= ${#names}; index++ )); do
+      printf '%-*s  %-*s  %s\n' "$name_width" "${names[index]}" "$version_width" "${versions[index]}" "${attrs[index]}"
+    done
+  }
+
+  _npkg_outdated() {
+    emulate -L zsh
+    local IFS=$' \t\n'
+    setopt pipefail localtraps NO_MONITOR NO_NOTIFY
+
+    _npkg_set_outdated_state partial 0 0 0
+
+    if ! command -v jq >/dev/null 2>&1; then
+      print -u2 -r -- 'npkg: jq is required for outdated'
+      return 1
+    fi
+
+    local profile_json profile_error_file profile_capture_dir profile_error entry_data entry_json name attr_path source locked_uri
+    local store_paths_json outputs_json structural_value
+    local REPLY eval_summary
+    local -a entry_fields eval_fields
+    integer field_index
+    local tmp_dir current_record locked_record
+    local installed_version available_version package_state display_state marker role detail error_output
+    local width name_width version_width visible_count more
+    local current_file locked_file pid
+    integer pkg_count=0 changed=0 unknown=0 idx interrupted=0
+    integer max_jobs=8
+    local -a names attrs sources locked_uris installed_path_sets output_specs structurally_valid
+    local -a installed_versions available_versions statuses unknown_details job_pids worker_fields
+    local -A job_identities
+    local worker_stat _ZSH_QUERY_ROOT_PID _ZSH_QUERY_ROOT_IDENTITY
+    local -a inherited_cleanup_dirs
+    if (( ${funcstack[(Ie)_upkg_run_outdated_nix]} )); then
+      inherited_cleanup_dirs=( "${_ZSH_QUERY_ROOT_CLEANUP_DIRS[@]-}" )
+    fi
+    local -a _ZSH_QUERY_ROOT_CLEANUP_DIRS=( "${inherited_cleanup_dirs[@]}" )
+    zmodload zsh/system || return 1
+    _ZSH_QUERY_ROOT_PID=$sysparams[pid]
+    worker_stat=$(</proc/$_ZSH_QUERY_ROOT_PID/stat)
+    worker_fields=( ${=${worker_stat##*\) }} )
+    _ZSH_QUERY_ROOT_IDENTITY=${worker_fields[20]}
+
+    profile_capture_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-profile.XXXXXX") || {
+      print -u2 -r -- 'npkg: failed to create temporary storage for outdated'
+      return 1
+    }
+    _ZSH_QUERY_ROOT_CLEANUP_DIRS+=( "$profile_capture_dir" )
+    profile_error_file="$profile_capture_dir/stderr"
+    local profile_status
+    {
+      _zsh_run_owned_query _npkg_nix profile list --json >"$profile_capture_dir/stdout" 2>"$profile_error_file"
+      profile_status=$?
+      profile_json=$(<"$profile_capture_dir/stdout")
+      profile_error=$(<"$profile_error_file")
+    } always {
+      command rm -rf -- "$profile_capture_dir"
+    }
+    if (( profile_status != 0 )); then
+      case $profile_status in 129|130|143) return "$profile_status" ;; esac
+      print -u2 -r -- 'npkg: failed to read the Nix profile'
+      if [[ -n $profile_error ]]; then
+        _ui_safe_text_reply "$profile_error"
+        print -u2 -r -- "npkg: diagnostic: $REPLY"
+      fi
+      return 1
+    fi
+
+    print -r -- "$profile_json" | command jq -e '
+      type == "object"
+      and (((.elements | type) == "object") or ((.elements | type) == "array"))
+    ' >/dev/null 2>&1 || {
+      print -u2 -r -- 'npkg: failed to parse the Nix profile JSON'
+      return 1
+    }
+
+    entry_data=$(
+      print -r -- "$profile_json" | _npkg_profile_entries
     ) || {
-      print -u2 -r -- 'Failed to parse Nix profile elements.'
+      print -u2 -r -- 'npkg: failed to parse the Nix profile elements'
       return 1
     }
 
@@ -685,7 +753,7 @@
 
       entry_fields=( "${(@ps:\t:)entry_json}" )
       (( ${#entry_fields} == 7 )) || {
-        print -u2 -r -- 'Failed to decode Nix profile fields.'
+        print -u2 -r -- 'npkg: failed to decode the Nix profile fields'
         return 1
       }
       for (( field_index=1; field_index<=7; field_index++ )); do
@@ -720,11 +788,11 @@
     echo "Checking $pkg_count package(s) for changes..."
 
     tmp_dir=$(command mktemp -d "${TMPDIR:-/tmp}/npkg-outdated.XXXXXX") || {
-      print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
+      print -u2 -r -- 'npkg: failed to create temporary storage for outdated'
       return 1
     }
     [[ -n $tmp_dir && -d $tmp_dir ]] || {
-      print -u2 -r -- 'Failed to create temporary storage for npkg outdated.'
+      print -u2 -r -- 'npkg: failed to create temporary storage for outdated'
       return 1
     }
 
@@ -1023,7 +1091,7 @@
           esac
         done
         if (( $# > 0 )); then
-          print -u2 -r -- "npkg $cmd: unsupported arguments; this command accepts no operands"
+          print -u2 -r -- "npkg: $cmd: unsupported arguments; this command accepts no operands"
           _npkg_helper_usage "$cmd" >&2
           return 1
         fi
@@ -1070,6 +1138,7 @@
         ;;
       search|s)
         if (( $# == 0 )); then
+          print -u2 -r -- 'npkg: search needs a query'
           print -u2 -r -- 'Usage: npkg search <query>'
           return 1
         fi
@@ -1081,7 +1150,12 @@
         fi
         ;;
       list|ls)
-        _npkg_nix profile list "$@"
+        # A compact table only for the bare form; any argument is native.
+        if (( $# == 0 )); then
+          _npkg_list
+        else
+          _npkg_nix profile list "$@"
+        fi
         ;;
       refresh)
         _npkg_refresh_index >/dev/null || return 1
@@ -1108,9 +1182,9 @@
         _npkg_usage
         ;;
       *)
-        print -u2 -r -- "Unknown npkg command: $cmd"
-        _npkg_usage >&2
-        return 1
+        _ui_usage_error npkg 'npkg <command> [args]' "unknown command: $cmd" "$cmd" \
+          install add i find pick fzf search s list ls refresh remove rm uninstall delete \
+          outdated check diff upgrade up update help
         ;;
     esac
   }
