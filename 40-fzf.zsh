@@ -42,6 +42,19 @@ _fzf_startup_diagnostic() {
   _fzf_diagnostic
 }
 
+# File and directory preview command for fzf ({} is the selection), as REPLY.
+# The command runs in a shell fzf starts, so its tool checks stay command -v.
+_fzf_file_preview_command() {
+  emulate -L zsh
+
+  if [[ -n ${NO_COLOR:-} ]]; then
+    # fzf shell-quotes selection placeholders by default; {q} is the query.
+    REPLY='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=never --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=never --line-range=:200 -- {}; elif command -v batcat >/dev/null 2>&1; then batcat --style=numbers --color=never --line-range=:200 -- {}; else sed -n "1,200p;200Q" -- {}; fi'
+  else
+    REPLY='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=always --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -C -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=always --line-range=:200 -- {}; elif command -v batcat >/dev/null 2>&1; then batcat --style=numbers --color=always --line-range=:200 -- {}; else sed -n "1,200p;200Q" -- {}; fi'
+  fi
+}
+
 _fzf_export_config() {
   emulate -L zsh
 
@@ -75,12 +88,8 @@ _fzf_export_config() {
   [[ -n ${ZSH_FZF_EXTRA_OPTS:-} ]] && FZF_DEFAULT_OPTS+=" ${ZSH_FZF_EXTRA_OPTS}"
   [[ -n ${NO_COLOR:-} ]] && FZF_DEFAULT_OPTS+=" $_ZSH_FZF_NO_COLOR_OPTS"
 
-  if [[ -n ${NO_COLOR:-} ]]; then
-    # fzf shell-quotes selection placeholders by default; {q} is the query.
-    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=never --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=never --line-range=:200 -- {}; elif command -v batcat >/dev/null 2>&1; then batcat --style=numbers --color=never --line-range=:200 -- {}; else sed -n "1,200p;200Q" -- {}; fi'
-  else
-    preview_command='if [[ -d {} ]]; then if command -v lsd >/dev/null 2>&1; then lsd --tree --depth=2 --color=always --group-dirs=first -- {}; elif command -v tree >/dev/null 2>&1; then tree -L 2 -a -C -- {}; else command ls -la -- {}; fi; elif command -v bat >/dev/null 2>&1; then bat --style=numbers --color=always --line-range=:200 -- {}; elif command -v batcat >/dev/null 2>&1; then batcat --style=numbers --color=always --line-range=:200 -- {}; else sed -n "1,200p;200Q" -- {}; fi'
-  fi
+  _fzf_file_preview_command
+  preview_command=$REPLY
   _zsh_theme_fzf_preview_window
   preview_window=$REPLY
   _zsh_theme_fzf_context_args Files 'Type to filter files' 'Enter insert  Ctrl-P preview  Ctrl-/ wrap  Esc close'

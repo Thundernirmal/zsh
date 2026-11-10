@@ -97,7 +97,7 @@ test_registration() {
     zdoctor _zsh_zdoctor
     ztheme _zsh_ztheme
     cgm _zsh_cgm
-    fbr _zsh_no_arguments
+    fbr _zsh_fbr
     croot _zsh_no_arguments
     path _zsh_no_arguments
     ports _zsh_ports
@@ -105,7 +105,7 @@ test_registration() {
     myip _zsh_no_arguments
     gitcount _zsh_no_arguments
     fanprofile _zsh_no_arguments
-    tips _zsh_no_arguments
+    tips _zsh_tips
   )
 
   autoload -Uz compinit
@@ -568,6 +568,32 @@ test_upkg_live_dry_run_description() (
   assert_equals "${captured_specs[(r)--dry-run*]}" "--dry-run[${_ZSH_UPKG_FLAGS[(r)--dry-run:*]#*:}]" 'live dry-run completion uses the shared inventory/cleanup contract' || return 1
 )
 
+test_search_and_query_completion() (
+  local -a captured_specs words
+  _arguments() { captured_specs=( "$@" ); return 0; }
+  _message() { :; }
+  for words in 'ff' 'ft'; do
+    words=( ${=words} '' )
+    captured_specs=()
+    _zsh_find_helper || return 1
+    [[ ${(j: :)captured_specs} == *'--pick[choose a result in fzf and open it in the editor]'* ]] || {
+      print -u2 -- "not ok: ${words[1]} completion offers --pick"
+      return 1
+    }
+    print -- "ok: ${words[1]} completion offers --pick"
+  done
+  words=(tips '')
+  captured_specs=()
+  _zsh_tips || return 1
+  [[ ${(j: :)captured_specs} == *'--all[list every tip'* ]] || { print -u2 -- 'not ok: tips completion offers --all'; return 1; }
+  print -- 'ok: tips completion offers --all and free search text'
+  words=(fbr '')
+  captured_specs=()
+  _zsh_fbr || return 1
+  [[ ${(j: :)captured_specs} == *'initial picker query'* ]] || { print -u2 -- 'not ok: fbr completion explains its query'; return 1; }
+  print -- 'ok: fbr completion explains its optional query'
+)
+
 test_npkg_helper_completion() (
   local -a captured_specs words
   local completion_command message
@@ -637,6 +663,7 @@ main() {
   test_upkg_live_dry_run_description || return 1
   test_upkg_completion_isolation || return 1
   test_npkg_helper_completion || return 1
+  test_search_and_query_completion || return 1
   test_extract_completion_drift || return 1
   test_cached_npkg_attributes || return 1
   test_npkg_union_invalidation || return 1

@@ -10,6 +10,7 @@ _zsh_tip_pool=(
   "Start a command with a space to keep it out of saved history"
   "Use ZSH_HISTFILE=path before sourcing init.zsh to keep history elsewhere"
   "Run zhelp to find a command and queue an editable example"
+  "Run tips <query> to list every tip about a command; tips --all lists them all"
   "Run zdoctor to check the setup and see why output looks plain"
   "Use ztheme show custom to inspect; ztheme use custom applies the palette"
   "Use ZSH_FZF_LAYOUT=roomy for a larger rounded finder with extra spacing"
@@ -64,6 +65,9 @@ if [[ ${_FZF_STATE:-blocked} == ready ]] && [[ -o interactive ]] && [[ -z ${ZSH_
     "Run fkill TERM to stop selected processes; use fkill 9 only to force"
     "Run fkill --all to include processes from all users"
     "Run fbr to pick a branch and check it out or enter its worktree"
+    "Run fbr <query> to start the branch picker with that filter"
+    "Run ff --pick <pattern> to choose a match and open it in your editor"
+    "Run ft --pick <pattern> to open a matching line at its line number"
     "Use [WT] in fbr to spot branches checked out in another worktree"
   )
 
@@ -152,28 +156,72 @@ if (( $+commands[pacman] && $+commands[checkupdates] && $+commands[fakeroot] ));
   )
 fi
 
+typeset -g _ZSH_TIPS_LAST=''
+
+_zsh_tips_usage() {
+  print 'Usage: tips [--all | <query>]'
+  print 'Print one random short usage tip; run it again for another.'
+  print ''
+  print '  tips            One random tip, never the same one twice in a row'
+  print '  tips --all      Every tip available on this machine, one per line'
+  print '  tips <query>    Tips containing the query (case-insensitive), one per line'
+}
+
 tips() {
   local total=${#_zsh_tip_pool}
-  local tip
+  local tip query needle
+  local -a found
 
   case ${1:-} in
     -h|--help)
-      print 'Usage: tips'
-      print 'Print one short usage tip. Run it again for another.'
+      _zsh_tips_usage
       return 0
       ;;
+    --all)
+      if (( $# > 1 )); then
+        print -u2 -r -- 'tips: --all takes no query'
+        _zsh_tips_usage >&2
+        return 1
+      fi
+      (( total > 0 )) || { print -u2 -r -- 'tips: no tips configured'; return 1; }
+      print -rl -- "${_zsh_tip_pool[@]}"
+      return 0
+      ;;
+    --)
+      shift
+      ;;
+    -?*)
+      print -u2 -r -- "tips: unknown option: $1"
+      _zsh_tips_usage >&2
+      return 1
+      ;;
   esac
+
   if (( $# > 0 )); then
-    print -u2 -r -- 'Usage: tips'
-    return 1
+    query="${(j: :)@}"
+    needle=${(L)query}
+    for tip in "${_zsh_tip_pool[@]}"; do
+      [[ ${(L)tip} == *"$needle"* ]] && found+=("$tip")
+    done
+    if (( ${#found[@]} == 0 )); then
+      print -u2 -r -- "tips: no tips matched: $query"
+      return 1
+    fi
+    print -rl -- "${found[@]}"
+    return 0
   fi
 
   if (( total == 0 )); then
-    print 'No tips configured.'
+    print -u2 -r -- 'tips: no tips configured'
     return 1
   fi
 
   tip=${_zsh_tip_pool[$(( RANDOM % total + 1 ))]}
+  # Never repeat the previous tip in this shell session when another exists.
+  while (( total > 1 )) && [[ $tip == "$_ZSH_TIPS_LAST" ]]; do
+    tip=${_zsh_tip_pool[$(( RANDOM % total + 1 ))]}
+  done
+  _ZSH_TIPS_LAST=$tip
 
   if (( $+functions[_ui_plain_mode] )) && ! _ui_plain_mode; then
     _ui_title_line 'Tip' 'shared zsh config' accent '󰛨' '*'
@@ -186,7 +234,7 @@ tips() {
     _ui_section_break
     print -nr -- '  '
     _ui_color muted
-    print -r -- 'Run tips again'
+    print -r -- 'Run tips again, or tips --all to browse'
     _ui_reset
     return 0
   fi

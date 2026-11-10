@@ -188,7 +188,7 @@ assert test "$?" -eq 1
 _npkg_nix() { print -u2 -r -- $'profile\tfailed'; return 1; }
 _npkg_outdated > "$scratch/output" 2> "$scratch/error"
 assert test "$?" -eq 1
-[[ $(<"$scratch/error") == *'Diagnostic: profile\tfailed'* ]] || exit 1
+[[ $(<"$scratch/error") == *'diagnostic: profile\tfailed'* ]] || exit 1
 assert test ! -e "$scratch/sanitizer-captures"
 assert test "$REPLY" = caller-sentinel
 print 'ok: Nix row and diagnostic sanitization avoids capture wrappers and preserves caller scratch state'
@@ -212,3 +212,51 @@ attr_output=$(_npkg_attr_index 2> /dev/null); attr_status=$?
 assert test "$attr_status" -eq 130
 assert test -z "$attr_output"
 print 'ok: a failed index refresh falls back to the existing index unless cancelled or missing'
+
+# npkg list: compact table from the same decoder, native output as a fallback.
+typeset list_output list_native
+list_native=$'native profile list\nName: hello'
+_npkg_nix() {
+  if [[ $* == 'profile list --json' ]]; then
+    print -r -- "$fixture"
+  elif [[ $* == 'profile list' ]]; then
+    print -r -- "$list_native"
+  else
+    return 9
+  fi
+}
+fixture='{"version":3,"elements":{"hello":{"active":true,"attrPath":"legacyPackages.x86_64-linux.hello","originalUrl":"flake:nixpkgs","storePaths":["/nix/store/00000000000000000000000000000000-hello-2.12.2"]},"sqlite":{"active":true,"attrPath":"legacyPackages.x86_64-linux.sqlite","originalUrl":"flake:nixpkgs","storePaths":["/nix/store/00000000000000000000000000000000-sqlite-3.53.3-bin","/nix/store/00000000000000000000000000000000-sqlite-3.53.3"]},"local":{"active":true,"attrPath":"packages.x86_64-linux.default","originalUrl":"path:/work","storePaths":["/nix/store/00000000000000000000000000000000-tool"]},"gone":{"active":false,"attrPath":"x.y.gone","originalUrl":"flake:nixpkgs","storePaths":["/nix/store/00000000000000000000000000000000-gone-1.0"]}}}'
+list_output=$(npkg list)
+assert test "$?" -eq 0
+assert test "${#${(@f)list_output}}" -eq 4
+[[ ${${(@f)list_output}[1]} == 'NAME     VERSION  ATTRIBUTE' ]] || { print -u2 -r -- "bad header: $list_output"; exit 1; }
+[[ $list_output == *$'hello    2.12.2   legacyPackages.x86_64-linux.hello'* ]] || { print -u2 -r -- "bad row: $list_output"; exit 1; }
+[[ $list_output == *$'sqlite   3.53.3 '* ]] || { print -u2 -r -- "output suffix leaked into the version: $list_output"; exit 1; }
+[[ $list_output == *$'default  -        packages.x86_64-linux.default'* ]] || { print -u2 -r -- "missing version should be -: $list_output"; exit 1; }
+[[ $list_output != *gone* ]] || exit 1
+print 'ok: npkg list prints one compact name, version, attribute line per active package'
+
+# The older array shape of elements decodes through the same code.
+fixture='{"version":2,"elements":[{"active":true,"attrPath":"legacyPackages.x86_64-linux.bat","originalUrl":"flake:nixpkgs","storePaths":["/nix/store/00000000000000000000000000000000-bat-0.25.0"]}]}'
+list_output=$(npkg list)
+[[ $list_output == *$'bat   0.25.0'* ]] || { print -u2 -r -- "array shape failed: $list_output"; exit 1; }
+print 'ok: npkg list decodes the array element shape used by older Nix versions'
+
+fixture='{"elements":{}}'
+assert test "$(npkg list)" = 'No packages in the current profile.'
+fixture='not json'
+assert test "$(npkg list)" = "$list_native"
+fixture='{"elements":false}'
+assert test "$(npkg list)" = "$list_native"
+print 'ok: npkg list falls back to the native listing for empty-safe and malformed profiles'
+
+command mkdir -p "$scratch/nojq"
+_npkg_nix() { print -r -- "native:$*"; }
+assert test "$(npkg list --profile /tmp/p)" = 'native:profile list --profile /tmp/p'
+assert test "$(npkg ls -h)" = 'native:profile list -h'
+(
+  path=( "${scratch}/nojq" )
+  _npkg_nix() { print -r -- "native:$*"; }
+  assert test "$(npkg list)" = 'native:profile list'
+)
+print 'ok: npkg list passes any argument, and a missing jq, through to nix profile list'

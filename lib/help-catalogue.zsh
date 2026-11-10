@@ -102,6 +102,21 @@ _zsh_help_is_available() {
   esac
 }
 
+# Why a command is unavailable, as REPLY. Global aliases are opt-in, so their
+# reason is the setting rather than the (unrelated) tool they pipe into.
+_zsh_help_unavailable_reason() {
+  emulate -L zsh
+
+  local id=$1
+
+  if [[ ${_ZSH_HELP_KIND[$id]-} == alias && ${_ZSH_HELP_USAGE[$id]-} == '<command> '* ]] &&
+    ! _zsh_help_entry_exists "$id"; then
+    REPLY='opt-in; export ZSH_GLOBAL_ALIASES=1 before startup'
+  else
+    REPLY="needs ${_ZSH_HELP_DEPS[$id]}"
+  fi
+}
+
 _zsh_help_availability_label() {
   emulate -L zsh
 
@@ -114,30 +129,54 @@ _zsh_help_availability_label() {
       REPLY="available (uses ${_ZSH_HELP_DEPS[$id]})"
     fi
   else
-    REPLY="unavailable (needs ${_ZSH_HELP_DEPS[$id]})"
+    _zsh_help_unavailable_reason "$id"
+    REPLY="unavailable ($REPLY)"
   fi
 }
 
+# True when $2 occurs in $1 at the start of a word: at the beginning of the text
+# or right after a character that is not a letter or digit. Both are lower-case.
+_zsh_help_word_start_match() {
+  [[ $1 == "$2"* || $1 == *[^[:alnum:]]"$2"* ]]
+}
+
+# A query matches anywhere inside a command name, but only at the start of a
+# word in the category, summary, and usage text (never the example), so "port"
+# finds ports but not "supported" or "export". Results are ranked: exact name,
+# name prefix, name substring, then the rest in registry order.
 _zsh_help_matches() {
   emulate -L zsh
 
   local query=${1-}
   local include_all=${2:-0}
-  local id haystack pattern needle=${(L)query}
+  local id lid needle=${(L)query}
+  local -a exact prefix inname other
   typeset -ga reply
   reply=()
 
   for id in "${_ZSH_HELP_ORDER[@]}"; do
     (( include_all )) || _zsh_help_is_available "$id" || continue
 
-    if [[ -n $needle ]]; then
-      haystack="${id} ${_ZSH_HELP_CATEGORY[$id]} ${_ZSH_HELP_SUMMARY[$id]} ${_ZSH_HELP_USAGE[$id]} ${_ZSH_HELP_EXAMPLE[$id]}"
-      pattern="*${(b)needle}*"
-      [[ ${(L)haystack} == ${~pattern} ]] || continue
+    if [[ -z $needle ]]; then
+      other+=("$id")
+      continue
     fi
 
-    reply+=("$id")
+    lid=${(L)id}
+    if [[ $lid == "$needle" ]]; then
+      exact+=("$id")
+    elif [[ $lid == "$needle"* ]]; then
+      prefix+=("$id")
+    elif [[ $lid == *"$needle"* ]]; then
+      inname+=("$id")
+    elif _zsh_help_word_start_match "${(L)_ZSH_HELP_CATEGORY[$id]}" "$needle" ||
+      _zsh_help_word_start_match "${(L)_ZSH_HELP_SUMMARY[$id]}" "$needle" ||
+      _zsh_help_word_start_match "${(L)_ZSH_HELP_USAGE[$id]}" "$needle"; then
+      other+=("$id")
+    fi
   done
+
+  reply=( "${exact[@]}" "${prefix[@]}" "${inname[@]}" "${other[@]}" )
 }
 
 _zsh_help_render_detail() {
@@ -162,7 +201,8 @@ _zsh_help_render_list() {
   for id in "$@"; do
     summary=${_ZSH_HELP_SUMMARY[$id]}
     if ! _zsh_help_is_available "$id"; then
-      summary+=" [needs ${_ZSH_HELP_DEPS[$id]}]"
+      _zsh_help_unavailable_reason "$id"
+      summary+=" [$REPLY]"
     fi
     printf '%-14s %-12s %s\n' "$id" "${_ZSH_HELP_CATEGORY[$id]}" "$summary"
   done
@@ -212,7 +252,7 @@ _zsh_help_palette() {
     "${preview_args[@]}"
     --delimiter=$'\t'
     --with-nth=1,2,3
-    --nth=1,2,3,4,5
+    --nth=1,2,3,4
     --accept-nth=5
     --freeze-left=1
     --wrap=word
@@ -229,24 +269,35 @@ _zsh_help_palette() {
   print -rz -- "$example"
 }
 
+# Up to five suggestions: names within a small edit distance of the query,
+# then names sharing its first two letters.
 _zsh_help_close_matches() {
   emulate -L zsh
 
   local query=${(L)1}
   local include_all=${2:-0}
   local prefix id
+  local -a pool
   typeset -ga reply
   reply=()
 
-  prefix=${query[1,2]}
-  [[ -n $prefix ]] || return 0
+  [[ -n $query ]] || return 0
 
   for id in "${_ZSH_HELP_ORDER[@]}"; do
     (( include_all )) || _zsh_help_is_available "$id" || continue
-    [[ ${(L)id} == ${(b)prefix}* ]] || continue
-    reply+=("$id")
-    (( ${#reply[@]} >= 5 )) && break
+    pool+=("$id")
   done
+
+  _ui_close_matches "$query" "${pool[@]}"
+
+  prefix=${query[1,2]}
+  for id in "${pool[@]}"; do
+    (( ${#reply[@]} >= 5 )) && break
+    [[ ${(L)id} == "$prefix"* ]] || continue
+    (( ${reply[(Ie)$id]} )) && continue
+    reply+=("$id")
+  done
+  (( ${#reply[@]} > 5 )) && reply[6,-1]=()
 }
 
 _zsh_help_usage() {
@@ -287,8 +338,7 @@ zhelp() {
         query_parts+=("$1")
         ;;
       -*)
-        print -u2 -- "Unknown zhelp option: $1"
-        _zsh_help_usage >&2
+        _ui_usage_error zhelp 'zhelp [--all] [--plain] [query]' "unknown option: $1" "$1" --all --plain --help
         return 1
         ;;
       *)
@@ -302,7 +352,8 @@ zhelp() {
 
   if [[ -n $query && -n ${_ZSH_HELP_CATEGORY[$query]-} ]]; then
     if (( ! include_all )) && ! _zsh_help_is_available "$query"; then
-      print -u2 -- "Command is unavailable: $query (needs ${_ZSH_HELP_DEPS[$query]})"
+      _zsh_help_unavailable_reason "$query"
+      print -u2 -- "zhelp: command is unavailable: $query ($REPLY)"
       print -u2 -- "Run 'zhelp --all $query' to view its help."
       return 1
     fi
@@ -313,7 +364,16 @@ zhelp() {
   _zsh_help_matches "$query" "$include_all"
   matches=( "${reply[@]}" )
   if (( ${#matches[@]} == 0 )); then
-    print -u2 -- "No commands matched: $query"
+    if (( ! include_all )); then
+      _zsh_help_matches "$query" 1
+      if (( ${#reply[@]} > 0 )); then
+        print -u2 -- "zhelp: no available commands matched: $query"
+        print -u2 -- "${#reply[@]} unavailable command(s) match: ${(j:, :)${(@)reply[1,5]}}"
+        print -u2 -- "Run 'zhelp --all $query' to view requirements."
+        return 1
+      fi
+    fi
+    print -u2 -- "zhelp: no commands matched: $query"
     _zsh_help_close_matches "$query" "$include_all"
     close=( "${reply[@]}" )
     (( ${#close[@]} > 0 )) && print -u2 -- "Close matches: ${(j:, :)close}"

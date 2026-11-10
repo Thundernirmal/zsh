@@ -326,10 +326,10 @@ _upkg_run_search_brew() {
   done
 
   if (( formula_total > info_limit )); then
-    print -u2 -- "Homebrew formula search returned $formula_total matches; showing first $info_limit. Refine the query for more specific results."
+    print -u2 -- "upkg: Homebrew formula search returned $formula_total matches; showing first $info_limit; refine the query for more specific results"
   fi
   if (( cask_total > info_limit )); then
-    print -u2 -- "Homebrew cask search returned $cask_total matches; showing first $info_limit. Refine the query for more specific results."
+    print -u2 -- "upkg: Homebrew cask search returned $cask_total matches; showing first $info_limit; refine the query for more specific results"
   fi
 
   if (( ${#formulae_for_info[@]} > 0 )); then
@@ -1409,12 +1409,12 @@ _upkg_run_npm_npx_cache_command() {
   typeset -g _UPKG_NPM_NPX_DIAGNOSTIC=''
 
   stdout_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm-npx.stdout.XXXXXX") || {
-    print -u2 -- 'Could not create temporary output capture for npm npx cache cleanup.'
+    print -u2 -- 'upkg: could not create temporary output capture for npm npx cache cleanup'
     return 1
   }
   stderr_file=$(command mktemp "${TMPDIR:-/tmp}/upkg-npm-npx.stderr.XXXXXX") || {
     command rm -f -- "$stdout_file"
-    print -u2 -- 'Could not create temporary error capture for npm npx cache cleanup.'
+    print -u2 -- 'upkg: could not create temporary error capture for npm npx cache cleanup'
     return 1
   }
 
@@ -1531,7 +1531,7 @@ _upkg_run_clean_npm() {
     done
 
     if (( parse_failed || ${#npx_keys[@]} == 0 )); then
-      print -u2 -- 'Could not safely parse npm npx cache keys; no npx entries were removed.'
+      print -u2 -- 'upkg: could not safely parse npm npx cache keys; no npx entries were removed'
       _upkg_record_cleanup_result 1 'npx cache listing could not be parsed' || return $?
     else
       _upkg_run_cleanup_step 'npx cache cleanup failed' npm cache npx rm "${npx_keys[@]}" || return $?

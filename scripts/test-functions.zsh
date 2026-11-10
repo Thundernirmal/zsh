@@ -104,8 +104,8 @@ assert_missing_arg_usage() {
 test_missing_arguments() {
   assert_missing_arg_usage extract 'Usage: extract [--keep] [--destination <dir>] <file>' || return 1
   assert_missing_arg_usage mkcd 'Usage: mkcd <directory>' || return 1
-  assert_missing_arg_usage ff 'Usage: ff [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]' || return 1
-  assert_missing_arg_usage ft 'Usage: ft [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]' || return 1
+  assert_missing_arg_usage ff 'Usage: ff [--pick] [--hidden|--no-hidden] [--no-ignore] [--follow|--no-follow] <pattern> [path]' || return 1
+  assert_missing_arg_usage ft 'Usage: ft [--pick] [--hidden] [--no-ignore] [--follow] [--fixed-strings] [--ignore-case] <pattern> [path]' || return 1
   assert_missing_arg_usage headers 'Usage: headers <url>' || return 1
   assert_missing_arg_usage peek 'Usage: peek <file>' || return 1
 }
@@ -253,7 +253,7 @@ exit 1" >"$fakebin/du"
   output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
   assert_status "$rc" 1 'dusage returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
   assert_contains "$output" 'entry' 'dusage preserves partial results' || { PATH=$old_path; rehash; return 1; }
-  assert_contains "$stderr_part" 'Incomplete scan' 'dusage reports an incomplete scan on stderr' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'incomplete scan' 'dusage reports an incomplete scan on stderr' || { PATH=$old_path; rehash; return 1; }
   assert_contains "$stderr_part" 'du exit 1' 'dusage names the failed scan tool' || { PATH=$old_path; rehash; return 1; }
   leftovers=( "$tmp_dir"/dusage.*(N) )
   assert_equals "${#leftovers[@]}" 0 'dusage cleans up after a partial scan' || { PATH=$old_path; rehash; return 1; }
@@ -262,7 +262,7 @@ exit 1" >"$fakebin/du"
   bigfiles "$fixture_dir/tree" 5 >"$stdout_file" 2>"$stderr_file"; rc=$?
   output=$(<"$stdout_file"); stderr_part=$(<"$stderr_file")
   assert_status "$rc" 1 'bigfiles returns failure when du is incomplete' || { PATH=$old_path; rehash; return 1; }
-  assert_contains "$stderr_part" 'Incomplete scan' 'bigfiles reports du failure on stderr' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'incomplete scan' 'bigfiles reports du failure on stderr' || { PATH=$old_path; rehash; return 1; }
 
   command rm -f -- "$fakebin/du"
   print -r -- "#!/bin/sh
@@ -296,9 +296,9 @@ exit 1" >"$fakebin/du"
   source "$repo_dir/55-ui-helpers.zsh"
   functions[_ui_plain_mode]='return 0'
   assert_status "$rc" 1 'dusage rich mode returns failure on a partial scan' || { PATH=$old_path; rehash; return 1; }
-  assert_contains "$output" 'Incomplete scan' 'dusage rich output carries the partial state' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$output" 'incomplete scan' 'dusage rich output carries the partial state' || { PATH=$old_path; rehash; return 1; }
   assert_contains "$output" '(incomplete scan)' 'dusage rich footer marks the partial state' || { PATH=$old_path; rehash; return 1; }
-  assert_contains "$stderr_part" 'Incomplete scan' 'dusage rich mode keeps the stderr diagnostic' || { PATH=$old_path; rehash; return 1; }
+  assert_contains "$stderr_part" 'incomplete scan' 'dusage rich mode keeps the stderr diagnostic' || { PATH=$old_path; rehash; return 1; }
 
   PATH=$old_path
   rehash
@@ -854,14 +854,14 @@ test_fkill_scope_and_review() {
 
   output=$(fkill --all 15 2>&1); rc=$?
   assert_status "$rc" 1 'fkill --all parses the flag and reaches the terminal gate' || return 1
-  assert_contains "$output" 'requires an interactive terminal' 'fkill --all does not treat the flag as a signal' || return 1
+  assert_contains "$output" 'an interactive terminal is required' 'fkill --all does not treat the flag as a signal' || return 1
 
   output=$(fkill -a 2>&1); rc=$?
   assert_status "$rc" 1 'fkill -a defaults to SIGTERM and reaches the terminal gate' || return 1
 
   output=$(fkill 15 --all 2>&1); rc=$?
   assert_status "$rc" 1 'fkill accepts the flag after the signal' || return 1
-  assert_contains "$output" 'requires an interactive terminal' 'trailing --all is not a signal' || return 1
+  assert_contains "$output" 'an interactive terminal is required' 'trailing --all is not a signal' || return 1
 
   output=$(fkill 15 9 2>&1); rc=$?
   assert_status "$rc" 1 'fkill rejects multiple signals' || return 1
@@ -1931,6 +1931,12 @@ FIXTURE' > "$fakebin/ss"
   functions[_ui_plain_mode]='return 0'
   output=$(ports)
   assert_contains "$output" 'udp   UNCONN' 'plain ports keeps native output' || return 1
+  assert_equals "${${(@f)output}[1]}" 'Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process' 'plain ports keeps the header line first' || return 1
+  assert_equals "${#${(@f)output}}" 6 'plain ports keeps every row' || return 1
+  assert_equals "${(j:,:)${(@)${(@f)output}[2,6]%% *}}" 'tcp,tcp,tcp,udp,udp' 'plain ports lists TCP rows before UDP rows' || return 1
+  assert_equals "${${(@f)output}[2]}" 'tcp   LISTEN 0      128    0.0.0.0:22         0.0.0.0:*' 'plain ports keeps native row text and ss order within a protocol' || return 1
+  output=$(ports 53)
+  assert_equals "${${(@f)output}[1]}" 'Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process' 'plain filtered ports keeps the header first' || return 1
   output=$(ports nginx)
   assert_contains "$output" 'Netid State' 'plain filtered ports keeps the header' || return 1
   assert_contains "$output" 'pid=22' 'plain filtered ports keeps the match' || return 1
@@ -2054,7 +2060,7 @@ exit 1' > "$fakebin/du"
   stderr_part=$(<"$scratch/stderr")
   command rm -f -- "$scratch/stderr"
   assert_status "$rc" 1 'plain dusage still fails on a partial scan' || return 1
-  assert_contains "$stderr_part" "Scan errors: $expected" 'plain dusage names the first scan error on stderr' || return 1
+  assert_contains "$stderr_part" "dusage: scan errors: $expected" 'plain dusage names the first scan error on stderr' || return 1
   assert_not_contains "$output" 'Scan errors' 'plain dusage keeps scan errors off stdout' || return 1
   [[ $stderr_part != *$'\e'* ]] || {
     print -u2 -- 'not ok: scan errors never carry raw control bytes'

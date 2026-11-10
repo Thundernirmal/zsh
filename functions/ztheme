@@ -12,6 +12,12 @@ _ztheme_usage() {
   print '  export <theme>   Print safe settings for ~/.zshrc'
 }
 
+# Short usage error (message, one usage line, pointer to --help) on stderr.
+# Optional word and candidates add a "Did you mean" suggestion.
+_ztheme_arg_error() {
+  _ui_usage_error ztheme 'ztheme <command> [theme]' "$1" "${2-}" "${@:3}"
+}
+
 _ztheme_validate_name() {
   emulate -L zsh
   local name=$1
@@ -204,33 +210,38 @@ _ztheme_export() {
 ztheme() {
   emulate -L zsh
   local command=${1-} theme
+  if (( $# == 0 )); then
+    # Bare ztheme is a request for its usage, as bare npkg and cgm are.
+    _ztheme_usage
+    return 0
+  fi
   case $command in
     list)
-      (( $# == 1 )) || { _ztheme_usage >&2; return 1; }
+      (( $# == 1 )) || { _ztheme_arg_error 'list takes no arguments'; return 1; }
       _ztheme_list
       ;;
     current)
-      (( $# == 1 )) || { _ztheme_usage >&2; return 1; }
+      (( $# == 1 )) || { _ztheme_arg_error 'current takes no arguments'; return 1; }
       _ztheme_current
       ;;
     show)
       local -A _ZSH_THEME_CUSTOM_COLORS=( "${(@kv)_ZSH_THEME_CUSTOM_COLORS}" )
-      (( $# <= 2 )) || { _ztheme_usage >&2; return 1; }
+      (( $# <= 2 )) || { _ztheme_arg_error 'show takes at most one theme'; return 1; }
       theme=${2:-${_ZSH_UI_ACTIVE_THEME:-terminal}}
       _ztheme_validate_name "$theme" || { print -u2 -r -- "ztheme: unknown or invalid theme: $theme"; return 1; }
       _ztheme_show "$theme"
       ;;
     use)
-      (( $# == 2 )) || { _ztheme_usage >&2; return 1; }
+      (( $# == 2 )) || { _ztheme_arg_error 'use needs exactly one theme'; return 1; }
       _ztheme_apply "$2"
       ;;
     reset)
-      (( $# == 1 )) || { _ztheme_usage >&2; return 1; }
+      (( $# == 1 )) || { _ztheme_arg_error 'reset takes no arguments'; return 1; }
       _ztheme_apply terminal reset
       ;;
     export)
       local -A _ZSH_THEME_CUSTOM_COLORS=( "${(@kv)_ZSH_THEME_CUSTOM_COLORS}" )
-      (( $# == 2 )) || { _ztheme_usage >&2; return 1; }
+      (( $# == 2 )) || { _ztheme_arg_error 'export needs exactly one theme'; return 1; }
       _ztheme_validate_name "$2" || { print -u2 -r -- "ztheme: unknown or invalid theme: $2"; return 1; }
       _ztheme_export "$2"
       ;;
@@ -238,8 +249,11 @@ ztheme() {
       _ztheme_usage
       ;;
     *)
-      [[ -n $command ]] && print -u2 -r -- "ztheme: unknown command: $command"
-      _ztheme_usage >&2
+      if [[ -n $command ]]; then
+        _ztheme_arg_error "unknown command: $command" "$command" list current show use reset export help
+      else
+        _ztheme_arg_error 'missing command'
+      fi
       return 1
       ;;
   esac
