@@ -23,6 +23,8 @@ alias ....='cd ../../..'
 alias -- -='cd -'
 
 # File viewing
+# cat itself is never redefined: scripts, AI agents, and shell snapshots that
+# capture interactive aliases need plain GNU cat output. bcat is the bat viewer.
 # Debian and Ubuntu install bat as batcat.
 if (( $+commands[bat] || $+commands[batcat] )); then
   typeset -g _ZSH_CAT_VIEWER=bat
@@ -30,7 +32,7 @@ if (( $+commands[bat] || $+commands[batcat] )); then
 
   # bat rejects these GNU cat flags, so they go to the real cat. -n, -A, and -u
   # mean the same in both, and bat's own options such as -l and -p stay with bat.
-  _zsh_cat() {
+  _zsh_bcat() {
     emulate -L zsh
 
     local arg
@@ -49,7 +51,7 @@ if (( $+commands[bat] || $+commands[batcat] )); then
     done
     command "$_ZSH_CAT_VIEWER" --style=numbers --paging=never "$@"
   }
-  alias cat='_zsh_cat'
+  alias bcat='_zsh_bcat'
 fi
 
 alias grep='grep --color=auto'

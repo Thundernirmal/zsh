@@ -126,7 +126,7 @@ If the distribution package is older than 0.68.0, upgrade through a current pack
 
 | Command | Effect when present | Fallback or absence behavior |
 |---|---|---|
-| `bat` / `batcat` | Highlighted `cat` alias, `peek`, and file previews | `peek` and fzf previews use `sed` |
+| `bat` / `batcat` | Highlighted `bcat` alias, `peek`, and file previews | `bcat` is undefined; `peek` and fzf previews use `sed` |
 | `tree` | `lt` and directory previews when `lsd` is absent | Preview uses `ls`; `lt` is unavailable without `lsd` or `tree` |
 | `fd` / `fdfind` | Faster `ff` search | GNU `find` |
 | `rg` | Faster `ft` content search | Recursive `grep` |
@@ -444,7 +444,7 @@ A recorded blocked fzf integration is a failure even when its binary version is 
 | `ll` | Long listing including hidden entries and readable sizes |
 | `la` | Listing including hidden entries |
 | `lt` | Tree to depth 3; defined only with `lsd` or `tree` |
-| `cat` | `bat --style=numbers --paging=never` when `bat` or `batcat` is present; flags only GNU `cat` understands, such as `-v`, `-e`, and `-T`, run the real `cat` |
+| `bcat` | `bat --style=numbers --paging=never`; defined only when `bat` or `batcat` is present. Flags only GNU `cat` understands, such as `-v`, `-e`, and `-T`, run the real `cat` |
 | `grep` | Adds `--color=auto` |
 | `diff` | Adds `--color=auto` |
 
@@ -925,7 +925,7 @@ These are the cross-cutting rules most likely to surprise a new user:
 
 1. **The install path is fixed.** `init.zsh` loads `$HOME/.config/zsh/*.zsh`. A clone elsewhere needs a symlink or a deliberate code change. Run `zdoctor` to confirm the location and catch silently skipped modules.
 2. **Source order matters.** Source this layer after frameworks when its aliases should win. `~/.zshrc` itself is not versioned here.
-3. **File operations keep native semantics.** `mkdir`, `cp`, `mv`, and `rm` are not redefined. Add flags deliberately and keep real backups; shell prompts are not a backup strategy.
+3. **File operations keep native semantics.** `cat`, `mkdir`, `cp`, `mv`, and `rm` are not redefined, so scripts and AI agents that read files with `cat` get plain output; use `bcat` for highlighted viewing. Add flags deliberately and keep real backups; shell prompts are not a backup strategy.
 4. **Interactive flags are situational.** If you opt into `-i`, remember that later flags such as `-f` can override it. Review the final command line before destructive operations.
 5. **Ordinary globs exclude dotfiles.** Use `*(D)` only when hidden entries are intentional. In contrast, `ff` and `dusage` explicitly include hidden entries by design.
 6. **Leading-space history is convenience, not secret storage.** `HIST_IGNORE_SPACE` reduces accidental persistence but does not protect process arguments, logs, terminal capture, or already-shared history.
