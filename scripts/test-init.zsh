@@ -407,7 +407,7 @@ test_benchmark_keeps_real_history() {
   print -- 'ok: startup benchmark leaves the real history file alone'
 }
 
-test_batcat_backs_the_cat_alias() {
+test_batcat_backs_the_bcat_alias() {
   local stub_bin="$tmp_home/batcat-bin" output
 
   command mkdir -p -- "$stub_bin" || return 1
@@ -415,14 +415,14 @@ test_batcat_backs_the_cat_alias() {
   command chmod +x -- "$stub_bin/batcat"
   print -r -- '#!/bin/sh
 printf "viewer %s\n" "$*"' > "$stub_bin/batcat"
-  output=$(HOME="$tmp_home" PATH="$stub_bin" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "cat note.txt"' 2>&1)
-  assert_equals "$output" 'viewer --style=numbers --paging=never note.txt' 'the cat alias uses batcat when only that name exists' || return 1
+  output=$(HOME="$tmp_home" PATH="$stub_bin" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "bcat note.txt"' 2>&1)
+  assert_equals "$output" 'viewer --style=numbers --paging=never note.txt' 'the bcat alias uses batcat when only that name exists' || return 1
 
   output=$(PATH="$stub_bin:/usr/bin:/bin" /bin/sh "$repo_dir/scripts/check-deps.sh" 2>&1)
   assert_contains "$output" 'ok: bat/batcat' 'the dependency checker accepts batcat' || return 1
 }
 
-test_cat_alias_flags() {
+test_bcat_alias_flags() {
   local stub_bin="$tmp_home/cat-flags-bin" spec args expected output
 
   command mkdir -p -- "$stub_bin" || return 1
@@ -443,9 +443,13 @@ printf "real %s\n" "$*"' > "$stub_bin/cat"
     else
       expected="viewer --style=numbers --paging=never $args"
     fi
-    output=$(HOME="$tmp_home" PATH="$stub_bin" CAT_ARGS="$args" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "cat $CAT_ARGS"' 2>&1)
-    assert_equals "$output" "$expected" "cat $args goes to ${spec%%:*}" || return 1
+    output=$(HOME="$tmp_home" PATH="$stub_bin" CAT_ARGS="$args" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; eval "bcat $CAT_ARGS"' 2>&1)
+    assert_equals "$output" "$expected" "bcat $args goes to ${spec%%:*}" || return 1
   done
+
+  # cat itself must stay vanilla even when bat is installed.
+  output=$(HOME="$tmp_home" PATH="$stub_bin" "$zsh_bin" -fc 'source "$HOME/.config/zsh/init.zsh"; (( ${+aliases[cat]} || ${+functions[cat]} )) && print redefined; eval "cat note.txt"' 2>&1)
+  assert_equals "$output" 'real note.txt' 'cat is not redefined when bat is present' || return 1
 }
 
 test_extended_glob_stays_off() {
@@ -1350,8 +1354,8 @@ main() {
   test_zoxide_rejected_cache_directory || return 1
   test_glob_policy || return 1
   test_extended_glob_stays_off || return 1
-  test_batcat_backs_the_cat_alias || return 1
-  test_cat_alias_flags || return 1
+  test_batcat_backs_the_bcat_alias || return 1
+  test_bcat_alias_flags || return 1
   test_benchmark_keeps_real_history || return 1
   test_fzf_startup_gate || return 1
   test_fzf_persistent_startup_cache || return 1

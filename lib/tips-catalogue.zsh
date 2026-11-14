@@ -52,6 +52,10 @@ if [[ -r /sys/firmware/acpi/platform_profile || -r /sys/devices/platform/asus-nb
   _zsh_tip_pool+=("Run fanprofile to show the current laptop performance profile")
 fi
 
+if (( $+commands[bat] || $+commands[batcat] )); then
+  _zsh_tip_pool+=("Run bcat <file> to print it with bat highlighting; cat stays plain")
+fi
+
 if (( $+commands[zoxide] )); then
   _zsh_tip_pool+=("Use z <query> to jump to a remembered directory")
 fi
